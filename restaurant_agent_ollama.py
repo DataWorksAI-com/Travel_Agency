@@ -19,6 +19,17 @@
 # mentors recommended for a narrow expert agent. The data is mock this week,
 # but shaped like a real restaurant API so it can be swapped in later.
 #
+# ORCHESTRATOR CONTRACT
+# ---------------------
+# This agent implements the team's sub-agent contract: the orchestrator sends
+# ONE task string and gets back ONE self-contained, itinerary-ready message.
+# No follow-up questions, no agent-to-agent messaging, no shared context.
+#
+#     from restaurant_agent_ollama import answer
+#     message = answer("Recommend a vegan dinner in Aruba under $30")
+#
+# See answer() in STEP 4b below.
+#
 # BEFORE YOU RUN THIS
 # -------------------
 #   1. The Ollama application must be installed and running.
@@ -31,7 +42,12 @@
 # STEP 1 - BRING IN CODE
 # -----------------------------------------------------------------------------
 from deepagents import create_deep_agent
-from restaurant_finder import search_restaurants, warm_up
+from restaurant_finder import (
+    search_restaurants,
+    warm_up,
+    parse_task,
+    format_for_itinerary,
+)
 
 
 # -----------------------------------------------------------------------------
@@ -81,7 +97,9 @@ def find_restaurants(
         gluten_free: set True only if the diner needs gluten-free options.
 
     Returns:
-        A numbered list of matching restaurants, or a message that none matched.
+        An itinerary-ready recommendation: one top pick with a reason, plus up
+        to two alternatives, each with name, cuisine, city, price per person and
+        rating. Or a plain statement that nothing matched.
     """
     dietary = []
     if vegetarian:
@@ -101,50 +119,152 @@ def find_restaurants(
         top_k=5,
     )
 
-    if not results:
-        return ("No restaurants in the database matched those requirements. "
-                "Try relaxing the price limit, the city, or the dietary filters.")
-
-    lines = []
-    for i, r in enumerate(results, 1):
-        tags = [t for t, on in (
-            ("vegetarian", r["vegetarian"]),
-            ("vegan", r["vegan"]),
-            ("gluten-free", r["gluten_free"]),
-        ) if on]
-        tag_str = ("  [" + ", ".join(tags) + "]") if tags else ""
-        lines.append(
-            f"{i}. {r['name']} - {r['cuisine']} in {r['city']}, "
-            f"about ${r['price']} per person, rated {r['rating']}/5{tag_str}.\n"
-            f"   {r['description']}"
-        )
-    return "\n".join(lines)
+    # One shared formatter (in restaurant_finder.py) writes the itinerary-ready
+    # block, so the tool output, the agent answer and the fallback path all look
+    # identical to the orchestrator.
+    return format_for_itinerary(results)
 
 
 # -----------------------------------------------------------------------------
 # STEP 4 - BUILD THE AGENT
 # -----------------------------------------------------------------------------
-agent = create_deep_agent(
-    model=MODEL,
-    tools=[find_restaurants],
-    system_prompt=(
-        "You are a restaurant expert for a tropical holiday planner.\n"
-        "\n"
-        "RULES YOU MUST FOLLOW:\n"
-        "1. For ANY question about where to eat, food, dining, or restaurants, "
-        "you MUST call the find_restaurants tool. Never invent restaurants.\n"
-        "2. Read the user's request and pass the right arguments: put their "
-        "wish into 'query'; if they name a city, set 'city'; if they name a "
-        "cuisine, set 'cuisine'; if they give a budget, set 'max_price'; if "
-        "they ask for highly rated, set 'min_rating' (e.g. 4.5); if they say "
-        "vegetarian, vegan, or gluten-free, set that flag to True.\n"
-        "3. Only recommend restaurants that the tool returned. Do not add your "
-        "own. If the tool returns none, say so plainly.\n"
-        "4. Give advice only. Never attempt to book anything.\n"
-        "\n"
-        "Briefly introduce the results, then list them clearly."
-    ),
+# The system prompt encodes the team's orchestrator contract: one task string
+# in, one self-contained itinerary-ready message out, no questions back.
+
+SYSTEM_PROMPT = (
+    "You are the restaurant sub-agent inside a travel-planning system. An "
+    "orchestrator sends you one task in plain words and uses your reply "
+    "directly in a customer itinerary.\n"
+    "\n"
+    "RULES YOU MUST FOLLOW:\n"
+    "1. For ANY request about where to eat, food, dining, or restaurants, you "
+    "MUST call the find_restaurants tool. Never invent restaurants.\n"
+    "2. Read the request and pass the right arguments: put their wish into "
+    "'query'; if a city is named, set 'city'; if a cuisine is named, set "
+    "'cuisine'; if a budget is given, set 'max_price'; if they ask for highly "
+    "rated, set 'min_rating' (e.g. 4.5); if they say vegetarian, vegan, or "
+    "gluten-free, set that flag to True.\n"
+    "3. Only recommend restaurants the tool returned. Do not add your own. If "
+    "the tool returns none, say so plainly.\n"
+    "4. NEVER ask a follow-up question and never request clarification. You get "
+    "exactly one turn. If something is missing, make one reasonable assumption, "
+    "state it in a line beginning 'Assumption:', and answer anyway. If you truly "
+    "cannot proceed, state exactly what is missing in your final message.\n"
+    "5. Reply with ONE self-contained message. Commit to a single top "
+    "recommendation, give a one-line reason, then list at most two "
+    "alternatives. Every restaurant you name must carry its cuisine, city, "
+    "price per person and rating, so it can be dropped straight into an "
+    "itinerary. Never write vague filler such as 'here are some options'.\n"
+    "6. Give advice only. Never attempt to book anything, and never address "
+    "another agent - only the orchestrator reads your reply.\n"
 )
+
+
+_AGENT = None
+
+
+def get_agent():
+    """Build the deep agent once, on first use.
+
+    Built lazily so that importing this module (which the orchestrator does to
+    reach answer()) never requires a running model. The model is only contacted
+    when an answer is actually requested.
+    """
+    global _AGENT
+    if _AGENT is None:
+        _AGENT = create_deep_agent(
+            model=MODEL,
+            tools=[find_restaurants],
+            system_prompt=SYSTEM_PROMPT,
+        )
+    return _AGENT
+
+
+# -----------------------------------------------------------------------------
+# STEP 4b - THE ORCHESTRATOR ENTRY POINT
+# -----------------------------------------------------------------------------
+# This is the single function the orchestrator calls:
+#
+#     from restaurant_agent_ollama import answer
+#     message = answer("Recommend a vegan dinner in Aruba under $30")
+#
+# One task string in, one itinerary-ready string out. It never asks a question
+# back, never raises, and never returns an empty reply.
+
+def _message_text(message):
+    """Pull plain text out of a model message, whatever shape it arrives in."""
+    content = getattr(message, "content", message)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):  # some providers return a list of blocks
+        parts = [
+            block.get("text", "") if isinstance(block, dict) else str(block)
+            for block in content
+        ]
+        return "".join(parts)
+    return str(content)
+
+
+def _retrieval_only_answer(task, reason=None):
+    """Deterministic fallback used when the language model is unavailable.
+
+    The retrieval half of this agent (vector search plus hard filters) needs no
+    model at all. So if Ollama is not running, we still return a real, useful,
+    itinerary-ready recommendation instead of failing the whole itinerary. The
+    filters are read from the task string by parse_task.
+    """
+    try:
+        parsed = parse_task(task)
+        results = search_restaurants(
+            parsed["query"],
+            city=parsed["city"],
+            cuisine=parsed["cuisine"],
+            max_price=parsed["max_price"],
+            min_rating=parsed["min_rating"],
+            dietary=parsed["dietary"] or None,
+            top_k=5,
+        )
+        notes = list(parsed["assumptions"])
+        if reason:
+            notes.append(
+                "Answered from the restaurant database directly, without the "
+                "language model, because the model was unavailable (" + reason + "). "
+                "The recommendation below is still drawn from real records."
+            )
+        return format_for_itinerary(results, assumptions=notes)
+    except Exception as error:  # retrieval itself failed - stay inside the contract
+        return ("The restaurant agent could not complete this task. Retrieval "
+                "failed with: " + str(error) + ". No restaurant has been invented. "
+                "Treat the restaurant section of the itinerary as unavailable.")
+
+
+def answer(task: str) -> str:
+    """Answer one orchestrator task and return one self-contained message.
+
+    Args:
+        task: everything this agent needs, in one plain-language string,
+              including the destination city. Sub-agents share no context, so
+              anything not in this string is unknown to the agent.
+
+    Returns:
+        A single itinerary-ready message. Contains no questions back to the
+        orchestrator, and states any assumption it had to make.
+    """
+    if not task or not task.strip():
+        return ("No task text was received, so no restaurant search could be "
+                "run. Send the request as one string including the destination "
+                "city, for example: 'dinner in San Juan, seafood, under $40'.")
+
+    try:
+        result = get_agent().invoke(
+            {"messages": [{"role": "user", "content": task.strip()}]}
+        )
+        text = _message_text(result["messages"][-1]).strip()
+        if not text:
+            raise ValueError("the model returned an empty message")
+        return text
+    except Exception as error:
+        return _retrieval_only_answer(task, reason=str(error)[:160])
 
 
 # -----------------------------------------------------------------------------
@@ -166,6 +286,8 @@ if __name__ == "__main__":
         print(error)
         print("Most likely: run  pip install chromadb  inside your .venv.\n")
 
+    print("If Ollama is not running, the agent still answers from the vector")
+    print("database directly (retrieval-only mode) and says so in its reply.\n")
     print("Ask for a restaurant. Examples you can try:")
     print("  - vegan gluten-free dinner in Aruba under 30 dollars")
     print("  - cheap casual tacos in Cancun")
@@ -181,18 +303,6 @@ if __name__ == "__main__":
         if not question:
             continue
 
-        try:
-            result = agent.invoke(
-                {"messages": [{"role": "user", "content": question}]}
-            )
-            print("\nAgent:", result["messages"][-1].content, "\n")
-
-        except Exception as error:
-            print("\n--- SOMETHING WENT WRONG ---")
-            print(error)
-            print("\nMost likely causes, in order:")
-            print("  1. The Ollama application is not running. Open it.")
-            print("  2. chromadb or langchain-ollama is not installed. Run:")
-            print("     pip install chromadb langchain-ollama")
-            print("  3. The model name in MODEL does not match. Run  ollama list")
-            print("----------------------------\n")
+        # Uses the same answer() the orchestrator calls, so what you see here is
+        # exactly what the orchestrator would receive.
+        print("\nAgent:", answer(question), "\n")

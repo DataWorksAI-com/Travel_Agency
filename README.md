@@ -23,18 +23,56 @@ real restaurant API (Google Places–style fields), so it can be swapped for a
 live API later by replacing a single function body — no changes to the agent,
 prompt, or callers.
 
+## Orchestrator interface
+
+This agent implements the team's sub-agent contract: **one task string in, one
+self-contained itinerary-ready message out.** It never asks a follow-up
+question, never talks to another agent, and assumes no shared context — the
+destination city must be included in the task string.
+
+```python
+from restaurant_agent_ollama import answer
+
+message = answer("Recommend a vegan dinner in Aruba under $30")
+```
+
+`answer(task: str) -> str` returns a single message shaped for direct insertion
+into an itinerary: one committed top pick with a one-line reason, then at most
+two alternatives, each carrying cuisine, city, price per person, rating and
+dietary tags. Example:
+
+```
+Recommended restaurant: Sunset Vegan Kitchen - Vegan, Aruba. About $26 per person, rated 4.8/5. Dietary: vegetarian, vegan, gluten-free.
+Why: Fully plant-based restaurant with vegan bowls, raw desserts, gluten-free options and sunset ocean views.
+
+Alternatives:
+- Palma Verde - Mediterranean, Aruba. About $28 per person, rated 4.6/5. Dietary: vegetarian, vegan, gluten-free.
+```
+
+Contract guarantees:
+- **Never raises.** Any failure is returned as a plain message, so one broken
+  sub-agent cannot break the itinerary.
+- **Never asks a question back.** If something is missing it makes one
+  reasonable assumption and states it on an `Assumption:` line.
+- **Degrades instead of failing.** If the language model is unavailable, the
+  retrieval half still runs and `answer()` returns a real recommendation drawn
+  from the vector database, saying plainly that it ran without the model.
+- **Invents nothing.** If no record matches, it says so and names the filter
+  most likely responsible.
+
 ## Files
-- `restaurant_finder.py` — the RAG engine (vector DB build, semantic search, hard filters)
+- `restaurant_finder.py` — the RAG engine (vector DB build, semantic search, hard filters) plus the contract helpers `parse_task` and `format_for_itinerary`
 - `restaurants_data.py` — the mock restaurant dataset (28 records)
-- `restaurant_agent_ollama.py` — the Deep Agent: its tool, system prompt, and interactive loop
-- `test_jig.py` — automatic black-box checker (8 cases over retrieval + filter correctness)
+- `restaurant_agent_ollama.py` — the Deep Agent: its tool, system prompt, the `answer()` orchestrator entry point, and an interactive loop
+- `test_jig.py` — automatic black-box checker (17 cases: 8 retrieval/filter, 9 contract)
+- `requirements.txt` — dependencies
 - `.env.template` — environment variable template
 - `.gitignore` — excludes secrets and generated files
 
 ## Requirements
 - Python 3.11+
 - Ollama installed and running, with the model: `ollama pull lfm2.5`
-- `pip install deepagents langchain-ollama chromadb`
+- `pip install -r requirements.txt`
 
 ## Run
 ```
@@ -48,8 +86,9 @@ restaurants into the vector database. Then ask, for example:
 ```
 python test_jig.py
 ```
-Runs 8 deterministic checks over the retrieval + filter core (no LLM needed).
-Expected result: `SCORE: 8/8`.
+Runs 17 deterministic checks with no LLM needed: 8 over the retrieval and hard-filter
+core, and 9 over the orchestrator contract (task-string parsing, itinerary-ready
+formatting, no questions back, nothing invented). Expected result: `SCORE: 17/17`.
 
 ## Switching the model / provider
 The agent runs locally on Ollama by default (`MODEL = "ollama:lfm2.5"` in

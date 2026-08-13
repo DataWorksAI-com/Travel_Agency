@@ -1,0 +1,23 @@
+# Restaurant Finder agent - dependencies
+# ALY 6980 Capstone / DataWorksAI AI Travel Agency / Vrushti Shah
+#
+# Install with:  pip install -r requirements.txt
+#
+# Minimum versions rather than exact pins, so this installs cleanly alongside
+# the other agents in the shared repo. The retrieval core (chromadb) is the
+# only hard requirement for the test jig; the deep-agent packages are needed
+# to run the agent itself.
+
+# Retrieval / vector database - required by restaurant_finder.py and test_jig.py
+chromadb>=0.5.0
+
+# Deep agent framework and the local Ollama model binding - required by
+# restaurant_agent_ollama.py
+deepagents>=0.7.4
+langchain-ollama>=0.2.0
+
+# NOTE ON RUNTIME (not a pip package):
+# The default model is local Ollama. Install the Ollama application and pull
+# the model once:   ollama pull lfm2.5
+# No API key and no cost. The optional paid fallback is OpenRouter - see
+# .env.template and the README.

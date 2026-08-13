@@ -12,10 +12,17 @@ By default this uses Chroma's own built-in embedding model, which downloads
 once and then runs locally and free. No API key, no cost.
 """
 
+import re
+
 import chromadb
 from restaurants_data import RESTAURANTS
 
 _COLLECTION = None  # built once, then reused
+
+# The vocabulary the database actually contains. Read from the data itself, so
+# it can never drift out of step with the records.
+CITIES = sorted({r["city"] for r in RESTAURANTS})
+CUISINES = sorted({r["cuisine"] for r in RESTAURANTS})
 
 
 def _doc_text(r):
@@ -123,3 +130,122 @@ def warm_up():
     in a conversation is not slow). Returns the number of restaurants loaded."""
     col = _get_collection()
     return col.count()
+
+
+# -----------------------------------------------------------------------------
+# ORCHESTRATOR CONTRACT HELPERS
+# -----------------------------------------------------------------------------
+# The orchestrator sends this agent ONE task string and expects ONE final
+# message back that can be dropped straight into an itinerary. The two
+# functions below are the deterministic halves of that contract:
+#   parse_task            reads filters out of a plain task string
+#   format_for_itinerary  writes the single itinerary-ready message
+# Both are pure Python with no LLM and no network, so the test jig can check
+# them directly and they behave identically on every machine.
+# -----------------------------------------------------------------------------
+
+_BUDGET_PATTERNS = (
+    r"(?:under|below|less than|up to|within|at most|max(?:imum)?|budget of)\s*\$?\s*(\d{1,4})",
+    r"\$\s*(\d{1,4})",
+    r"(\d{1,4})\s*(?:dollars|usd|bucks)",
+)
+
+_QUALITY_WORDS = ("highly rated", "best rated", "top rated", "highest rated",
+                  "very well reviewed", "top-rated", "best-rated")
+
+
+def parse_task(task):
+    """Read hard filters out of a plain-language task string.
+
+    Returns a dict with: query, city, cuisine, max_price, min_rating, dietary,
+    and assumptions (a list of plain sentences describing anything that had to
+    be inferred). Nothing here guesses silently - every inference is recorded
+    in assumptions so the final message can state it out loud.
+    """
+    text = (task or "").strip()
+    low = text.lower()
+    assumptions = []
+
+    city = next((c for c in CITIES if c.lower() in low), None)
+
+    # Longest cuisine name first, so "Fine Dining" wins over a shorter overlap.
+    cuisine = next((c for c in sorted(CUISINES, key=len, reverse=True)
+                    if c.lower() in low), None)
+
+    max_price = None
+    for pattern in _BUDGET_PATTERNS:
+        found = re.search(pattern, low)
+        if found:
+            max_price = int(found.group(1))
+            break
+
+    min_rating = 4.5 if any(w in low for w in _QUALITY_WORDS) else None
+
+    dietary = []
+    if "vegan" in low:
+        dietary.append("vegan")
+    if "vegetarian" in low or re.search(r"\bveggie\b", low):
+        dietary.append("vegetarian")
+    if "gluten" in low:
+        dietary.append("gluten_free")
+
+    if not city:
+        assumptions.append(
+            "No destination city was named in the task, so this searched all "
+            "covered cities (" + ", ".join(CITIES) + "). Pass a city in the "
+            "task string for a destination-specific pick."
+        )
+
+    return {
+        "query": text,
+        "city": city,
+        "cuisine": cuisine,
+        "max_price": max_price,
+        "min_rating": min_rating,
+        "dietary": dietary,
+        "assumptions": assumptions,
+    }
+
+
+def _headline(r):
+    """One itinerary line for a single restaurant."""
+    tags = [t for t, on in (("vegetarian", r["vegetarian"]),
+                            ("vegan", r["vegan"]),
+                            ("gluten-free", r["gluten_free"])) if on]
+    tag_str = (" Dietary: " + ", ".join(tags) + ".") if tags else ""
+    return (f"{r['name']} - {r['cuisine']}, {r['city']}. "
+            f"About ${r['price']} per person, rated {r['rating']}/5.{tag_str}")
+
+
+def format_for_itinerary(results, assumptions=None):
+    """Write the single self-contained message the orchestrator receives.
+
+    Shape: one committed top pick with a reason, then up to two alternatives.
+    Specific enough to drop directly into a final itinerary - never a vague
+    "found some options" and never a question back to the orchestrator.
+    """
+    lines = []
+    for note in (assumptions or []):
+        lines.append("Assumption: " + note)
+
+    if not results:
+        lines.append(
+            "No restaurant in this agent's database matches those requirements. "
+            "Nothing has been invented to fill the gap. The requirement that most "
+            "likely caused this is the budget, the cuisine, or the dietary filter - "
+            "relaxing any one of them should return options."
+        )
+        return "\n".join(lines)
+
+    top = results[0]
+    lines.append("Recommended restaurant: " + _headline(top))
+    lines.append("Why: " + top["description"])
+
+    alternatives = results[1:3]
+    if alternatives:
+        lines.append("")
+        lines.append("Alternatives:")
+        for r in alternatives:
+            lines.append("- " + _headline(r))
+
+    return "\n".join(lines)
