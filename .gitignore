@@ -1,0 +1,7 @@
+# Never commit these
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+restaurant_db/
