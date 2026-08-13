@@ -1,0 +1,73 @@
+{
+  "Fiji": {
+    "destination": "Fiji",
+    "features": [
+      "beaches",
+      "attractions",
+      "nature"
+    ],
+    "places": {
+      "beaches": [
+        "Sunrise Beach",
+        "Barefoot beach",
+        "Honeymoon Beach",
+        "South Beach",
+        "North Beach",
+        "Vatukamali",
+        "Natadola Beach",
+        "Cuvu Beach",
+        "Manta Beach",
+        "Sunset Beach"
+      ],
+      "attractions": [
+        "Sunset viewpoint",
+        "Vanua Levu",
+        "Vuda village",
+        "Savala Island",
+        "Jaabi's point",
+        "Togoru Beach",
+        "Nakalavo"
+      ],
+      "nature": [
+        "House Reef / Nature Reserve / No Fishing"
+      ]
+    }
+  },
+  "Barbados": {
+    "destination": "Barbados",
+    "features": [
+      "beaches",
+      "attractions",
+      "nature",
+      "diving"
+    ],
+    "places": {
+      "beaches": [
+        "Sandy Lane Beach",
+        "Rockley Beach",
+        "Lakes Beach",
+        "Batts Rock Beach",
+        "Skeetes Bay Beach",
+        "Paynes Bay Beach",
+        "Mullins Beach",
+        "Palmetto Bay",
+        "Archer's Bay",
+        "Martin's Bay Beach"
+      ],
+      "attractions": [
+        "Rihanna's Childhood Home",
+        "Malibu Beach Club (Cockspur)",
+        "Tyrol Cot Village",
+        "Hackletons Cliff",
+        "Gallery of Carribean Art;Courts"
+      ],
+      "nature": [
+        "Graeme Hall Nature Sanctuary"
+      ],
+      "diving": [
+        "Barbados Blue",
+        "Spearfishing & Freediving Barbados"
+      ]
+    }
+  }
+}
