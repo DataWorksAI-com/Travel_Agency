@@ -1,0 +1,16 @@
+# Core Deep Agents framework (built on LangGraph)
+deepagents>=0.1.0
+langchain>=0.3.0
+langchain-core>=0.3.0
+
+# Direct Anthropic (Claude) API access
+langchain-anthropic>=0.3.0
+
+# OpenRouter model access (alternative to direct Anthropic access)
+langchain-openrouter>=0.1.0
+
+# Env var loading
+python-dotenv>=1.0.0
+
+# Testing
+pytest>=8.0.0
