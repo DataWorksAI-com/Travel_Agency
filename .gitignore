@@ -5,3 +5,9 @@ __pycache__/
 .DS_Store
 .env
 restaurant_db/
+
+# Local run artefacts and pre-change backups - never belong in the repo
+_run_logs/
+_backup_pre_reflection_15aug/
+_dev/
+_offline_runner.py
