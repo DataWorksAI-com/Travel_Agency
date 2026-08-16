@@ -172,8 +172,14 @@ def experiment_one():
         recall, hit1 = totals[label]
         print(f"  {label:<10}{recall / n:>11.0%}{hit1 / n:>18.0%}")
     print("-" * 74)
-    lift = (totals["vector"][0] - totals["keyword"][0]) / n
-    print(f"  Meaning-based search beats keyword search by {lift:+.0%} on recall@{TOP_K}.")
+    kw_hits, vec_hits = int(totals["keyword"][0]), int(totals["vector"][0])
+    diff = vec_hits - kw_hits
+    verb = "beats" if diff > 0 else ("loses to" if diff < 0 else "ties with")
+    print(f"  Meaning-based search {verb} keyword search on recall@{TOP_K}: "
+          f"{vec_hits}/{n} against {kw_hits}/{n}.")
+    if abs(diff) <= 1:
+        print(f"  A difference of {abs(diff)} question in {n} is not a signal. "
+              "Read the per-question pattern above, not this number.")
     print()
     return totals
 

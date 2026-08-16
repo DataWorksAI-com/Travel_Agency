@@ -22,8 +22,8 @@ filters.
 
 The data is mock (28 restaurants across 6 tropical cities) but shaped like a
 real restaurant API (Google Places–style fields), so it can be swapped for a
-live API later by replacing a single function body — no changes to the agent,
-prompt, or callers.
+live API later — see the live-data section below, where that swap is actually
+exercised against a real public API rather than only claimed.
 
 ## The reflection step — what makes this an agent, not a search pipeline
 
@@ -66,10 +66,15 @@ question, never talks to another agent, and assumes no shared context — the
 destination city must be included in the task string.
 
 ```python
-from restaurant_agent_ollama import answer
+from restaurant_agent import answer
 
 message = answer("Recommend a vegan dinner in Aruba under $30")
 ```
+
+Both `from restaurant_agent import answer` and
+`from restaurant_agent.restaurant_agent_ollama import answer` work, and so does
+running the module directly from inside this folder. All three are covered by
+the import test.
 
 `answer(task: str) -> str` returns a single message shaped for direct insertion
 into an itinerary: one committed top pick with a one-line reason, then at most
@@ -84,6 +89,12 @@ Alternatives:
 - Palma Verde - Mediterranean, Aruba. About $28 per person, rated 4.6/5. Dietary: vegetarian, vegan, gluten-free.
 ```
 
+Concurrency: the per-request dietary safety net is held in a `ContextVar`, not a
+module global, so two travellers answered at the same time — in threads or in
+asyncio — cannot inherit each other's dietary requirements. Building the vector
+database is guarded by a lock and never deletes a collection another caller is
+reading.
+
 Contract guarantees:
 - **Never raises.** Any failure is returned as a plain message, so one broken
   sub-agent cannot break the itinerary.
@@ -94,6 +105,55 @@ Contract guarantees:
   from the vector database, saying plainly that it ran without the model.
 - **Invents nothing.** If no record matches, it says so and names the filter
   most likely responsible.
+
+## Coverage, and what happens outside it
+
+This agent holds records for **Aruba, Cancun, Honolulu, Montego Bay, Nassau and
+San Juan**. The destination layer on `main` (`destination_data/destinations.json`)
+covers 47 cities worldwide and shares exactly one of them with this agent, so in
+the merged system the orchestrator will routinely name a destination this agent
+has never seen.
+
+When that happens it **declines**:
+
+```
+Coverage limit: this restaurant agent holds records for Aruba, Cancun, Honolulu,
+Montego Bay, Nassau, San Juan only. Tokyo is outside that coverage, so no
+restaurant has been recommended and nothing has been invented.
+```
+
+A named-but-uncovered city is a different state from no city at all, and the two
+are handled separately. Answering about the wrong country would be worse than
+answering nothing, because the orchestrator cannot tell a wrong recommendation
+from a right one.
+
+## Live data, and what a free source actually gives you
+
+`restaurants_live.py` fetches real restaurants from OpenStreetMap through the
+Overpass API. No API key, no billing, no sign-up, so anyone reading this can run
+it. Records come back in exactly the shape the local dataset uses.
+
+OpenStreetMap was chosen **because** it supports `diet:vegan`, `diet:vegetarian`
+and `diet:gluten_free` as first-class fields. Measured on 40 real San Juan
+records, 15 August 2026:
+
+| field | populated |
+|---|---|
+| name | 100% |
+| cuisine | 28% |
+| price | 0% |
+| rating | 0% |
+| any dietary tag | **2%** |
+
+The fields exist. Almost nobody fills them in. Supporting a field and populating
+it are different things, and only running the call showed the difference.
+
+So a free crowd-sourced source supplies one of the five fields this agent filters
+on, and dietary filtering — the entire point of the agent — would fail on live
+data for 98% of restaurants. A production deployment needs a commercial provider
+that guarantees these fields. That is a purchasing decision, not an engineering
+one, and it is the reason the demo runs on a local dataset shaped like a
+commercial provider's response.
 
 ## Measured results
 
@@ -132,7 +192,9 @@ The agentic win comes from the second look, not from the retriever.
 - `restaurant_finder.py` — the RAG engine (vector DB build, semantic search, hard filters), the reflection step `search_with_reflection`, plus the contract helpers `parse_task` and `format_for_itinerary`
 - `restaurants_data.py` — the mock restaurant dataset (28 records)
 - `restaurant_agent_ollama.py` — the Deep Agent: its tool, system prompt, the `answer()` orchestrator entry point, and an interactive loop
-- `test_jig.py` — automatic black-box checker (30 cases: 8 retrieval/filter, 9 contract, 13 reflection and hard-constraint)
+- `test_jig.py` — automatic black-box checker (34 cases: 8 retrieval/filter, 9 contract, 17 reflection, hard-constraint and coverage). Exits non-zero on failure, so it can gate a build
+- `run_tests_offline.py` — runs the whole suite with no network, no API key and no model download, using a deterministic stand-in embedder
+- `restaurants_live.py` — the live OpenStreetMap data path and its coverage measurement
 - `eval_retrieval.py` — the measured evaluation behind the numbers above
 - `requirements.txt` — dependencies
 - `.env.template` — environment variable template
@@ -160,7 +222,9 @@ hard-filter core, 9 over the orchestrator contract (task-string parsing,
 itinerary-ready formatting, no questions back, nothing invented), and 13 over the
 reflection step and the hard-constraint guarantees (relaxation order, the
 two-attempt stop, dietary and city never relaxed, every adjustment reported).
-Expected result: `SCORE: 30/30`.
+Expected result: `SCORE: 34/34`. On a machine with no network or no embedding
+model available, run `python run_tests_offline.py` instead — same suite, stand-in
+embedder, still exits non-zero on failure.
 
 ## Switching the model / provider
 The agent runs locally on Ollama by default (`MODEL = "ollama:lfm2.5"` in

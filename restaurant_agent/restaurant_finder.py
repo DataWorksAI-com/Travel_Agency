@@ -12,7 +12,9 @@ By default this uses Chroma's own built-in embedding model, which downloads
 once and then runs locally and free. No API key, no cost.
 """
 
+import os
 import re
+import threading
 
 import chromadb
 try:  # works when imported as part of the restaurant_agent package
@@ -50,6 +52,20 @@ _NOT_PLACES = {
     "september", "october", "november", "december",
     "morning", "evening", "afternoon", "night", "summer", "winter",
 }
+
+
+_NEGATIONS = ("not", "no", "non", "isn't", "arent", "aren't", "without",
+              "avoid", "except", "other than", "rather than", "dont", "don't")
+
+
+def _wants(low, word):
+    """True when the word appears AND is not negated just before it."""
+    for match in re.finditer(re.escape(word), low):
+        before = low[max(0, match.start() - 18):match.start()]
+        if any(neg in before for neg in _NEGATIONS):
+            continue
+        return True
+    return False
 
 
 def _named_but_uncovered(text):
@@ -94,28 +110,69 @@ def _doc_text(r):
 
 def _metadata(r):
     """The structured fields we filter on (Chroma metadata must be scalar)."""
-    return {
+    meta = {
         "name": r["name"], "city": r["city"], "cuisine": r["cuisine"],
-        "price": r["price"], "rating": r["rating"],
         "vegetarian": r["vegetarian"], "vegan": r["vegan"],
         "gluten_free": r["gluten_free"], "description": r["description"],
+        # Whether this record carries a price and a rating at all. Live records
+        # from OpenStreetMap carry neither, and Chroma rejects a None value, so
+        # the field is omitted and its presence recorded as a boolean instead.
+        "has_price": r.get("price") is not None,
+        "has_rating": r.get("rating") is not None,
+        "source": r.get("source", "mock"),
     }
+    if r.get("price") is not None:
+        meta["price"] = r["price"]
+    if r.get("rating") is not None:
+        meta["rating"] = r["rating"]
+    return meta
 
 
-def build_collection(embedding_function=None, in_memory=False, persist_path="restaurant_db"):
-    """Create the vector database and load all restaurants into it."""
+# The database lives beside this file, NOT in whatever directory the caller
+# happened to start in. A bare relative path meant the orchestrator would ignore
+# the pre-built database and silently create an empty one of its own, then pay
+# for an 80 MB embedding-model download inside a customer's first request.
+DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               "restaurant_db")
+
+# One process may answer several travellers at once. Building the collection is
+# a check-then-create, which two threads can enter together - and the build used
+# to delete the collection first, so one worker could delete what another was
+# reading. This lock makes the build happen exactly once.
+_BUILD_LOCK = threading.Lock()
+
+
+def build_collection(embedding_function=None, in_memory=False, persist_path=None):
+    """Create or reuse the vector database and load all restaurants into it.
+
+    Rebuilds only when the stored collection does not match the dataset. The
+    previous version deleted and re-embedded on every start, which was both slow
+    and unsafe while another thread was querying.
+    """
     if in_memory:
         client = chromadb.EphemeralClient()
     else:
-        client = chromadb.PersistentClient(path=persist_path)
-    try:
-        client.delete_collection("restaurants")  # rebuild fresh each run
-    except Exception:
-        pass
+        client = chromadb.PersistentClient(path=persist_path or DEFAULT_DB_PATH)
+
     kwargs = {}
     if embedding_function is not None:
         kwargs["embedding_function"] = embedding_function
     col = client.get_or_create_collection("restaurants", **kwargs)
+
+    try:
+        already = col.count()
+    except Exception:
+        already = -1
+    if already == len(RESTAURANTS):
+        return col  # already built and complete - reuse it
+
+    if already:  # partial or stale, start clean
+        try:
+            client.delete_collection("restaurants")
+        except Exception:
+            pass
+        col = client.get_or_create_collection("restaurants", **kwargs)
+
     col.add(
         ids=[r["id"] for r in RESTAURANTS],
         documents=[_doc_text(r) for r in RESTAURANTS],
@@ -127,7 +184,10 @@ def build_collection(embedding_function=None, in_memory=False, persist_path="res
 def _get_collection(embedding_function=None, in_memory=False):
     global _COLLECTION
     if _COLLECTION is None:
-        _COLLECTION = build_collection(embedding_function=embedding_function, in_memory=in_memory)
+        with _BUILD_LOCK:
+            if _COLLECTION is None:  # re-check inside the lock
+                _COLLECTION = build_collection(
+                    embedding_function=embedding_function, in_memory=in_memory)
     return _COLLECTION
 
 
@@ -146,8 +206,10 @@ def _build_where(city, max_price, dietary, cuisine=None, min_rating=None):
     if cuisine:
         conds.append({"cuisine": {"$eq": cuisine.strip().title()}})
     if max_price:
+        conds.append({"has_price": {"$eq": True}})
         conds.append({"price": {"$lte": int(max_price)}})
     if min_rating:
+        conds.append({"has_rating": {"$eq": True}})
         conds.append({"rating": {"$gte": float(min_rating)}})
     for d in (dietary or []):
         key = _DIET_KEYS.get(str(d).lower().strip().replace(" ", "_"))
@@ -171,9 +233,10 @@ def search_restaurants(query, city=None, max_price=None, dietary=None, cuisine=N
     for m in metas:
         out.append({
             "name": m["name"], "city": m["city"], "cuisine": m["cuisine"],
-            "price": m["price"], "rating": m["rating"],
+            "price": m.get("price"), "rating": m.get("rating"),
             "vegetarian": m["vegetarian"], "vegan": m["vegan"],
             "gluten_free": m["gluten_free"], "description": m["description"],
+            "source": m.get("source", "mock"),
         })
     return out
 
@@ -315,9 +378,12 @@ def search_with_reflection(query, city=None, max_price=None, dietary=None,
 # -----------------------------------------------------------------------------
 
 _BUDGET_PATTERNS = (
-    r"(?:under|below|less than|up to|within|at most|max(?:imum)?|budget of)\s*\$?\s*(\d{1,4})",
-    r"\$\s*(\d{1,4})",
-    r"(\d{1,4})\s*(?:dollars|usd|bucks)",
+    # Comma groups are captured whole. Measured 16 Aug: the old pattern stopped
+    # at the comma, so "the flight cost $1,250 already" was read as a $1 budget.
+    # A composed orchestrator task string will routinely carry a flight price.
+    r"(?:under|below|less than|up to|within|at most|max(?:imum)?|budget of)\s*\$?\s*(\d{1,3}(?:,\d{3})+|\d{1,5})",
+    r"\$\s*(\d{1,3}(?:,\d{3})+|\d{1,5})",
+    r"(\d{1,3}(?:,\d{3})+|\d{1,5})\s*(?:dollars|usd|bucks)",
 )
 
 _QUALITY_WORDS = ("highly rated", "best rated", "top rated", "highest rated",
@@ -370,17 +436,32 @@ def parse_task(task):
     for pattern in _BUDGET_PATTERNS:
         found = re.search(pattern, low)
         if found:
-            max_price = int(found.group(1))
+            max_price = int(found.group(1).replace(",", ""))
             break
 
     min_rating = 4.5 if any(w in low for w in _QUALITY_WORDS) else None
 
+    # A dietary word that is NEGATED is not a dietary requirement. Measured
+    # 16 Aug: "guests are not vegan but love steak" set dietary=['vegan'], and
+    # because the tool only ever ADDS dietary flags by design, nothing
+    # downstream could undo it. The traveller would be served vegan food.
     dietary = []
-    if "vegan" in low:
+    if _wants(low, "vegan"):
         dietary.append("vegan")
-    if "vegetarian" in low or re.search(r"\bveggie\b", low):
+    if _wants(low, "vegetarian") or _wants(low, "veggie"):
         dietary.append("vegetarian")
-    if "gluten" in low:
+
+    # Gluten is asymmetric and needs its own handling. For vegan and vegetarian
+    # the requirement is the PRESENCE of the thing, so "not vegan" cancels it.
+    # For gluten the requirement is its ABSENCE, so "no gluten", "without
+    # gluten" and "avoid gluten" all mean the diner NEEDS gluten-free, while
+    # "not gluten-free" is the one phrasing that cancels it. Treating gluten
+    # like the other two turned "no gluten please" into no requirement at all.
+    if any(p in low for p in ("no gluten", "without gluten", "avoid gluten",
+                              "gluten intoleran", "gluten allerg", "coeliac",
+                              "celiac")):
+        dietary.append("gluten_free")
+    elif _wants(low, "gluten"):
         dietary.append("gluten_free")
 
     if not city and not city_uncovered:
@@ -408,8 +489,11 @@ def _headline(r):
                             ("vegan", r["vegan"]),
                             ("gluten-free", r["gluten_free"])) if on]
     tag_str = (" Dietary: " + ", ".join(tags) + ".") if tags else ""
-    return (f"{r['name']} - {r['cuisine']}, {r['city']}. "
-            f"About ${r['price']} per person, rated {r['rating']}/5.{tag_str}")
+    price = (f"About ${r['price']} per person" if r.get("price") is not None
+             else "price not published by this source")
+    rating = (f"rated {r['rating']}/5" if r.get("rating") is not None
+              else "no published rating")
+    return f"{r['name']} - {r['cuisine']}, {r['city']}. {price}, {rating}.{tag_str}"
 
 
 def format_for_itinerary(results, assumptions=None, relaxations=None,

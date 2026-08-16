@@ -41,8 +41,19 @@
 # -----------------------------------------------------------------------------
 # STEP 1 - BRING IN CODE
 # -----------------------------------------------------------------------------
+import logging
 import os
 from contextvars import ContextVar
+
+# Every other agent in the team repo loads a .env file. This one did not, which
+# meant an orchestrator that set RESTAURANT_AGENT_MODEL in .env - the normal
+# place - would have been silently ignored and this agent would have dropped to
+# the local model on its own.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:  # optional; the agent still runs on real environment vars
+    pass
 
 from deepagents import create_deep_agent
 try:  # works when imported as part of the restaurant_agent package
@@ -245,6 +256,8 @@ SYSTEM_PROMPT = (
 )
 
 
+_LOG = logging.getLogger(__name__)
+
 _AGENT = None
 
 
@@ -310,15 +323,19 @@ def _retrieval_only_answer(task, reason=None):
             top_k=5,
         )
         notes = list(parsed["assumptions"])
+        message = format_for_itinerary(results, assumptions=notes,
+                                       relaxations=relaxations,
+                                       city_uncovered=parsed["city_uncovered"])
         if reason:
-            notes.append(
-                "Answered from the restaurant database directly, without the "
-                "language model, because the model was unavailable (" + reason + "). "
-                "The recommendation below is still drawn from real records."
-            )
-        return format_for_itinerary(results, assumptions=notes,
-                                    relaxations=relaxations,
-                                    city_uncovered=parsed["city_uncovered"])
+            # The traveller must never be shown a stack trace or a pip command,
+            # and a technical failure is not an "Assumption" about their trip.
+            # The detail goes to the log; the itinerary gets one plain sentence.
+            _LOG.warning("restaurant agent fell back to retrieval-only: %s", reason)
+            message = ("Note: answered directly from the restaurant database "
+                       "without the language model, which was unavailable. The "
+                       "recommendation below is still drawn from real records.\n"
+                       + message)
+        return message
     except Exception as error:  # retrieval itself failed - stay inside the contract
         return ("The restaurant agent could not complete this task. Retrieval "
                 "failed with: " + str(error) + ". No restaurant has been invented. "
@@ -337,7 +354,15 @@ def answer(task: str) -> str:
         A single itinerary-ready message. Contains no questions back to the
         orchestrator, and states any assumption it had to make.
     """
-    if not task or not task.strip():
+    # Coerce first, and inside the guard. The contract says this function never
+    # raises; before this, a dict, a list or an int reached .strip() and threw
+    # AttributeError before the try block was even entered.
+    try:
+        task = task if isinstance(task, str) else ("" if task is None else str(task))
+    except Exception:
+        task = ""
+
+    if not task.strip():
         return ("No task text was received, so no restaurant search could be "
                 "run. Send the request as one string including the destination "
                 "city, for example: 'dinner in San Juan, seafood, under $40'.")

@@ -371,4 +371,7 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    # Exit non-zero on failure, so the suite can actually gate something. A bare
+    # run() always exited 0, which meant thirty passing checks could not block a
+    # broken commit.
+    raise SystemExit(0 if run() else 1)

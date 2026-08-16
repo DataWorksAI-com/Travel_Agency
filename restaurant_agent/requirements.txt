@@ -20,6 +20,14 @@ chromadb>=1.5.9                 # tested with 1.5.9
 deepagents>=0.7.4               # tested with 0.7.4
 langchain-ollama>=1.1.0         # tested with 1.1.0
 
+# Reads a .env file, the same way every other agent in this repo does, so the
+# orchestrator can set RESTAURANT_AGENT_MODEL without editing any source file.
+python-dotenv>=1.0.0
+
+# Co-installation floor. Jainam's activities agent uses langchain-chroma in the
+# same environment; this is the version that works alongside chromadb 1.5.9.
+langchain-chroma>=1.1.0
+
 # Pulled in automatically by deepagents; listed for reproducibility only.
 # langchain      1.3.14
 # langchain-core 1.5.3
