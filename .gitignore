@@ -1,4 +1,22 @@
+# Environment files
 .env
+*.env
+
+# Virtual environments
 .venv/
+venv/
+
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# Chroma local database/cache
+chroma_db/
+**/chroma_db/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/

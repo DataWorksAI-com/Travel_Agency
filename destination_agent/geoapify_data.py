@@ -1,14 +1,12 @@
 import os
 import json
+import time
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
 
-
-# ============================================================
 # ENVIRONMENT SETUP
-# ============================================================
 
 # Load environment variables from the .env file.
 load_dotenv()
@@ -27,7 +25,10 @@ PROFILE_FILE = Path(__file__).parent / "destination_profiles.json"
 # GEOAPIFY: DESTINATION GEOCODING
 # ============================================================
 
-def geocode_destination(destination_name: str):
+def geocode_destination(
+    destination_name: str,
+    country_code: str = None
+):
     """
     Convert a destination name into latitude and longitude
     using the Geoapify Geocoding API.
@@ -53,9 +54,16 @@ def geocode_destination(destination_name: str):
 
     params = {
         "text": destination_name,
+        "type": "city",
         "format": "json",
+        "bias": "countrycode:none",
         "apiKey": GEOAPIFY_API_KEY
     }
+
+    if country_code:
+        params["filter"] = (
+            f"countrycode:{country_code.lower()}"
+        )
 
     try:
         response = requests.get(
@@ -105,12 +113,21 @@ def search_places(
     latitude: float,
     longitude: float,
     category: str,
-    place_id: str = None, 
+    place_id: str = None,
+    bbox: dict = None,
     limit: int = 10
 ):
     """
     Search for places near a destination using
     the Geoapify Places API.
+
+    The function tries several spatial search strategies:
+    1. City bounding box
+    2. Geoapify place boundary
+    3. 20 km coordinate circle
+
+    If one strategy fails because of a network/API error,
+    the next strategy is attempted.
 
     Args:
         latitude:
@@ -127,11 +144,23 @@ def search_places(
             - leisure.park.nature_reserve
             - sport.dive_centre
 
+        place_id:
+            Optional Geoapify place boundary ID.
+
+        bbox:
+            Optional destination bounding box.
+
         limit:
             Maximum number of places to return.
 
     Returns:
         A list of place dictionaries.
+
+        Returns [] when the request succeeds but no places
+        are found.
+
+        Returns None only when every spatial search strategy
+        fails.
     """
 
     if not GEOAPIFY_API_KEY:
@@ -146,79 +175,145 @@ def search_places(
         "limit": limit,
         "apiKey": GEOAPIFY_API_KEY
     }
-    # If Geoapify provides a place boundary,
-    # search inside the entire destination.
-    if place_id:
-        params["filter"] = f"place:{place_id}"
 
-    # Fallback:
-    # If no place boundary is available,
-    # search within 20 km of the coordinates.
-    else:
-        params["filter"] = (
+    # --------------------------------------------------------
+    # BUILD SEARCH STRATEGIES
+    # --------------------------------------------------------
+
+    search_filters = []
+
+    # 1. City bounding box
+    if bbox:
+        search_filters.append(
+            (
+                "bbox",
+                (
+                    f"rect:"
+                    f"{bbox['lon1']},"
+                    f"{bbox['lat1']},"
+                    f"{bbox['lon2']},"
+                    f"{bbox['lat2']}"
+                )
+            )
+        )
+
+    # 2. Geoapify place boundary
+    if place_id:
+        search_filters.append(
+            (
+                "place",
+                f"place:{place_id}"
+            )
+        )
+
+    # 3. Coordinate fallback
+    search_filters.append(
+        (
+            "circle",
             f"circle:{longitude},{latitude},20000"
         )
+    )
 
-        params["bias"] = (
-            f"proximity:{longitude},{latitude}"
-        )
+    # --------------------------------------------------------
+    # TRY EACH SEARCH STRATEGY
+    # --------------------------------------------------------
 
-    
+    max_attempts = 3
 
-    try:
-        response = requests.get(
-            url,
-            params=params,
-            timeout=10
-        )
+    for filter_name, spatial_filter in search_filters:
 
-        response.raise_for_status()
+        request_params = params.copy()
 
-        data = response.json()
+        request_params["filter"] = spatial_filter
 
-        places = []
-
-        for feature in data.get("features", []):
-            properties = feature.get(
-                "properties",
-                {}
+        # Bias is only needed for the circle search.
+        if filter_name == "circle":
+            request_params["bias"] = (
+                f"proximity:{longitude},{latitude}"
             )
 
-            name = properties.get("name")
+        # Retry the current strategy up to 3 times.
+        for attempt in range(
+            1,
+            max_attempts + 1
+        ):
 
-            # Ignore places without a usable name.
-            if not name:
-                continue
+            try:
+                response = requests.get(
+                    url,
+                    params=request_params,
+                    timeout=15
+                )
 
-            places.append(
-                {
-                    "name": name,
-                    "categories": properties.get(
-                        "categories",
-                        []
-                    ),
-                    "formatted": properties.get(
-                        "formatted"
+                response.raise_for_status()
+
+                data = response.json()
+
+                places = []
+
+                for feature in data.get(
+                    "features",
+                    []
+                ):
+                    properties = feature.get(
+                        "properties",
+                        {}
                     )
-                }
-            )
 
-        return places
+                    name = properties.get("name")
 
-    except requests.RequestException as error:
+                    if not name:
+                        continue
+
+                    places.append(
+                        {
+                            "name": name,
+                            "categories": properties.get(
+                                "categories",
+                                []
+                            ),
+                            "formatted": properties.get(
+                                "formatted"
+                            )
+                        }
+                    )
+
+                # [] is still a successful API response.
+                return places
+
+            except requests.RequestException as error:
+
+                print(
+                    f"{category} search using "
+                    f"{filter_name} failed "
+                    f"(attempt "
+                    f"{attempt}/{max_attempts}): "
+                    f"{error}"
+                )
+
+                if attempt < max_attempts:
+                    time.sleep(2)
+
+        # Current spatial strategy failed all retries.
         print(
-            f"Places request failed for category "
-            f"{category}: {error}"
+            f"{category} search using "
+            f"{filter_name} failed. "
+            f"Trying next spatial filter..."
         )
 
-        return []
-
+    # Every spatial strategy failed.
+    return None
 
 # ============================================================
 # BUILD ONE DESTINATION PROFILE
 # ============================================================
 
-def build_destination_profile(destination_name: str):
+def build_destination_profile(
+        destination_name: str,
+        latitude: float = None,
+        longitude: float = None,
+        country_code: str = None
+    ):
     """
     Build a travel-oriented profile for one destination
     using live Geoapify data.
@@ -229,31 +324,38 @@ def build_destination_profile(destination_name: str):
     - nature reserves
     - diving
 
-    Climate information is intentionally excluded because
-    it belongs to another agent in the multi-agent system.
-
-    Args:
-        destination_name:
-            Name of the destination.
-
-    Returns:
-        A structured destination profile dictionary.
-
-        Returns None if the destination cannot be found.
+    Climate and public-holiday data are handled separately
+    by the shared destination data layer.
     """
 
     # Step 1:
     # Convert the destination name into coordinates.
+
+    place_id = None
+    bbox = None
+
+    # Use Geoapify geocoding to obtain the correct
+    # destination boundary information.
     destination = geocode_destination(
-        destination_name
+        destination_name,
+        country_code
     )
 
-    if not destination:
-        return None
+    if destination:
 
-    latitude = destination["latitude"]
-    longitude = destination["longitude"]
-    place_id = destination.get("place_id")
+        place_id = destination.get("place_id")
+        bbox = destination.get("bbox")
+
+        # Only use Geoapify coordinates when coordinates
+        # were not already supplied by the shared data layer.
+        if latitude is None or longitude is None:
+            latitude = destination["latitude"]
+            longitude = destination["longitude"]
+
+    # If neither source can provide coordinates,
+    # the profile cannot be built.
+    if latitude is None or longitude is None:
+        return None
 
     # Map user-friendly feature names to
     # Geoapify category names.
@@ -279,9 +381,20 @@ def build_destination_profile(destination_name: str):
             latitude,
             longitude,
             api_category,
-            place_id
+            place_id=place_id,
+            bbox=bbox
         )
 
+        # API request failed.
+        # Do not treat this as "no places exist".
+        if places is None:
+            print(
+                f"Could not complete {feature_name} lookup "
+                f"for {destination_name}."
+            )
+            return None
+
+        # API worked, but no places were found.
         if not places:
             continue
 
@@ -309,6 +422,46 @@ def build_destination_profile(destination_name: str):
 
     return profile
 
+# ============================================================
+# CONVERT PROFILE TO RAG TEXT
+# ============================================================
+
+def profile_to_rag_text(profile: dict) -> str:
+    """
+    Convert a Geoapify destination profile into concise text
+    that can be added to the Destination RAG corpus.
+    """
+
+    if not profile:
+        return ""
+
+    parts = []
+
+    features = profile.get("features", [])
+
+    if features:
+        parts.append(
+            "Travel features: "
+            + ", ".join(features)
+            + "."
+        )
+
+    for feature, places in profile.get("places", {}).items():
+
+        if not places:
+            continue
+
+        # Keep only a few examples so the RAG text
+        # stays concise.
+        examples = places[:5]
+
+        parts.append(
+            f"{feature.title()}: "
+            + ", ".join(examples)
+            + "."
+        )
+
+    return " ".join(parts)
 
 # ============================================================
 # LOCAL CACHE: LOAD DESTINATION PROFILES
@@ -384,7 +537,10 @@ def save_destination_profiles(profiles):
 # ============================================================
 
 def get_or_build_destination_profile(
-    destination_name: str
+    destination_name: str,
+    latitude: float = None,
+    longitude: float = None,
+    country_code: str = None
 ):
     """
     Get destination information from the local cache first.
@@ -412,9 +568,7 @@ def get_or_build_destination_profile(
     # Load current destination knowledge.
     profiles = load_destination_profiles()
 
-    # --------------------------------------------------------
     # STEP 1: CHECK CACHE
-    # --------------------------------------------------------
 
     # Case-insensitive comparison allows:
     #
@@ -436,9 +590,7 @@ def get_or_build_destination_profile(
 
             return profile
 
-    # --------------------------------------------------------
     # STEP 2: CACHE MISS -> CALL GEOAPIFY
-    # --------------------------------------------------------
 
     print(
         f"No cached profile found for "
@@ -451,7 +603,10 @@ def get_or_build_destination_profile(
     )
 
     profile = build_destination_profile(
-        lookup_name
+        lookup_name,
+        latitude=latitude,
+        longitude=longitude,
+        country_code=country_code
     )
 
     if not profile:
@@ -462,9 +617,7 @@ def get_or_build_destination_profile(
 
         return None
 
-    # --------------------------------------------------------
     # STEP 3: SAVE NEW DESTINATION
-    # --------------------------------------------------------
 
     # Do not cache an empty destination profile.
     if not profile["features"]:
