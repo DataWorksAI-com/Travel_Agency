@@ -15,7 +15,10 @@ once and then runs locally and free. No API key, no cost.
 import re
 
 import chromadb
-from restaurants_data import RESTAURANTS
+try:  # works when imported as part of the restaurant_agent package
+    from .restaurants_data import RESTAURANTS
+except ImportError:  # works when this file is run directly from its folder
+    from restaurants_data import RESTAURANTS
 
 _COLLECTION = None  # built once, then reused
 
@@ -23,6 +26,56 @@ _COLLECTION = None  # built once, then reused
 # it can never drift out of step with the records.
 CITIES = sorted({r["city"] for r in RESTAURANTS})
 CUISINES = sorted({r["cuisine"] for r in RESTAURANTS})
+
+
+def _fold(text):
+    """Lowercase and strip accents, so Cancun matches Cancún.
+
+    Joel's destination corpus writes it with the accent; this agent's records
+    do not. Without folding, a destination the system genuinely covers would be
+    treated as uncovered.
+    """
+    import unicodedata
+    return "".join(
+        c for c in unicodedata.normalize("NFD", (text or "").lower())
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+# Words that follow "in"/"to" and are NOT places. Kept deliberately short - a
+# false positive here only costs a clear refusal, never a wrong recommendation.
+_NOT_PLACES = {
+    "the", "a", "an", "town", "advance", "general", "particular", "mind",
+    "january", "february", "march", "april", "may", "june", "july", "august",
+    "september", "october", "november", "december",
+    "morning", "evening", "afternoon", "night", "summer", "winter",
+}
+
+
+def _named_but_uncovered(text):
+    """Return the place name if the task names a destination this agent lacks.
+
+    Looks for "in X" / "to X" / "near X" followed by a capitalised name, and
+    returns it when it is not one of the covered cities. Returns None when no
+    place is named at all - which is the genuinely-unspecified case and is
+    handled separately with a stated assumption.
+    """
+    import re as _re
+    covered = {_fold(c) for c in CITIES}
+    for match in _re.finditer(
+        r"\b(?:in|to|near|around|at|visiting)\s+([A-Z][a-zA-Z\u00C0-\u024F]+(?:\s+[A-Z][a-zA-Z\u00C0-\u024F]+)?)",
+        text or "",
+    ):
+        candidate = match.group(1).strip()
+        if _fold(candidate) in covered:
+            return None
+        first_word = _fold(candidate.split()[0])
+        if first_word in _NOT_PLACES:
+            continue
+        if _fold(candidate) in {_fold(c) for c in CUISINES}:
+            continue
+        return candidate
+    return None
 
 
 def _doc_text(r):
@@ -280,10 +333,25 @@ def parse_task(task):
     in assumptions so the final message can state it out loud.
     """
     text = (task or "").strip()
-    low = text.lower()
+    low = _fold(text)
     assumptions = []
 
-    city = next((c for c in CITIES if c.lower() in low), None)
+    city = next((c for c in CITIES if _fold(c) in low), None)
+
+    # A city that was NAMED but is not covered is a completely different case
+    # from no city at all, and collapsing the two is dangerous. Measured on
+    # 16 Aug 2026: the destination layer already merged into main
+    # (destination_data/destinations.json) carries 47 cities - Paris, Rome,
+    # Bangkok, Kyoto - and shares exactly ONE of them with this agent's six.
+    # So in the merged system the orchestrator will routinely name a city this
+    # agent has never heard of. Before this check, that fell through to a search
+    # across all six Caribbean cities and attached the sentence "No destination
+    # city was named in the task", which was simply false. Asked for dinner in
+    # Tokyo, it recommended a restaurant in Cancun.
+    #
+    # Answering about the wrong country is the exact failure this agent's own
+    # NEVER_RELAXED rule exists to prevent, so it is caught here instead.
+    city_uncovered = None if city else _named_but_uncovered(text)
 
     # Longest cuisine name first, so "Fine Dining" wins over a shorter overlap.
     cuisine = next((c for c in sorted(CUISINES, key=len, reverse=True)
@@ -315,7 +383,7 @@ def parse_task(task):
     if "gluten" in low:
         dietary.append("gluten_free")
 
-    if not city:
+    if not city and not city_uncovered:
         assumptions.append(
             "No destination city was named in the task, so this searched all "
             "covered cities (" + ", ".join(CITIES) + "). Pass a city in the "
@@ -329,6 +397,7 @@ def parse_task(task):
         "max_price": max_price,
         "min_rating": min_rating,
         "dietary": dietary,
+        "city_uncovered": city_uncovered,
         "assumptions": assumptions,
     }
 
@@ -343,7 +412,8 @@ def _headline(r):
             f"About ${r['price']} per person, rated {r['rating']}/5.{tag_str}")
 
 
-def format_for_itinerary(results, assumptions=None, relaxations=None):
+def format_for_itinerary(results, assumptions=None, relaxations=None,
+                         city_uncovered=None):
     """Write the single self-contained message the orchestrator receives.
 
     Shape: one committed top pick with a reason, then up to two alternatives.
@@ -356,6 +426,21 @@ def format_for_itinerary(results, assumptions=None, relaxations=None):
     moved; an answer that quietly bends a requirement looks correct and is not.
     """
     lines = []
+
+    # A destination this agent does not cover is refused outright, before any
+    # search runs. Returning a Caribbean restaurant for a request about Tokyo
+    # would be worse than returning nothing: the orchestrator would drop it
+    # into an itinerary and nobody downstream could tell it was wrong.
+    if city_uncovered:
+        return (
+            "Coverage limit: this restaurant agent holds records for "
+            + ", ".join(CITIES) + " only. "
+            + str(city_uncovered) + " is outside that coverage, so no "
+            "restaurant has been recommended and nothing has been invented. "
+            "Treat the restaurant section of the itinerary as unavailable for "
+            "this destination."
+        )
+
     for note in (assumptions or []):
         lines.append("Assumption: " + note)
     for note in (relaxations or []):

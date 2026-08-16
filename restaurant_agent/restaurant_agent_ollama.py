@@ -42,14 +42,23 @@
 # STEP 1 - BRING IN CODE
 # -----------------------------------------------------------------------------
 import os
+from contextvars import ContextVar
 
 from deepagents import create_deep_agent
-from restaurant_finder import (
-    search_with_reflection,
-    warm_up,
-    parse_task,
-    format_for_itinerary,
-)
+try:  # works when imported as part of the restaurant_agent package
+    from .restaurant_finder import (
+        search_with_reflection,
+        warm_up,
+        parse_task,
+        format_for_itinerary,
+    )
+except ImportError:  # works when this file is run directly from its folder
+    from restaurant_finder import (
+        search_with_reflection,
+        warm_up,
+        parse_task,
+        format_for_itinerary,
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -88,7 +97,17 @@ MODEL = os.environ.get("RESTAURANT_AGENT_MODEL", "ollama:lfm2.5")
 # The orchestrator's original task string, remembered while a request is being
 # answered. The tool needs it because the model paraphrases the request before
 # passing it on, and a paraphrase can quietly lose a dietary word.
-_CURRENT_TASK = ""
+#
+# This is a ContextVar and NOT a plain module variable, and the distinction is a
+# safety one. A plain global is shared by every caller in the process. If the
+# orchestrator ever answers two travellers at once - two threads, or two async
+# tasks, which is the normal shape of a multi-agent system - one traveller's
+# task string would overwrite the other's, and a vegan diner could be served the
+# safety net built from somebody else's request. A ContextVar gives each thread
+# and each async task its own value, so that cannot happen. This is the same bug
+# class the dietary safety net exists to prevent, so it would have been a poor
+# place to leave a shared global.
+_CURRENT_TASK: ContextVar = ContextVar("restaurant_agent_current_task", default="")
 
 
 def find_restaurants(
@@ -139,6 +158,12 @@ def find_restaurants(
     # text, and the two sources are combined. The model can only ever ADD a
     # dietary requirement, never drop one.
     # -------------------------------------------------------------------
+    # Refuse an uncovered destination before searching, whether it arrived in
+    # the orchestrator's task string or in the model's city argument.
+    uncovered = parse_task(_CURRENT_TASK.get() or "")["city_uncovered"]
+    if uncovered:
+        return format_for_itinerary([], city_uncovered=uncovered)
+
     cuisine_clean = (cuisine or "").strip().lower()
     if cuisine_clean == "vegan":
         vegan, cuisine = True, ""
@@ -154,7 +179,7 @@ def find_restaurants(
         dietary.add("gluten_free")
 
     # The safety net: re-read the diet from the words of the request itself.
-    for source in (_CURRENT_TASK, query):
+    for source in (_CURRENT_TASK.get(), query):
         if source:
             dietary.update(parse_task(source)["dietary"])
 
@@ -292,7 +317,8 @@ def _retrieval_only_answer(task, reason=None):
                 "The recommendation below is still drawn from real records."
             )
         return format_for_itinerary(results, assumptions=notes,
-                                    relaxations=relaxations)
+                                    relaxations=relaxations,
+                                    city_uncovered=parsed["city_uncovered"])
     except Exception as error:  # retrieval itself failed - stay inside the contract
         return ("The restaurant agent could not complete this task. Retrieval "
                 "failed with: " + str(error) + ". No restaurant has been invented. "
@@ -316,8 +342,7 @@ def answer(task: str) -> str:
                 "run. Send the request as one string including the destination "
                 "city, for example: 'dinner in San Juan, seafood, under $40'.")
 
-    global _CURRENT_TASK
-    _CURRENT_TASK = task.strip()
+    token = _CURRENT_TASK.set(task.strip())
     try:
         result = get_agent().invoke(
             {"messages": [{"role": "user", "content": task.strip()}]}
@@ -329,7 +354,7 @@ def answer(task: str) -> str:
     except Exception as error:
         return _retrieval_only_answer(task, reason=str(error)[:160])
     finally:
-        _CURRENT_TASK = ""
+        _CURRENT_TASK.reset(token)
 
 
 # -----------------------------------------------------------------------------

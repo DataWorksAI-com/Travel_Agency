@@ -264,6 +264,41 @@ REFLECTION_CASES = [
         ),
     },
     {
+        "desc": "A city outside coverage is REFUSED, not answered with the wrong country",
+        # Joel's destination layer on main carries 47 cities and shares one with
+        # this agent. The orchestrator will name cities this agent has never
+        # heard of, and answering anyway would put a Caribbean restaurant into a
+        # Tokyo itinerary.
+        "check": lambda: (
+            "Coverage limit" in format_for_itinerary(
+                [], city_uncovered=parse_task("seafood dinner in Tokyo under $40")["city_uncovered"])
+            and parse_task("seafood dinner in Tokyo under $40")["city_uncovered"] == "Tokyo"
+        ),
+    },
+    {
+        "desc": "A covered city is NOT mistaken for an uncovered one, accents included",
+        "check": lambda: (
+            parse_task("dinner in Cancun")["city"] == "Cancun"
+            and parse_task("dinner in Canc\u00fan")["city"] == "Cancun"
+            and parse_task("dinner in San Juan")["city_uncovered"] is None
+        ),
+    },
+    {
+        "desc": "No city named at all still yields a stated assumption, not a refusal",
+        "check": lambda: (
+            parse_task("somewhere good for dinner")["city_uncovered"] is None
+            and len(parse_task("somewhere good for dinner")["assumptions"]) > 0
+        ),
+    },
+    {
+        "desc": "The dietary safety net is per-request, not shared between callers",
+        # It is a ContextVar, so two travellers answered at once cannot inherit
+        # each other's dietary requirements.
+        "check": lambda: (
+            __import__("restaurant_agent_ollama")._CURRENT_TASK.__class__.__name__ == "ContextVar"
+        ),
+    },
+    {
         "desc": "Relaxation order is published and puts price last",
         "check": lambda: (
             RELAXATION_ORDER == ("min_rating", "cuisine", "max_price")

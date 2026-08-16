@@ -36,12 +36,12 @@
 
 import re
 
-from restaurants_data import RESTAURANTS
-from restaurant_finder import (
-    _doc_text,
-    search_restaurants,
-    search_with_reflection,
-)
+try:  # works when imported as part of the restaurant_agent package
+    from .restaurants_data import RESTAURANTS
+    from .restaurant_finder import _doc_text, search_restaurants, search_with_reflection
+except ImportError:  # works when run directly from its folder
+    from restaurants_data import RESTAURANTS
+    from restaurant_finder import _doc_text, search_restaurants, search_with_reflection
 
 TOP_K = 3
 
