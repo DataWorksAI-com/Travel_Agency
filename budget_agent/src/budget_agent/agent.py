@@ -1,22 +1,16 @@
 """
-Builds the Budget Cost Aggregator Agent.
+Builds the Budget Agent.
 
-This agent follows the orchestrator/sub-agent contract used across the
-project:
-  - Input: ONE task string from the orchestrator, containing the
-    itemized costs already returned by Flights, Restaurants, and
-    Activities, plus the user's stated budget.
-  - Output: ONE self-contained final message -- total cost, whether
-    it's within budget, and (if over) concrete suggestions for what
-    to cut or downgrade. No follow-up questions back to the
-    orchestrator; if something is ambiguous, it states an assumption
-    and moves on.
+This agent runs standalone -- same pattern as Destination, Flights,
+Activities, and Restaurants -- and does NOT depend on any other
+sub-agent's output. Given a destination + the user's stated budget
+(+ optional trip length), it reasons about feasibility using its own
+knowledge source: typical per-destination cost ranges for flights,
+lodging, food, and activities.
 
-Unlike the other sub-agents, this one does not run in parallel off the
-orchestrator -- it only runs after Flights/Restaurants/Activities have
-already produced priced results, and it needs no external API, MCP
-server, or vector DB. Its tools are pure computation over the numbers
-it's given.
+Per the orchestrator/sub-agent contract: this agent takes ONE
+self-contained task string from the orchestrator and returns ONE
+self-contained final message -- no follow-up questions.
 """
 
 from langchain.chat_models import init_chat_model
@@ -26,31 +20,28 @@ from deepagents import create_deep_agent
 from .config import load_settings
 from .tools import ALL_TOOLS
 
-SYSTEM_PROMPT = """You are the Budget Cost Aggregator agent in a \
-multi-agent travel planning system.
+SYSTEM_PROMPT = """You are the Budget Agent in a multi-agent travel \
+planning system.
 
-You receive a single task string from the orchestrator. It will \
-contain a list of priced line items (from Flights, Restaurants, and \
-Activities sub-agents) and the user's stated budget.
+You receive a single task string from the orchestrator containing a \
+destination, the user's stated budget, and optionally a trip length \
+in days. You do NOT wait on or depend on any other sub-agent's \
+output -- reason entirely from your own tools.
 
-Your job, in order:
-1. Use the aggregate_costs tool to total the line items and break \
-them down by category.
-2. Use the check_budget tool to compare the total against the budget.
-3. If over budget, use the suggest_adjustment tool to propose \
-specific items to cut or downgrade, covering the overage with as few \
-changes as possible. Never touch flights unless nothing else can \
-cover the overage.
+Your job:
+1. Use get_cost_estimate to look up typical costs for the destination.
+2. Use check_feasibility to estimate the total trip cost and compare \
+it against the stated budget.
 
 Always finish with ONE clear, self-contained message stating:
-- The total cost and budget
-- Whether the trip is within budget or over, and by how much
-- If over budget, the specific suggested changes (name + cost of \
-each item to cut/downgrade)
+- The estimated total cost and its breakdown (flight, lodging, food, \
+activities)
+- Whether the budget is feasible for this trip, and by how much it's \
+over or under
 
-Do not ask the orchestrator or user any follow-up questions. If a \
-line item is missing a category or cost, make a reasonable assumption \
-and state it clearly in your final message.
+Do not ask the orchestrator or user any follow-up questions. If trip \
+length isn't given, assume a reasonable default (e.g. 3 days) and \
+state that assumption clearly in your final message.
 """
 
 

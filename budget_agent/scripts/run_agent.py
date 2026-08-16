@@ -22,16 +22,12 @@ from budget_agent.agent import build_agent  # noqa: E402
 
 
 SAMPLE_TASK = """\
-Here are the priced line items collected so far for a trip to Cancun:
+Destination: Cancun
+Trip length: 4 days
+User's stated budget: $700 total
 
-- Flights: JetBlue B6 204, Boston -> Cancun, $412
-- Restaurants: Verde Cancun (dinner), $65
-- Restaurants: La Habichuela (dinner), $80
-- Activities: Snorkeling tour, $120
-- Activities: Chichen Itza day trip, $150
-
-The user's stated budget is $700 total. Aggregate the costs, check \
-against the budget, and if over, suggest what to cut or downgrade.
+Estimate the total trip cost for this destination and check whether \
+it's feasible within the stated budget.
 """
 
 
