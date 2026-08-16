@@ -17,7 +17,15 @@
 # orchestrator drops this agent's reply straight into a customer itinerary.
 # =============================================================================
 
-from restaurant_finder import search_restaurants, parse_task, format_for_itinerary
+from restaurant_finder import (
+    search_restaurants,
+    search_with_reflection,
+    parse_task,
+    format_for_itinerary,
+    RELAXATION_ORDER,
+    MAX_ATTEMPTS,
+)
+from restaurant_agent_ollama import find_restaurants
 
 # Each case: a description, the search arguments, and a check(results) -> bool
 CASES = [
@@ -152,6 +160,134 @@ CONTRACT_CASES = [
 ]
 
 
+# -----------------------------------------------------------------------------
+# SECTION C - THE REFLECTION STEP (the second look)
+# -----------------------------------------------------------------------------
+# These check that the agent re-queries when the literal request fails, that it
+# relaxes the RIGHT things in the RIGHT order, that it never relaxes a dietary
+# need or the destination city, that it stops, and that it always says what it
+# changed. Each case runs the real vector search, so they also prove the loop
+# works end to end rather than only in theory.
+
+REFLECTION_CASES = [
+    {
+        "desc": "Impossible budget triggers a second look and recovers a real pick",
+        # No vegan gluten-free option in Honolulu under $15; the cheapest is $18.
+        "check": lambda: (
+            lambda r, x: len(r) > 0 and len(x) > 0 and "budget was widened" in " ".join(x)
+        )(*search_with_reflection("vegan gluten-free lunch", city="Honolulu",
+                                  max_price=15, dietary=["vegan", "gluten-free"],
+                                  top_k=10)),
+    },
+    {
+        "desc": "A request that is satisfiable as written reports NO adjustments",
+        "check": lambda: (
+            lambda r, x: len(r) > 0 and x == []
+        )(*search_with_reflection("vegan dinner", city="Aruba", max_price=30,
+                                  dietary=["vegan"], top_k=10)),
+    },
+    {
+        "desc": "An unmeetable rating floor is dropped before the budget is touched",
+        # Nassau's only vegan option is rated 4.4, so the 4.5 floor must give way.
+        "check": lambda: (
+            lambda r, x: len(r) > 0 and "rating" in " ".join(x).lower()
+            and "budget" not in " ".join(x).lower()
+        )(*search_with_reflection("highly rated vegan dinner", city="Nassau",
+                                  min_rating=4.5, dietary=["vegan"], top_k=10)),
+    },
+    {
+        "desc": "An unavailable cuisine is dropped, and the diet is still honoured",
+        "check": lambda: (
+            lambda r, x: len(r) > 0 and "cuisine" in " ".join(x).lower()
+            and all(item["vegan"] for item in r)
+        )(*search_with_reflection("vegan bahamian dinner", city="Aruba",
+                                  cuisine="Bahamian", dietary=["vegan"], top_k=10)),
+    },
+    {
+        "desc": "Dietary needs are NEVER relaxed - a vegan steakhouse yields vegan food, not steak",
+        # No steakhouse is vegan. The correct behaviour is to drop the CUISINE
+        # (a preference) and keep 'vegan' (a hard requirement), so every result
+        # is still vegan and no adjustment ever mentions the diet.
+        "check": lambda: (
+            lambda r, x: all(item["vegan"] for item in r)
+            and not any(word in " ".join(x).lower()
+                        for word in ("vegan", "vegetarian", "gluten", "diet"))
+        )(*search_with_reflection("steak dinner", cuisine="Steakhouse",
+                                  dietary=["vegan"], top_k=10)),
+    },
+    {
+        "desc": "A truly impossible request returns nothing rather than a wrong answer",
+        # Gluten-free steakhouse in Montego Bay: the city has no steakhouse at
+        # all, and after cuisine is dropped nothing gluten-free remains either.
+        "check": lambda: (
+            lambda r, x: len(r) == 0 or all(item["gluten_free"] for item in r)
+        )(*search_with_reflection("steak", city="Montego Bay",
+                                  cuisine="Steakhouse", dietary=["gluten_free"],
+                                  top_k=10)),
+    },
+    {
+        "desc": "The destination city is NEVER relaxed",
+        "check": lambda: (
+            lambda r, x: all(item["city"] == "Nassau" for item in r)
+            and "city" not in " ".join(x).lower()
+        )(*search_with_reflection("highly rated vegan dinner", city="Nassau",
+                                  min_rating=4.9, dietary=["vegan"], top_k=10)),
+    },
+    {
+        "desc": "The loop stops - never more than two adjustments",
+        "check": lambda: (
+            lambda r, x: len(x) <= MAX_ATTEMPTS - 1
+        )(*search_with_reflection("highly rated vegan bahamian meal", city="Nassau",
+                                  cuisine="Bahamian", max_price=5, min_rating=4.9,
+                                  dietary=["vegan"], top_k=10)),
+    },
+    {
+        "desc": "A diet passed as a CUISINE is converted to a dietary requirement",
+        # Measured defect: the local model called the tool with cuisine='Vegan'
+        # and vegan=False, which demoted a requirement into a relaxable
+        # preference and returned non-vegan places to a vegan diner.
+        # The invariant: no non-vegan Nassau restaurant may appear, no matter
+        # how the constraint arrived or what the loop had to relax.
+        "check": lambda: not any(
+            name in find_restaurants(query="vegan dinner", city="Nassau",
+                                     cuisine="Vegan", min_rating=4.5)
+            for name in ("Graycliff Dining", "Bamboo Shack", "Conch Corner")
+        ),
+    },
+    {
+        "desc": "A dietary word in the request survives even if the model omits the flag",
+        "check": lambda: all(
+            item["vegan"] for item in search_restaurants(
+                "vegan dinner", city="Nassau",
+                dietary=parse_task("highly rated vegan dinner in Nassau")["dietary"],
+                top_k=10)
+        ),
+    },
+    {
+        "desc": "Relaxation order is published and puts price last",
+        "check": lambda: (
+            RELAXATION_ORDER == ("min_rating", "cuisine", "max_price")
+        ),
+    },
+    {
+        "desc": "Every adjustment is stated in the final message, never silent",
+        "check": lambda: (
+            lambda r, x: "Adjusted:" in format_for_itinerary(r, relaxations=x)
+        )(*search_with_reflection("vegan gluten-free lunch", city="Honolulu",
+                                  max_price=15, dietary=["vegan", "gluten-free"],
+                                  top_k=10)),
+    },
+    {
+        "desc": "An adjusted message still asks the orchestrator no questions",
+        "check": lambda: (
+            lambda r, x: "?" not in format_for_itinerary(r, relaxations=x)
+        )(*search_with_reflection("vegan gluten-free lunch", city="Honolulu",
+                                  max_price=15, dietary=["vegan", "gluten-free"],
+                                  top_k=10)),
+    },
+]
+
+
 def run():
     print("\n" + "=" * 60)
     print("  Restaurant Agent - Test Jig")
@@ -181,7 +317,18 @@ def run():
         if ok:
             passed += 1
 
-    total = len(CASES) + len(CONTRACT_CASES)
+    print("\nSECTION C - the reflection step (second look)\n")
+    for c in REFLECTION_CASES:
+        try:
+            ok = bool(c["check"]())
+        except Exception as error:
+            ok = False
+            print("   (error:", error, ")")
+        print(f"[{'PASS' if ok else 'FAIL'}]  {c['desc']}")
+        if ok:
+            passed += 1
+
+    total = len(CASES) + len(CONTRACT_CASES) + len(REFLECTION_CASES)
     print("\n" + "-" * 60)
     print(f"  SCORE: {passed}/{total} checks passed")
     print("-" * 60 + "\n")

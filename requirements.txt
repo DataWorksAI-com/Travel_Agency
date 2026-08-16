@@ -3,18 +3,27 @@
 #
 # Install with:  pip install -r requirements.txt
 #
-# Minimum versions rather than exact pins, so this installs cleanly alongside
-# the other agents in the shared repo. The retrieval core (chromadb) is the
-# only hard requirement for the test jig; the deep-agent packages are needed
-# to run the agent itself.
+# Versions below are the ones this agent was actually developed and tested
+# against - read from the working environment with pip freeze on 15 Aug 2026,
+# not guessed. Python 3.11.2.
+#
+# Lower bounds rather than exact pins, so this installs cleanly alongside the
+# other agents in the shared repo, with the tested version named beside each
+# one for anyone who needs to reproduce the results exactly.
 
-# Retrieval / vector database - required by restaurant_finder.py and test_jig.py
-chromadb>=0.5.0
+# Retrieval / vector database - required by restaurant_finder.py, test_jig.py
+# and eval_retrieval.py
+chromadb>=1.5.9                 # tested with 1.5.9
 
 # Deep agent framework and the local Ollama model binding - required by
 # restaurant_agent_ollama.py
-deepagents>=0.7.4
-langchain-ollama>=0.2.0
+deepagents>=0.7.4               # tested with 0.7.4
+langchain-ollama>=1.1.0         # tested with 1.1.0
+
+# Pulled in automatically by deepagents; listed for reproducibility only.
+# langchain      1.3.14
+# langchain-core 1.5.3
+# langgraph      1.2.10
 
 # NOTE ON RUNTIME (not a pip package):
 # The default model is local Ollama. Install the Ollama application and pull

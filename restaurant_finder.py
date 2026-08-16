@@ -133,6 +133,123 @@ def warm_up():
 
 
 # -----------------------------------------------------------------------------
+# THE REFLECTION STEP - THE SECOND LOOK
+# -----------------------------------------------------------------------------
+# Everything above runs ONE search and stops. That is a search pipeline: it
+# retrieves, filters, and returns whatever survives. On a genuinely tight
+# request it returns nothing, even when loosening a single condition would
+# have produced a good answer.
+#
+# A person would not stop there. Told "no vegan gluten-free lunch in Honolulu
+# under $15", they would notice the gap, loosen ONE condition, look again, and
+# say what they changed. That is what the code below does, and it is what makes
+# this agent decide its own next search rather than just execute one.
+#
+# Three rules keep it honest:
+#   1. One constraint at a time, in a fixed published order.
+#   2. A hard stop after two second looks. A loop with no stopping rule is a
+#      worse failure than never looping at all.
+#   3. Every relaxation is reported in the final message. Silently bending a
+#      requirement produces an answer that looks correct and is not.
+# -----------------------------------------------------------------------------
+
+# Relaxed in this order - least costly to the diner first. A rating floor is a
+# preference, a cuisine is a preference, money is real, so price moves last.
+RELAXATION_ORDER = ("min_rating", "cuisine", "max_price")
+
+# NEVER relaxed, and the reason each one is off limits:
+#   dietary - a medical or ethical requirement, not a preference. Relaxing it
+#             could put someone in front of food they cannot safely eat.
+#   city    - fixed upstream by the destination agent. A restaurant in the
+#             wrong country is not a weaker answer, it is a broken itinerary.
+NEVER_RELAXED = ("dietary", "city")
+
+MAX_ATTEMPTS = 3          # the first search, plus at most two second looks
+PRICE_WIDEN_FACTOR = 1.5  # how far the budget stretches on each relaxation
+
+
+def _relax_one(filters):
+    """Loosen exactly one constraint, in the published order.
+
+    Mutates the filters dict in place. Returns a plain sentence describing what
+    was changed, or None when nothing further may be relaxed.
+    """
+    for name in RELAXATION_ORDER:
+        value = filters.get(name)
+        if not value:
+            continue
+
+        if name == "min_rating":
+            filters["min_rating"] = None
+            return (f"Nothing met the {value}/5 rating floor, so the rating "
+                    "requirement was dropped for this search.")
+
+        if name == "cuisine":
+            filters["cuisine"] = None
+            return (f"No {value} option matched the other requirements, so the "
+                    "cuisine preference was dropped for this search.")
+
+        if name == "max_price":
+            widened = int(round(float(value) * PRICE_WIDEN_FACTOR))
+            filters["max_price"] = widened
+            return (f"Nothing matched under ${int(value)} per person, so the "
+                    f"budget was widened to ${widened} for this search.")
+
+    return None
+
+
+def search_with_reflection(query, city=None, max_price=None, dietary=None,
+                           cuisine=None, min_rating=None, top_k=5,
+                           embedding_function=None, in_memory=False):
+    """Search; if nothing comes back, relax one constraint and look again.
+
+    This is the agentic half of the agent. The plain search_restaurants above
+    answers "what matches these filters". This answers the harder question a
+    person actually asks: "what should I eat", deciding for itself which
+    requirement to bend when the literal request cannot be met.
+
+    Returns:
+        (results, relaxations) - the ranked matches, and a list of plain
+        sentences describing every constraint that had to be loosened. The
+        list is empty when the original request was satisfied as written, so
+        the caller can always tell a clean hit from a recovered one.
+    """
+    filters = {
+        "city": city,
+        "max_price": max_price,
+        "dietary": dietary,
+        "cuisine": cuisine,
+        "min_rating": min_rating,
+    }
+    relaxations = []
+
+    for attempt in range(MAX_ATTEMPTS):
+        results = search_restaurants(
+            query,
+            city=filters["city"],
+            max_price=filters["max_price"],
+            dietary=filters["dietary"],
+            cuisine=filters["cuisine"],
+            min_rating=filters["min_rating"],
+            top_k=top_k,
+            embedding_function=embedding_function,
+            in_memory=in_memory,
+        )
+        if results:
+            return results, relaxations
+
+        if attempt == MAX_ATTEMPTS - 1:
+            break  # the hard stop - no third second look
+
+        note = _relax_one(filters)
+        if note is None:
+            break  # only dietary and city are left, and neither may be relaxed
+        relaxations.append(note)
+
+    return [], relaxations
+
+
+# -----------------------------------------------------------------------------
 # ORCHESTRATOR CONTRACT HELPERS
 # -----------------------------------------------------------------------------
 # The orchestrator sends this agent ONE task string and expects ONE final
@@ -171,6 +288,15 @@ def parse_task(task):
     # Longest cuisine name first, so "Fine Dining" wins over a shorter overlap.
     cuisine = next((c for c in sorted(CUISINES, key=len, reverse=True)
                     if c.lower() in low), None)
+
+    # "Vegan" and "Vegetarian" are BOTH cuisine names in this database and
+    # dietary words in plain speech. Someone asking for "a vegan dinner" means
+    # the diet, not that cuisine specifically - reading it as a cuisine narrows
+    # the search to one restaurant type and hides good matches. So a diet word
+    # is treated as a diet only. Asking for a "vegan restaurant" still works,
+    # because the dietary filter covers every place that serves vegan food.
+    if cuisine and cuisine.lower() in ("vegan", "vegetarian"):
+        cuisine = None
 
     max_price = None
     for pattern in _BUDGET_PATTERNS:
@@ -217,24 +343,41 @@ def _headline(r):
             f"About ${r['price']} per person, rated {r['rating']}/5.{tag_str}")
 
 
-def format_for_itinerary(results, assumptions=None):
+def format_for_itinerary(results, assumptions=None, relaxations=None):
     """Write the single self-contained message the orchestrator receives.
 
     Shape: one committed top pick with a reason, then up to two alternatives.
     Specific enough to drop directly into a final itinerary - never a vague
     "found some options" and never a question back to the orchestrator.
+
+    Any constraint the reflection step had to loosen is stated on its own
+    "Adjusted:" line, above the recommendation. This is deliberate. A diner who
+    asked for a $15 lunch and is handed an $18 one needs to see that the budget
+    moved; an answer that quietly bends a requirement looks correct and is not.
     """
     lines = []
     for note in (assumptions or []):
         lines.append("Assumption: " + note)
+    for note in (relaxations or []):
+        lines.append("Adjusted: " + note)
 
     if not results:
-        lines.append(
-            "No restaurant in this agent's database matches those requirements. "
-            "Nothing has been invented to fill the gap. The requirement that most "
-            "likely caused this is the budget, the cuisine, or the dietary filter - "
-            "relaxing any one of them should return options."
-        )
+        if relaxations:
+            lines.append(
+                "No restaurant in this agent's database matches those "
+                "requirements, even after the adjustments above. Nothing has "
+                "been invented to fill the gap. The dietary requirement and the "
+                "destination were held fixed, so the shortfall is genuine for "
+                "this city. Treat the restaurant section as needing a wider "
+                "search area or a different destination."
+            )
+        else:
+            lines.append(
+                "No restaurant in this agent's database matches those requirements. "
+                "Nothing has been invented to fill the gap. The requirement that most "
+                "likely caused this is the budget, the cuisine, or the dietary filter - "
+                "relaxing any one of them should return options."
+            )
         return "\n".join(lines)
 
     top = results[0]

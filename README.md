@@ -18,10 +18,45 @@ filters.
    max price, minimum rating, and dietary needs (vegetarian / vegan /
    gluten-free).
 
+4. If nothing comes back, the agent **looks again** — see below.
+
 The data is mock (28 restaurants across 6 tropical cities) but shaped like a
 real restaurant API (Google Places–style fields), so it can be swapped for a
 live API later by replacing a single function body — no changes to the agent,
 prompt, or callers.
+
+## The reflection step — what makes this an agent, not a search pipeline
+
+A search pipeline runs one query and returns whatever survives the filters. On a
+genuinely tight request that means returning nothing, even when loosening a
+single condition would have produced a good answer.
+
+`search_with_reflection()` gives the agent a second look. When a search comes
+back empty it **relaxes exactly one constraint, on its own, and searches again**:
+
+```
+Adjusted: Nothing matched under $15 per person, so the budget was widened to $22 for this search.
+Recommended restaurant: Leilani Thai - Thai, Honolulu. About $22 per person, rated 4.4/5. Dietary: vegetarian, vegan, gluten-free.
+```
+
+Three rules keep it honest:
+
+1. **One constraint at a time, in a published order** — `RELAXATION_ORDER = ("min_rating", "cuisine", "max_price")`. A rating floor is a preference, a cuisine is a preference, money is real, so price moves last.
+2. **Never relaxed:** dietary needs (a medical or ethical requirement, not a preference) and the destination city (fixed upstream by the destination agent — a restaurant in the wrong country is a broken itinerary, not a weaker answer).
+3. **A hard stop after two second looks,** and every adjustment is reported on its own `Adjusted:` line. Silently bending a requirement produces an answer that looks correct and is not.
+
+## Hard constraints are not left to the language model
+
+Measured on 15 Aug 2026: asked for *"highly rated vegan dinner in Nassau"*, the
+local model called the tool with `cuisine='Vegan'` and `vegan=False`. That
+demotes a dietary **requirement** into a cuisine **preference** — and preferences
+are exactly what the reflection step may relax. The result offered a vegan diner
+two restaurants that are not vegan.
+
+The fix is not "use a bigger model", which would fail less often rather than
+never. Dietary needs are now derived deterministically from the request text and
+combined with whatever the model passes, so **the model can only ever add a
+dietary requirement, never drop one.** Two tests cover it.
 
 ## Orchestrator interface
 
@@ -60,11 +95,45 @@ Contract guarantees:
 - **Invents nothing.** If no record matches, it says so and names the filter
   most likely responsible.
 
+## Measured results
+
+Run `python eval_retrieval.py`. Numbers below are from a real run on 15 Aug 2026
+under the real embedding model.
+
+**Experiment 1 — retrieval quality.** 20 hand-labelled questions, phrased the way
+a traveller speaks, scored on recall@3 against a plain keyword baseline searching
+the identical text.
+
+| | recall@3 | top-1 hit rate |
+|---|---|---|
+| keyword baseline | 85% | 70% |
+| vector search | 80% | 55% |
+
+**Keyword search wins on this corpus, and that is reported rather than hidden.**
+The pattern is what matters. Vector search won where the wording differed but the
+concept was concrete — *"fresh fish right by the water"*, *"spicy asian curry"*.
+It lost on abstract, social requests — *"somewhere romantic for an anniversary
+dinner"*, *"a special occasion splurge"* — because the corpus describes food and
+setting, not occasions. On a small corpus of rich descriptive text, keyword search
+is a strong baseline; semantic search earns its place on vocabulary mismatch.
+
+**Experiment 2 — the value of the second look.** Six deliberately tight requests,
+measured with the reflection step off and on. This result does not depend on the
+embedding model.
+
+| | requests answered |
+|---|---|
+| without the second look | 0 / 6 |
+| with the second look | 6 / 6 |
+
+The agentic win comes from the second look, not from the retriever.
+
 ## Files
-- `restaurant_finder.py` — the RAG engine (vector DB build, semantic search, hard filters) plus the contract helpers `parse_task` and `format_for_itinerary`
+- `restaurant_finder.py` — the RAG engine (vector DB build, semantic search, hard filters), the reflection step `search_with_reflection`, plus the contract helpers `parse_task` and `format_for_itinerary`
 - `restaurants_data.py` — the mock restaurant dataset (28 records)
 - `restaurant_agent_ollama.py` — the Deep Agent: its tool, system prompt, the `answer()` orchestrator entry point, and an interactive loop
-- `test_jig.py` — automatic black-box checker (17 cases: 8 retrieval/filter, 9 contract)
+- `test_jig.py` — automatic black-box checker (30 cases: 8 retrieval/filter, 9 contract, 13 reflection and hard-constraint)
+- `eval_retrieval.py` — the measured evaluation behind the numbers above
 - `requirements.txt` — dependencies
 - `.env.template` — environment variable template
 - `.gitignore` — excludes secrets and generated files
@@ -86,9 +155,12 @@ restaurants into the vector database. Then ask, for example:
 ```
 python test_jig.py
 ```
-Runs 17 deterministic checks with no LLM needed: 8 over the retrieval and hard-filter
-core, and 9 over the orchestrator contract (task-string parsing, itinerary-ready
-formatting, no questions back, nothing invented). Expected result: `SCORE: 17/17`.
+Runs 30 deterministic checks with no LLM needed: 8 over the retrieval and
+hard-filter core, 9 over the orchestrator contract (task-string parsing,
+itinerary-ready formatting, no questions back, nothing invented), and 13 over the
+reflection step and the hard-constraint guarantees (relaxation order, the
+two-attempt stop, dietary and city never relaxed, every adjustment reported).
+Expected result: `SCORE: 30/30`.
 
 ## Switching the model / provider
 The agent runs locally on Ollama by default (`MODEL = "ollama:lfm2.5"` in

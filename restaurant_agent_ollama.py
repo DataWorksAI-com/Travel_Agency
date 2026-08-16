@@ -43,7 +43,7 @@
 # -----------------------------------------------------------------------------
 from deepagents import create_deep_agent
 from restaurant_finder import (
-    search_restaurants,
+    search_with_reflection,
     warm_up,
     parse_task,
     format_for_itinerary,
@@ -68,6 +68,12 @@ MODEL = "ollama:lfm2.5"          # first choice - built for tool calling
 #
 # The type labels (str, int, bool) and the docstring are how Deep Agents tells
 # the model what this tool does and how to call it. Keep them accurate.
+
+# The orchestrator's original task string, remembered while a request is being
+# answered. The tool needs it because the model paraphrases the request before
+# passing it on, and a paraphrase can quietly lose a dietary word.
+_CURRENT_TASK = ""
+
 
 def find_restaurants(
     query: str,
@@ -101,15 +107,48 @@ def find_restaurants(
         to two alternatives, each with name, cuisine, city, price per person and
         rating. Or a plain statement that nothing matched.
     """
-    dietary = []
-    if vegetarian:
-        dietary.append("vegetarian")
-    if vegan:
-        dietary.append("vegan")
-    if gluten_free:
-        dietary.append("gluten_free")
+    # -------------------------------------------------------------------
+    # HARD CONSTRAINTS ARE NOT LEFT TO THE LANGUAGE MODEL
+    # -------------------------------------------------------------------
+    # Measured on 15 Aug 2026: asked for "highly rated vegan dinner in
+    # Nassau", the local model called this tool with cuisine='Vegan' and
+    # left vegan=False. That turns a dietary REQUIREMENT into a cuisine
+    # PREFERENCE - and preferences are exactly what the reflection step is
+    # allowed to relax. The result offered a vegan diner two restaurants
+    # that are not vegan.
+    #
+    # The lesson is not "use a bigger model". It is that a safety-relevant
+    # constraint must not depend on a model choosing the right argument. So
+    # the dietary needs are also read deterministically from the request
+    # text, and the two sources are combined. The model can only ever ADD a
+    # dietary requirement, never drop one.
+    # -------------------------------------------------------------------
+    cuisine_clean = (cuisine or "").strip().lower()
+    if cuisine_clean == "vegan":
+        vegan, cuisine = True, ""
+    elif cuisine_clean == "vegetarian":
+        vegetarian, cuisine = True, ""
 
-    results = search_restaurants(
+    dietary = set()
+    if vegetarian:
+        dietary.add("vegetarian")
+    if vegan:
+        dietary.add("vegan")
+    if gluten_free:
+        dietary.add("gluten_free")
+
+    # The safety net: re-read the diet from the words of the request itself.
+    for source in (_CURRENT_TASK, query):
+        if source:
+            dietary.update(parse_task(source)["dietary"])
+
+    dietary = sorted(dietary)
+
+    # search_with_reflection, not the plain search: if the literal request
+    # returns nothing, it loosens ONE constraint at a time (rating, then
+    # cuisine, then budget - never the dietary needs, never the city), looks
+    # again, and reports exactly what it changed.
+    results, relaxations = search_with_reflection(
         query,
         city=city or None,
         cuisine=cuisine or None,
@@ -122,7 +161,7 @@ def find_restaurants(
     # One shared formatter (in restaurant_finder.py) writes the itinerary-ready
     # block, so the tool output, the agent answer and the fallback path all look
     # identical to the orchestrator.
-    return format_for_itinerary(results)
+    return format_for_itinerary(results, relaxations=relaxations)
 
 
 # -----------------------------------------------------------------------------
@@ -157,6 +196,11 @@ SYSTEM_PROMPT = (
     "itinerary. Never write vague filler such as 'here are some options'.\n"
     "6. Give advice only. Never attempt to book anything, and never address "
     "another agent - only the orchestrator reads your reply.\n"
+    "7. If the tool output contains any line beginning 'Adjusted:', the tool "
+    "could not meet the request as written and loosened a requirement to find "
+    "anything at all. You MUST carry that line through into your reply, in your "
+    "own words if you prefer, so the traveller sees what changed. Never present "
+    "an adjusted result as though it met the original request.\n"
 )
 
 
@@ -215,7 +259,7 @@ def _retrieval_only_answer(task, reason=None):
     """
     try:
         parsed = parse_task(task)
-        results = search_restaurants(
+        results, relaxations = search_with_reflection(
             parsed["query"],
             city=parsed["city"],
             cuisine=parsed["cuisine"],
@@ -231,7 +275,8 @@ def _retrieval_only_answer(task, reason=None):
                 "language model, because the model was unavailable (" + reason + "). "
                 "The recommendation below is still drawn from real records."
             )
-        return format_for_itinerary(results, assumptions=notes)
+        return format_for_itinerary(results, assumptions=notes,
+                                    relaxations=relaxations)
     except Exception as error:  # retrieval itself failed - stay inside the contract
         return ("The restaurant agent could not complete this task. Retrieval "
                 "failed with: " + str(error) + ". No restaurant has been invented. "
@@ -255,6 +300,8 @@ def answer(task: str) -> str:
                 "run. Send the request as one string including the destination "
                 "city, for example: 'dinner in San Juan, seafood, under $40'.")
 
+    global _CURRENT_TASK
+    _CURRENT_TASK = task.strip()
     try:
         result = get_agent().invoke(
             {"messages": [{"role": "user", "content": task.strip()}]}
@@ -265,6 +312,8 @@ def answer(task: str) -> str:
         return text
     except Exception as error:
         return _retrieval_only_answer(task, reason=str(error)[:160])
+    finally:
+        _CURRENT_TASK = ""
 
 
 # -----------------------------------------------------------------------------
