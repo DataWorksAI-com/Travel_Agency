@@ -142,6 +142,27 @@ DEFAULT_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 _BUILD_LOCK = threading.Lock()
 
 
+# The metadata keys every record must carry. If a stored record is missing any
+# of them it was written by an older version of this file and the collection
+# has to be rebuilt, however many records it happens to contain.
+_SCHEMA_KEYS = ("name", "city", "cuisine", "has_price", "has_rating", "source")
+
+
+def _collection_is_current(col):
+    """True when the stored collection holds all curated records in the current
+    metadata schema. Any doubt returns False, because rebuilding is cheap and a
+    silently wrong filter is not."""
+    try:
+        curated_ids = [r["id"] for r in RESTAURANTS]
+        found = col.get(ids=curated_ids, include=["metadatas"])
+        metas = found.get("metadatas") or []
+        if len(metas) != len(curated_ids):
+            return False
+        return all(all(k in (m or {}) for k in _SCHEMA_KEYS) for m in metas)
+    except Exception:
+        return False
+
+
 def build_collection(embedding_function=None, in_memory=False, persist_path=None):
     """Create or reuse the vector database and load all restaurants into it.
 
@@ -159,19 +180,25 @@ def build_collection(embedding_function=None, in_memory=False, persist_path=None
         kwargs["embedding_function"] = embedding_function
     col = client.get_or_create_collection("restaurants", **kwargs)
 
-    try:
-        already = col.count()
-    except Exception:
-        already = -1
-    if already == len(RESTAURANTS):
-        return col  # already built and complete - reuse it
+    # Reuse the stored collection ONLY if it is complete AND was built with the
+    # current metadata schema.
+    #
+    # Measured 16 Aug 2026: reusing on record-count alone silently kept a
+    # database built before has_price / has_rating existed. Every price and
+    # rating filter then matched nothing, because the filter asks for a field
+    # those old records do not carry. A curated Aruba search that had worked all
+    # evening started returning "no restaurant matches". The count was right and
+    # the data was wrong, which is exactly the failure a count cannot see.
+    already = _collection_is_current(col)
+    if already:
+        return col
 
-    if already:  # partial or stale, start clean
-        try:
-            client.delete_collection("restaurants")
-        except Exception:
-            pass
-        col = client.get_or_create_collection("restaurants", **kwargs)
+    # Stale, partial, or built under an older schema - start clean.
+    try:
+        client.delete_collection("restaurants")
+    except Exception:
+        pass
+    col = client.get_or_create_collection("restaurants", **kwargs)
 
     col.add(
         ids=[r["id"] for r in RESTAURANTS],
@@ -494,6 +521,80 @@ def _headline(r):
     rating = (f"rated {r['rating']}/5" if r.get("rating") is not None
               else "no published rating")
     return f"{r['name']} - {r['cuisine']}, {r['city']}. {price}, {rating}.{tag_str}"
+
+
+# -----------------------------------------------------------------------------
+# DYNAMIC CORPUS EXPANSION
+# -----------------------------------------------------------------------------
+# The curated corpus covers six destinations. The destination agent can now
+# produce any destination in the world, so a fixed corpus would make this agent
+# decline most of the trips the system can plan.
+#
+# When an uncovered city is requested, this fetches real restaurants for it from
+# OpenStreetMap and adds them to the vector store, so the next request for that
+# city is served from the corpus like any other.
+#
+# It is honest about the cost. Measured on 40 real records: the free source
+# supplies name and cuisine, but 0% price, 0% rating and a dietary tag on 2%.
+# So an expanded city CANNOT be filtered by budget, by rating, or reliably by
+# diet - and the caller is told exactly that rather than being handed results
+# that silently ignore half their request.
+#
+# Off by default in tests, and any failure degrades to the coverage refusal.
+LIVE_EXPANSION_ENABLED = os.environ.get(
+    "RESTAURANT_AGENT_LIVE_EXPANSION", "1").strip().lower() not in ("0", "false", "no", "off")
+
+_EXPANDED = set()
+
+
+def expand_corpus_for(city, limit=40):
+    """Fetch a new destination live and add it to the vector store.
+
+    Returns (count_added, caveat_sentence) or (0, reason_it_failed).
+    Never raises: a network failure simply means the city stays uncovered.
+    """
+    if not LIVE_EXPANSION_ENABLED:
+        return 0, "live expansion is disabled in this environment"
+    if not city:
+        return 0, "no city given"
+    if city in _EXPANDED:
+        return 0, "already expanded"
+
+    try:
+        from .restaurants_live import fetch_live_restaurants
+    except ImportError:
+        try:
+            from restaurants_live import fetch_live_restaurants
+        except ImportError:
+            return 0, "the live source module is unavailable"
+
+    try:
+        records, error = fetch_live_restaurants(city, limit=limit)
+    except Exception as err:
+        return 0, f"the live source failed ({err})"
+    if error or not records:
+        return 0, error or f"no restaurants were found for {city}"
+
+    try:
+        col = _get_collection()
+        col.add(
+            ids=[r["id"] for r in records],
+            documents=[_doc_text(r) for r in records],
+            metadatas=[_metadata(r) for r in records],
+        )
+    except Exception as err:
+        return 0, f"the fetched records could not be indexed ({err})"
+
+    _EXPANDED.add(city)
+    CITIES.append(city)
+    caveat = (
+        f"{city} is not in this agent's curated corpus, so {len(records)} "
+        "restaurants were fetched live from OpenStreetMap for it. That source "
+        "publishes no price and no star rating, and dietary tags on only about "
+        "2% of records, so budget, rating and dietary filters could not be "
+        "applied to this destination. Names, cuisines and locations are real."
+    )
+    return len(records), caveat
 
 
 def format_for_itinerary(results, assumptions=None, relaxations=None,

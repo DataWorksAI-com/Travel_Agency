@@ -58,6 +58,7 @@ except ImportError:  # optional; the agent still runs on real environment vars
 from deepagents import create_deep_agent
 try:  # works when imported as part of the restaurant_agent package
     from .restaurant_finder import (
+        expand_corpus_for,
         search_with_reflection,
         warm_up,
         parse_task,
@@ -65,6 +66,7 @@ try:  # works when imported as part of the restaurant_agent package
     )
 except ImportError:  # works when this file is run directly from its folder
     from restaurant_finder import (
+        expand_corpus_for,
         search_with_reflection,
         warm_up,
         parse_task,
@@ -313,6 +315,23 @@ def _retrieval_only_answer(task, reason=None):
     """
     try:
         parsed = parse_task(task)
+
+        # An uncovered destination is not an automatic refusal any more. Try to
+        # fetch it live first, exactly as the destination agent expands its own
+        # corpus for newly requested places. Only refuse if that fails.
+        expansion_note = None
+        if parsed["city_uncovered"]:
+            added, note = expand_corpus_for(parsed["city_uncovered"])
+            if added:
+                parsed["city"] = parsed["city_uncovered"]
+                parsed["city_uncovered"] = None
+                # The live source carries no price or rating, so these filters
+                # cannot be honoured for this city. Dropping them silently would
+                # be the exact failure this agent exists to avoid.
+                parsed["max_price"] = None
+                parsed["min_rating"] = None
+                expansion_note = note
+
         results, relaxations = search_with_reflection(
             parsed["query"],
             city=parsed["city"],
@@ -323,6 +342,8 @@ def _retrieval_only_answer(task, reason=None):
             top_k=5,
         )
         notes = list(parsed["assumptions"])
+        if expansion_note:
+            notes.append(expansion_note)
         message = format_for_itinerary(results, assumptions=notes,
                                        relaxations=relaxations,
                                        city_uncovered=parsed["city_uncovered"])

@@ -40,6 +40,7 @@
 import json
 import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
@@ -88,9 +89,58 @@ CITY_COORDS = {
 }
 
 
-def _query(city, limit):
-    """An Overpass query for restaurants near a known city centre."""
-    lat, lon, radius = CITY_COORDS[city]
+NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+
+# A small cache, so the same city is never geocoded twice in one process.
+_GEOCODE_CACHE = {}
+
+
+def geocode_city(city, timeout=15):
+    """Look up a city name and return (lat, lon), or None.
+
+    Uses OpenStreetMap's Nominatim, which like Overpass needs no API key. This
+    is what makes the corpus EXPANDABLE: without it the agent could only ever
+    reach the six destinations whose coordinates are written into this file.
+
+    Nominatim asks callers to identify themselves and to keep request rates
+    low, which is why there is a cache and a descriptive User-Agent.
+    """
+    key = (city or "").strip().lower()
+    if not key:
+        return None
+    if key in _GEOCODE_CACHE:
+        return _GEOCODE_CACHE[key]
+    try:
+        query = urllib.parse.urlencode({"q": city, "format": "json", "limit": 1})
+        request = urllib.request.Request(
+            NOMINATIM_URL + "?" + query,
+            headers={"User-Agent": "ALY6980-capstone-restaurant-agent"},
+        )
+        with urllib.request.urlopen(request, timeout=timeout,
+                                    context=_ssl_context()) as response:
+            hits = json.load(response)
+        if not hits:
+            _GEOCODE_CACHE[key] = None
+            return None
+        point = (float(hits[0]["lat"]), float(hits[0]["lon"]))
+        _GEOCODE_CACHE[key] = point
+        return point
+    except Exception:
+        _GEOCODE_CACHE[key] = None
+        return None
+
+
+def _query(city, limit, point=None):
+    """An Overpass query for restaurants near a city centre.
+
+    Uses the hardcoded coordinates for the six built-in destinations, and a
+    geocoded point for anything else.
+    """
+    if city in CITY_COORDS:
+        lat, lon, radius = CITY_COORDS[city]
+    else:
+        lat, lon = point
+        radius = 5000
     return f"""
     [out:json][timeout:30];
     (
@@ -160,13 +210,16 @@ def fetch_live_restaurants(city, limit=40):
     a caller can fall back to the mock dataset without the whole agent breaking -
     the same degradation rule answer() already follows.
     """
+    point = None
     if city not in CITY_COORDS:
-        return [], (f"{city} is not one of the six destinations this agent "
-                    f"covers ({', '.join(sorted(CITY_COORDS))})")
+        point = geocode_city(city)
+        if point is None:
+            return [], (f"{city} could not be located, so no live restaurants "
+                        "could be fetched for it")
     try:
         request = urllib.request.Request(
             OVERPASS_URL,
-            data=_query(city, limit).encode("utf-8"),
+            data=_query(city, limit, point).encode("utf-8"),
             headers={"User-Agent": "ALY6980-capstone-restaurant-agent"},
         )
         with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS,
