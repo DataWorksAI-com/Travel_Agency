@@ -20,7 +20,7 @@ import os
 # For shared/repo use, prefer setting this via a real .env file instead
 # (see .env.example) and python-dotenv, rather than hardcoding it here.
 # ---------------------------------------------------------------------------
-os.environ.setdefault("CEREBRAS_API_KEY", "your-actual-cerebras-key-here")
+os.environ.setdefault("CEREBRAS_API_KEY", "KEYKEYKEY_THISISWHEREITGOES")
 
 from langchain_cerebras import ChatCerebras
 from deepagents import create_deep_agent
@@ -39,7 +39,12 @@ SYSTEM_PROMPT = (
     "rough local price scale for destinations worldwide.\n"
     "\n"
     "RULES YOU MUST FOLLOW:\n"
-    "1. For currency conversion, use get_exchange_rate.\n"
+    "1. For currency conversion, use get_exchange_rate. Report the 'rate' "
+    "and 'date' fields EXACTLY as the tool returns them -- verbatim, "
+    "character for character. Never substitute, reformat, guess, or "
+    "'correct' the date based on what you expect today's date to be. The "
+    "tool's date field is always the true, current source of truth; your "
+    "own sense of the current date is not.\n"
     "2. For tipping/haggling norms, use get_money_customs. Pass a specific "
     "'service' (restaurants, taxis, hotel_housekeeping, tour_guides) if the "
     "traveller asked about one in particular; otherwise call it without a "

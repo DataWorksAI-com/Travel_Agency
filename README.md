@@ -42,6 +42,19 @@ cp .env.example .env   # then fill in your real CEREBRAS_API_KEY
 python agent.py
 ```
 
+## Known limitations
+- **Ambiguous requests with no country/city mentioned** (e.g. "Do I tip for
+  room service?") may return an error rather than the agent stating an
+  assumption and picking a reasonable default, even though the system
+  prompt's rule 5 calls for the latter. Not yet fixed -- worth revisiting
+  the prompt wording if this agent gets picked back up.
+- **Exchange rate dates may lag a few days on weekends/holidays** -- this
+  reflects the European Central Bank's actual publishing schedule via
+  Frankfurter, not stale or broken data.
+- **Untested:** malformed currency codes, live API failures (Frankfurter or
+  World Bank being down/slow), and service names outside the four defined
+  in `by_service` (restaurants, taxis, hotel_housekeeping, tour_guides).
+
 ## Example
 ```python
 from agent import answer
