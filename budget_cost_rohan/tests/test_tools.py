@@ -12,8 +12,10 @@ from budget_agent.corpus import Corpus
 from budget_agent.tools import (
     FIRST_LAST_DAY_FACTOR,
     RESERVE_FRACTION,
+    RESERVE_STALE_BONUS,
     allocate_budget,
     estimate_costs,
+    reallocate,
     verify_plan,
 )
 
@@ -261,6 +263,93 @@ def test_overrun_larger_than_reserve_is_still_infeasible():
 def test_reserve_can_be_passed_separately():
     out = verify_plan({"lodging": 1200, "meals": 400}, ENVELOPES, reserve=300)
     assert out["status"] == "covered_by_reserve"
+
+
+# --- preference weights and data-derived reserve --------------------------
+
+def test_preferences_shift_the_optional_split():
+    """The user can say what they care about without inventing dollar figures."""
+    even = allocate_budget(5000, "BARBADOS", nights=4, travelers=2)
+    tilted = allocate_budget(5000, "BARBADOS", nights=4, travelers=2,
+                             preferences={"activities": 3, "local_transport": 1})
+    assert even["envelopes"]["activities"] == even["envelopes"]["local_transport"]
+    assert tilted["envelopes"]["activities"] > tilted["envelopes"]["local_transport"]
+    # Mandatory envelopes must be untouched by a preference.
+    assert tilted["envelopes"]["lodging"] == even["envelopes"]["lodging"]
+    assert tilted["envelopes"]["meals"] == even["envelopes"]["meals"]
+
+
+def test_preferences_never_overspend_the_budget():
+    out = allocate_budget(5000, "BARBADOS", nights=4, travelers=2,
+                          preferences={"activities": 9, "local_transport": 1})
+    assert sum(out["envelopes"].values()) <= 5000
+
+
+def test_stale_data_earns_a_bigger_reserve():
+    """Panama's rates are 12+ years old, so the contingency is larger.
+
+    This makes the reserve a function of data quality rather than a guess.
+    """
+    fresh = allocate_budget(4000, "BARBADOS", nights=3, travelers=1)
+    stale = allocate_budget(4000, "PANAMA", nights=3, travelers=1)
+    assert fresh["stale"] is False and stale["stale"] is True
+    assert fresh["envelopes"]["reserve"] == round(4000 * RESERVE_FRACTION)
+    assert stale["envelopes"]["reserve"] == round(
+        4000 * (RESERVE_FRACTION + RESERVE_STALE_BONUS))
+
+
+# --- bargaining loop ------------------------------------------------------
+
+def test_reallocate_does_nothing_when_no_shortfall():
+    alloc = allocate_budget(5000, "BARBADOS", nights=4, travelers=2)
+    out = reallocate(alloc, {})
+    assert out["status"] == "unchanged"
+
+
+def test_shortfall_is_taken_from_optional_before_reserve():
+    """Accommodation needs $300 more. Snorkelling gives way, not the reserve."""
+    alloc = allocate_budget(5000, "BARBADOS", nights=4, travelers=2)
+    before = alloc["envelopes"]
+    out = reallocate(alloc, {"lodging": 300})
+    after = out["envelopes"]
+    assert out["status"] == "renegotiated"
+    assert after["lodging"] == before["lodging"] + 300
+    assert after["activities"] + after["local_transport"] == \
+        before["activities"] + before["local_transport"] - 300
+    assert out["drawn_from_reserve"] == 0
+    assert after["reserve"] == before["reserve"]
+
+
+def test_mandatory_envelopes_are_never_reduced():
+    alloc = allocate_budget(5000, "BARBADOS", nights=4, travelers=2)
+    before = alloc["envelopes"]
+    out = reallocate(alloc, {"lodging": 300})
+    assert out["envelopes"]["meals"] == before["meals"]
+
+
+def test_reserve_is_the_last_resort_and_the_draw_is_reported():
+    alloc = allocate_budget(5000, "BARBADOS", nights=4, travelers=2)
+    optional = alloc["envelopes"]["activities"] + alloc["envelopes"]["local_transport"]
+    out = reallocate(alloc, {"lodging": optional + 200})
+    assert out["envelopes"]["activities"] == 0
+    assert out["envelopes"]["local_transport"] == 0
+    assert out["drawn_from_reserve"] == 200
+    assert any("reserve" in c for c in out["changes"])
+
+
+def test_shortfall_beyond_every_source_is_infeasible():
+    alloc = allocate_budget(5000, "BARBADOS", nights=4, travelers=2)
+    out = reallocate(alloc, {"lodging": 99999})
+    assert out["status"] == "infeasible"
+    assert out["unmet"] > 0
+
+
+def test_changes_are_explainable():
+    """Every movement is recorded, so the agent can say why, not just what."""
+    alloc = allocate_budget(5000, "BARBADOS", nights=4, travelers=2)
+    out = reallocate(alloc, {"lodging": 300})
+    assert out["changes"]
+    assert any("lodging raised" in c for c in out["changes"])
 
 
 def test_allocate_output_feeds_verify_without_leaking_reserve():

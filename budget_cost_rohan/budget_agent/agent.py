@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 
 from .corpus import Corpus
 from .tools import allocate_budget as _allocate
+from .tools import reallocate as _reallocate
 from .tools import estimate_costs as _estimate
 from .tools import verify_plan as _verify
 
@@ -107,6 +108,31 @@ def allocate_budget(total_budget: float, destination: str, nights: int,
     return _allocate(total_budget, destination, nights, travelers)
 
 
+def reallocate(allocation: dict, shortfalls: dict) -> dict:
+    """Revise the spending ceilings when an agent cannot work within one.
+
+    Call this when a domain agent reports it could not find anything inside
+    the ceiling you gave it — for example Accommodation saying it needs $300
+    more than the lodging envelope allows.
+
+    Needs no per diem data, so the coverage limit above does not apply.
+
+    Who gives way is fixed and not negotiable: activities and local
+    transport are reduced first, the reserve is drawn on only after they are
+    empty, and lodging and meals are NEVER reduced — people must sleep and
+    eat. If the shortfall survives all of that, the answer is infeasible and
+    "unmet" says by how much.
+
+    Report the "changes" list to the user. It explains what moved and why,
+    which is the difference between a revised budget and an unexplained one.
+
+    Args:
+        allocation: the result previously returned by allocate_budget
+        shortfalls: extra dollars each category needs, e.g. {"lodging": 300}
+    """
+    return _reallocate(allocation, shortfalls)
+
+
 def verify_plan(plan: dict, envelopes: dict) -> dict:
     """Check an assembled travel plan against its budget ceilings.
 
@@ -133,11 +159,11 @@ def verify_plan(plan: dict, envelopes: dict) -> dict:
 
 # Inject the real coverage list into the docstrings, so it can never drift
 # out of sync with the corpus. A hand-typed list would go stale silently.
-for _fn in (estimate_costs, allocate_budget, verify_plan):
+for _fn in (estimate_costs, allocate_budget, reallocate, verify_plan):
     if _fn.__doc__:
         _fn.__doc__ = _fn.__doc__.replace("{countries}", _COUNTRIES)
 
-TOOLS = [estimate_costs, allocate_budget, verify_plan]
+TOOLS = [estimate_costs, allocate_budget, reallocate, verify_plan]
 
 
 # ---------------------------------------------------------------------------

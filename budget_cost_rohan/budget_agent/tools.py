@@ -38,6 +38,23 @@ FIRST_LAST_DAY_FACTOR = 0.75
 # Share of the total budget held back and not allocated to any category.
 RESERVE_FRACTION = 0.10
 
+# Extra contingency when the underlying rate has not been surveyed recently.
+# 17 of 46 rows in this corpus were last surveyed 9-18 years ago. A budget
+# built on a stale rate deserves a bigger buffer than one built on a current
+# rate, so the reserve is derived from data quality rather than picked.
+RESERVE_STALE_BONUS = 0.05
+
+# Which envelopes may be reduced during renegotiation, and which may not.
+# LSP (Logical Scoring of Preferences) separates mandatory criteria - fail
+# and you are excluded - from optional ones, which earn points when
+# satisfied. You must sleep and eat; snorkelling is a preference.
+MANDATORY = ("lodging", "meals")
+OPTIONAL = ("activities", "local_transport")
+
+# Default relative weights for splitting whatever is left after the
+# mandatory envelopes and the reserve. Equal until the user says otherwise.
+DEFAULT_PREFERENCES = {"activities": 1.0, "local_transport": 1.0}
+
 
 def estimate_costs(destination: str, nights: int, travelers: int = 1,
                    post: str | None = None) -> dict:
@@ -126,7 +143,8 @@ def estimate_costs(destination: str, nights: int, travelers: int = 1,
 
 
 def allocate_budget(total_budget: float, destination: str, nights: int,
-                    travelers: int = 1, post: str | None = None) -> dict:
+                    travelers: int = 1, post: str | None = None,
+                    preferences: dict | None = None) -> dict:
     """Split a total trip budget into per-category ceilings.
 
     Method:
@@ -171,7 +189,11 @@ def allocate_budget(total_budget: float, destination: str, nights: int,
     # Step 2 — hold the reserve back off the top, before anything is spent.
     # Taken from the remainder instead, it would be the first thing squeezed
     # by an expensive hotel, which defeats the point of having a reserve.
-    reserve = round(total_budget * RESERVE_FRACTION)
+    #
+    # The rate is not a flat guess: a stale underlying rate earns a bigger
+    # buffer, because the older the survey the less we should trust it.
+    reserve_rate = RESERVE_FRACTION + (RESERVE_STALE_BONUS if est["stale"] else 0)
+    reserve = round(total_budget * reserve_rate)
 
     committed = lodging + meals + reserve
 
@@ -246,13 +268,20 @@ def allocate_budget(total_budget: float, destination: str, nights: int,
             "stale": est["stale"],
         }
 
-    # Step 4 — split what survives between the two discretionary categories.
-    # Floor division on both halves, deliberately: it can leave one dollar
-    # unallocated, which is harmless, whereas rounding both halves up would
-    # let the envelopes total more than the budget they came from.
+    # Step 4 — split what survives between the discretionary categories,
+    # weighted by preference. Equal weights unless the caller says otherwise,
+    # so "I care more about tours than taxis" is expressible without the user
+    # having to invent dollar figures they have no basis for.
+    #
+    # Floor division deliberately: it can leave a dollar unallocated, which
+    # is harmless, whereas rounding up would let the envelopes total more
+    # than the budget they came from.
+    weights = {**DEFAULT_PREFERENCES, **(preferences or {})}
+    weight_sum = sum(max(0.0, weights.get(k, 0.0)) for k in OPTIONAL) or 1.0
     discretionary = int(total_budget - committed)
-    activities = discretionary // 2
-    local_transport = discretionary // 2
+    activities = int(discretionary * max(0.0, weights.get("activities", 0)) // weight_sum)
+    local_transport = int(
+        discretionary * max(0.0, weights.get("local_transport", 0)) // weight_sum)
 
     return {
         "status": "feasible",
@@ -277,6 +306,106 @@ def allocate_budget(total_budget: float, destination: str, nights: int,
             f"{int(RESERVE_FRACTION * 100)}% reserve."
         ),
         "stale": est["stale"],
+    }
+
+
+def reallocate(allocation: dict, shortfalls: dict) -> dict:
+    """Renegotiate the envelopes when a domain agent cannot work within one.
+
+    This closes the loop that made the original split a guess. Instead of
+    Budget picking numbers and hoping, the domain agents report back what
+    they actually need and the allocation is corrected.
+
+    Adapted from the cooperative bargaining protocol in HiMAP-Travel (Bui,
+    Li & Liu, 2026). There, an executor that cannot satisfy its sub-goal
+    returns {status, deficit, violation_type} and the coordinator revises
+    the plan. 89% of their queries succeeded on the first allocation; the
+    rest were resolved by renegotiation rather than failure.
+
+    Who gives way is decided by the LSP mandatory/optional split, not by
+    size. You must sleep and eat, so lodging and meals are never reduced.
+    Activities and local transport are the donors. The reserve is the last
+    resort, and drawing on it is reported rather than absorbed silently.
+
+    Args:
+        allocation: the dict returned by allocate_budget
+        shortfalls: extra dollars each category needs, e.g.
+            {"lodging": 300} means Accommodation could not find anything
+            within its ceiling and needs $300 more.
+
+    Returns:
+        {"status": "renegotiated" | "unchanged" | "infeasible",
+         "envelopes": {...},          # revised
+         "changes": [str, ...],       # one line per movement, for explaining
+         "drawn_from_reserve": int,
+         "unmet": int}                # still short after every source
+    """
+    envelopes = dict(allocation.get("envelopes", {}))
+    reserve = int(envelopes.get("reserve", 0))
+    changes: list[str] = []
+
+    needed = {k: int(v) for k, v in shortfalls.items() if int(v) > 0}
+    if not needed:
+        return {"status": "unchanged", "envelopes": envelopes,
+                "changes": [], "drawn_from_reserve": 0, "unmet": 0}
+
+    total_needed = sum(needed.values())
+
+    # Source 1 — the optional envelopes, taken in proportion to what they
+    # hold, so no single preference is wiped out to protect another.
+    pot = sum(int(envelopes.get(k, 0)) for k in OPTIONAL)
+    take = min(pot, total_needed)
+    raised = 0
+    if take > 0 and pot > 0:
+        for k in OPTIONAL:
+            have = int(envelopes.get(k, 0))
+            if have <= 0:
+                continue
+            share = int(take * have // pot)
+            envelopes[k] = have - share
+            raised += share
+            if share:
+                changes.append(f"{k} reduced by ${share} (${have} -> ${have - share})")
+        # Proportional shares can round down; close the gap from whichever
+        # optional envelope still has money.
+        for k in OPTIONAL:
+            if raised >= take:
+                break
+            gap = min(take - raised, int(envelopes.get(k, 0)))
+            if gap > 0:
+                envelopes[k] -= gap
+                raised += gap
+                changes.append(f"{k} reduced by a further ${gap}")
+
+    # Source 2 — the reserve. Only after the optional envelopes are empty,
+    # and the draw is always reported.
+    drawn = 0
+    if raised < total_needed and reserve > 0:
+        drawn = min(reserve, total_needed - raised)
+        envelopes["reserve"] = reserve - drawn
+        raised += drawn
+        changes.append(
+            f"drew ${drawn} from the ${reserve} reserve "
+            f"(${reserve - drawn} remaining)")
+
+    # Mandatory envelopes are never reduced, so anything still missing is a
+    # real shortfall rather than something to paper over.
+    unmet = total_needed - raised
+    for category, amount in needed.items():
+        envelopes[category] = int(envelopes.get(category, 0)) + amount
+        changes.append(f"{category} raised by ${amount}")
+
+    if unmet > 0:
+        changes.append(
+            f"still ${unmet} short after exhausting optional envelopes "
+            f"and the reserve; mandatory envelopes were not reduced")
+
+    return {
+        "status": "infeasible" if unmet > 0 else "renegotiated",
+        "envelopes": envelopes,
+        "changes": changes,
+        "drawn_from_reserve": drawn,
+        "unmet": unmet,
     }
 
 
