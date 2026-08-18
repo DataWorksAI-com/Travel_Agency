@@ -280,7 +280,7 @@ def allocate_budget(total_budget: float, destination: str, nights: int,
     }
 
 
-def verify_plan(plan: dict, envelopes: dict) -> dict:
+def verify_plan(plan: dict, envelopes: dict, reserve: int | None = None) -> dict:
     """Check an assembled plan against its budget envelopes.
 
     `plan` maps category name -> cost, e.g.
@@ -290,17 +290,37 @@ def verify_plan(plan: dict, envelopes: dict) -> dict:
 
     Pure arithmetic. No model calls, no rounding in your favour.
 
+    THE RESERVE. allocate_budget returns "reserve" inside its envelopes dict.
+    A reserve is contingency — it is NOT a spending ceiling, and counting it
+    as one would let a plan quietly consume the buffer while still reporting
+    as comfortably within budget. So it is pulled out of the ceilings here
+    automatically, whether or not the caller separates it.
+
+    But excluding it entirely is also wrong: that fails plans a contingency
+    fund would comfortably absorb. The rule contingency actually follows is
+    that a reserve may cover an overrun, but its use has to be VISIBLE.
+    Hence a distinct status rather than a silent pass or a hard fail.
+
     Returns the HiMAP-style feedback shape, which is also what the shared
     sub-agent schema uses for failures:
 
-        {"status": "feasible" | "infeasible",
-         "deficit": int,                 # total overspend, 0 if feasible
-         "violation_type": str | None,   # "budget" | "uncategorised" | None
+        {"status": "feasible" | "covered_by_reserve" | "infeasible",
+         "deficit": int,                 # total overspend, 0 if none
+         "violation_type": str | None,   # "budget" | "uncategorised"
+         |                               # | "reserve_used" | None
          "per_category": {name: {"spent": int, "ceiling": int,
                                  "over_by": int, "ok": bool}},
          "total_spent": int,
-         "total_ceiling": int}
+         "total_ceiling": int,           # spendable only, excludes reserve
+         "reserve": int,
+         "reserve_used": int,
+         "reserve_remaining": int}
     """
+    # Never let the reserve act as a ceiling, however it was passed in.
+    envelopes = dict(envelopes)
+    embedded_reserve = envelopes.pop("reserve", 0)
+    reserve = int(embedded_reserve if reserve is None else reserve)
+
     per_category: dict[str, dict] = {}
     deficit = 0
     uncategorised: list[str] = []
@@ -339,21 +359,33 @@ def verify_plan(plan: dict, envelopes: dict) -> dict:
             "over_by": over_by, "ok": over_by == 0,
         }
 
-    # Step 2 — classify the failure. Unbudgeted categories are a different
-    # problem from overspending, and the orchestrator should be told which.
+    # Step 2 — classify. Unbudgeted spend is a different problem from
+    # overspending, and an overrun the reserve absorbs is different again.
+    # The orchestrator should be told which of the three it is.
     if uncategorised:
-        violation_type = "uncategorised"
-    elif deficit > 0:
-        violation_type = "budget"
+        status, violation_type = "infeasible", "uncategorised"
+        reserve_used = 0
+    elif deficit == 0:
+        status, violation_type = "feasible", None
+        reserve_used = 0
+    elif deficit <= reserve:
+        # Workable — but the contingency is being spent, and that is
+        # reported rather than absorbed silently.
+        status, violation_type = "covered_by_reserve", "reserve_used"
+        reserve_used = deficit
     else:
-        violation_type = None
+        status, violation_type = "infeasible", "budget"
+        reserve_used = reserve
 
     return {
-        "status": "feasible" if violation_type is None else "infeasible",
+        "status": status,
         "deficit": deficit,
         "violation_type": violation_type,
         "per_category": per_category,
         "total_spent": sum(int(v) for v in plan.values()),
         "total_ceiling": sum(int(v) for v in envelopes.values()),
+        "reserve": reserve,
+        "reserve_used": reserve_used,
+        "reserve_remaining": reserve - reserve_used,
         "uncategorised": uncategorised,
     }

@@ -156,6 +156,21 @@ Your job is money, and only money. You do two things:
 You do NOT recommend destinations, hotels, restaurants, flights or
 activities. Other agents own those. If asked, say so and hand back.
 
+ORCHESTRATOR CONTRACT
+
+You receive ONE task string from the orchestrator and return ONE
+self-contained final message. You do not share context with the other
+sub-agents — anything you need must be in the task string.
+
+Never ask the orchestrator a follow-up question. If something is
+missing, either make a reasonable assumption and state it plainly in
+your answer, or say exactly what is missing so the orchestrator can
+decide whether to go back to the user. Do not do both, and do not stall.
+
+Your final message must stand alone. Someone reading only that message,
+without the task string, should still know the destination, the trip
+length, the number of travellers, the budget, and the verdict.
+
 RULES
 
 Never do arithmetic yourself. Call the tools and report what they return.
@@ -181,29 +196,62 @@ Answer in a few sentences. Lead with the number that answers the question.
 """
 
 
-def build_agent():
+DEFAULT_MODEL = "openrouter:inclusionai/ling-3.0-flash:free"
+
+# Cap the response length per call. This agent answers with a verdict and a
+# few numbers; it has no reason to produce long prose, and the cap keeps
+# runs cheap enough to repeat many times during evaluation.
+MAX_TOKENS = 2000
+
+
+def build_agent(max_tokens: int = MAX_TOKENS):
     """Construct the deep agent.
 
-    CHECK THESE TWO LINES against your working hello_agent.py — the model
-    construction is the part that varies with the provider adapter, and I
-    could not verify it against your installed deepagents version. Everything
-    else in this file is independent of that choice.
+    Uses init_chat_model rather than passing a raw model string, so the
+    provider can be swapped through configuration instead of a code change.
+    Adopted from Shashank Gaur's budget agent in this repository, along with
+    the max_tokens cap and the create_deep_agent parameter name — his version
+    is known to run against our installed deepagents, mine was not verified.
     """
+    from langchain.chat_models import init_chat_model
+
     from deepagents import create_deep_agent
 
-    model = os.getenv("BUDGET_AGENT_MODEL",
-                      "openrouter:inclusionai/ling-3.0-flash:free")
+    model = init_chat_model(
+        os.getenv("BUDGET_AGENT_MODEL", DEFAULT_MODEL),
+        max_tokens=max_tokens,
+    )
 
     return create_deep_agent(
-        tools=TOOLS,
-        instructions=INSTRUCTIONS,
         model=model,
+        tools=TOOLS,
+        system_prompt=INSTRUCTIONS,
     )
 
 
 def ask(agent, question: str) -> str:
     result = agent.invoke({"messages": [{"role": "user", "content": question}]})
     return result["messages"][-1].content
+
+
+def run_task(task: str, agent=None) -> str:
+    """Single-shot orchestrator entry point: one task string in, one message out.
+
+    This is the interface the orchestrator calls. It matches the sub-agent
+    contract Brinda proposed for the team — no shared context between
+    sub-agents, no follow-up questions, exactly one self-contained reply.
+
+    Args:
+        task: the full task string from the orchestrator, containing
+            everything this agent needs (destination, nights, travellers,
+            budget, and any priced line items to verify).
+        agent: an already-built agent, to avoid rebuilding across a batch.
+
+    Returns:
+        One self-contained message. Safe to hand straight back to the
+        orchestrator.
+    """
+    return ask(agent or build_agent(), task)
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +302,22 @@ def demo() -> None:
 def main() -> int:
     if "--demo" in sys.argv:
         demo()
+        return 0
+
+    # Single-shot mode, the way the orchestrator will call this agent:
+    #   python -m budget_agent.agent --task "4 nights in Barbados for 2, $2000"
+    if "--task" in sys.argv:
+        i = sys.argv.index("--task")
+        if i + 1 >= len(sys.argv):
+            print('Usage: python -m budget_agent.agent --task "your task string"')
+            return 1
+        try:
+            print(run_task(sys.argv[i + 1]))
+        except Exception as exc:                  # noqa: BLE001
+            print(f"Could not run the task: {exc}\n"
+                  f"Check .env and the model line in build_agent().\n"
+                  f"Run with --demo to exercise the tools without a model.")
+            return 1
         return 0
 
     try:

@@ -225,3 +225,49 @@ def test_verify_totals_are_reported():
     out = verify_plan({"lodging": 900, "meals": 400}, ENVELOPES)
     assert out["total_spent"] == 1300
     assert out["total_ceiling"] == 1800
+
+
+# --- the reserve is contingency, not a ceiling ----------------------------
+
+WITH_RESERVE = {**ENVELOPES, "reserve": 300}
+
+
+def test_reserve_is_never_counted_as_spendable_ceiling():
+    """Passing allocate_budget's envelopes straight through must not inflate
+    the ceiling by the reserve amount."""
+    out = verify_plan({"lodging": 900}, WITH_RESERVE)
+    assert out["total_ceiling"] == 1800          # not 2100
+    assert out["reserve"] == 300
+
+
+def test_small_overrun_is_covered_by_reserve_and_reported():
+    """$200 over with a $300 reserve is workable — but the draw is visible."""
+    out = verify_plan({"lodging": 1200, "meals": 400}, WITH_RESERVE)
+    assert out["status"] == "covered_by_reserve"
+    assert out["violation_type"] == "reserve_used"
+    assert out["deficit"] == 200
+    assert out["reserve_used"] == 200
+    assert out["reserve_remaining"] == 100
+
+
+def test_overrun_larger_than_reserve_is_still_infeasible():
+    out = verify_plan({"lodging": 1600, "meals": 400}, WITH_RESERVE)
+    assert out["status"] == "infeasible"
+    assert out["violation_type"] == "budget"
+    assert out["deficit"] == 600
+    assert out["reserve_remaining"] == 0
+
+
+def test_reserve_can_be_passed_separately():
+    out = verify_plan({"lodging": 1200, "meals": 400}, ENVELOPES, reserve=300)
+    assert out["status"] == "covered_by_reserve"
+
+
+def test_allocate_output_feeds_verify_without_leaking_reserve():
+    """The two tools must compose. This is the integration the leak broke."""
+    alloc = allocate_budget(5000, "BARBADOS", nights=4, travelers=2)
+    env = alloc["envelopes"]
+    out = verify_plan({"lodging": env["lodging"], "meals": env["meals"]}, env)
+    assert out["reserve"] == env["reserve"]
+    assert out["total_ceiling"] == sum(env.values()) - env["reserve"]
+    assert out["status"] == "feasible"
