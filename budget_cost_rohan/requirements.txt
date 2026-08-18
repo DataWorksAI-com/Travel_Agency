@@ -1,0 +1,5 @@
+deepagents==0.7.3
+langchain-openrouter
+python-dotenv
+pandas
+pytest
