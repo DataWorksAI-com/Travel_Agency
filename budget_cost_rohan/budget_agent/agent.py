@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -196,12 +197,22 @@ Answer in a few sentences. Lead with the number that answers the question.
 """
 
 
-DEFAULT_MODEL = "openrouter:inclusionai/ling-3.0-flash:free"
+# Pin a specific slug rather than an auto-router such as "openrouter/free":
+# auto-routing can serve a different model on each call, which would make
+# evaluation runs unreproducible.
+# Free tiers get retired without notice — list what is currently free with:
+#   python -c "import json,urllib.request as u; d=json.load(
+#     u.urlopen('https://openrouter.ai/api/v1/models'))"
+DEFAULT_MODEL = "openrouter:openai/gpt-oss-20b:free"
 
 # Cap the response length per call. This agent answers with a verdict and a
 # few numbers; it has no reason to produce long prose, and the cap keeps
 # runs cheap enough to repeat many times during evaluation.
 MAX_TOKENS = 2000
+
+# Backoff between whole-run retries: 15s, 30s, 60s. OpenRouter's free-tier
+# 429s report Retry-After of about 30 seconds.
+RETRY_BASE_SECONDS = 15
 
 
 def build_agent(max_tokens: int = MAX_TOKENS):
@@ -217,10 +228,17 @@ def build_agent(max_tokens: int = MAX_TOKENS):
 
     from deepagents import create_deep_agent
 
-    model = init_chat_model(
-        os.getenv("BUDGET_AGENT_MODEL", DEFAULT_MODEL),
-        max_tokens=max_tokens,
-    )
+    # .strip() matters: `echo VAR=value >> .env` in cmd writes the space that
+    # sits before the redirect, and a trailing space silently invalidates the
+    # model slug.
+    slug = (os.getenv("BUDGET_AGENT_MODEL") or DEFAULT_MODEL).strip()
+
+    # max_retries handles the single failing call inside the graph. Not every
+    # provider adapter accepts it, so fall back rather than crash.
+    try:
+        model = init_chat_model(slug, max_tokens=max_tokens, max_retries=5)
+    except TypeError:
+        model = init_chat_model(slug, max_tokens=max_tokens)
 
     return create_deep_agent(
         model=model,
@@ -229,9 +247,39 @@ def build_agent(max_tokens: int = MAX_TOKENS):
     )
 
 
-def ask(agent, question: str) -> str:
-    result = agent.invoke({"messages": [{"role": "user", "content": question}]})
-    return result["messages"][-1].content
+def ask(agent, question: str, attempts: int = 4) -> str:
+    """Run one query, retrying the whole run on upstream rate limits.
+
+    A deep agent makes several model calls per query — the middleware stack
+    adds more on top of the tool loop. On a shared free-tier pool that burst
+    trips the provider's limit even when a single call succeeds fine, and the
+    429 surfaces from the middle of the graph rather than from one call. So
+    the retry has to wrap the whole run.
+
+    This matters for evaluation: without it, a scoring loop records queuing
+    as agent failure, and the numbers are about the provider's traffic rather
+    than the agent.
+    """
+    last: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            result = agent.invoke(
+                {"messages": [{"role": "user", "content": question}]}
+            )
+            return result["messages"][-1].content
+        except Exception as exc:                  # noqa: BLE001
+            text = str(exc).lower()
+            transient = ("429" in text or "rate" in text
+                         or "too many requests" in text
+                         or "timeout" in text or "overloaded" in text)
+            if not transient or attempt == attempts - 1:
+                raise
+            last = exc
+            delay = RETRY_BASE_SECONDS * (2 ** attempt)
+            print(f"  [rate limited, retrying in {delay}s "
+                  f"({attempt + 1}/{attempts - 1})]", file=sys.stderr)
+            time.sleep(delay)
+    raise RuntimeError(f"exhausted retries: {last}")
 
 
 def run_task(task: str, agent=None) -> str:
