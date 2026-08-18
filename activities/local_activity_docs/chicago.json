@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Art Institute of Chicago",
+    "category": "art",
+    "price_tier": "premium",
+    "description": "World-renowned art museum with an extensive Impressionist collection and the iconic lion statues out front."
+  },
+  {
+    "name": "Millennium Park & The Bean",
+    "category": "sightseeing",
+    "price_tier": "free",
+    "description": "Downtown park home to the famous reflective 'Cloud Gate' sculpture, popular for photos and people-watching."
+  },
+  {
+    "name": "Chicago Riverwalk Architecture Tour",
+    "category": "cultural",
+    "price_tier": "moderate",
+    "description": "A guided boat tour along the Chicago River highlighting the city's famous skyscraper architecture."
+  },
+  {
+    "name": "Lincoln Park Zoo",
+    "category": "outdoor",
+    "price_tier": "free",
+    "description": "One of the few free zoos in the country, set inside a large lakefront park."
+  },
+  {
+    "name": "Chicago Riverwalk Bike Rental",
+    "category": "outdoor",
+    "price_tier": "moderate",
+    "description": "Rent a bike and ride the paved Riverwalk and Lakefront Trail past downtown skyscrapers and Lake Michigan."
+  },
+  {
+    "name": "Second City Comedy Show",
+    "category": "entertainment",
+    "price_tier": "moderate",
+    "description": "Live improv and sketch comedy at the legendary theater that launched many well-known comedians."
+  }
+]
