@@ -1,31 +1,23 @@
 """
-Test Jig for the Activities Agent
-------------------------------------
+Test Jig for the Activities Agent (multi-city)
+--------------------------------------------------
 A "test jig" = a set of prompts paired with expected answers, run
 through a scoring loop, so you can tell at a glance whether the agent
-is still behaving correctly after a change — instead of eyeballing
-the output every time.
+is still behaving correctly after a change.
 
 Two levels here:
-
-1. TOOL TESTS (deterministic, no LLM) — call search_activities_local_exact
-   and search_activities_semantic directly and assert exact behavior.
-   Fast, free, 100% reproducible. Good for catching a broken filter
-   or a broken vector DB connection.
-
+1. TOOL TESTS (deterministic, no LLM) — call the tier 1/2 tool
+   functions directly and assert exact behavior.
 2. BLACK-BOX AGENT TESTS (via answer()) — send a task string through
-   the full agent (LLM + tool-calling) and check the final message
-   for expected keywords/patterns. This is what a teammate can run
-   against your agent without reading your code — hence "black box."
-   LLM output varies run to run, so these are keyword-based checks,
-   not exact-match — some flakiness is expected and normal.
+   the full agent and check the final message for expected keywords.
+   LLM output varies run to run, so these are keyword-based checks.
 
 Run:
     python test_jig.py
 """
 
 import asyncio
-from activities_agent import search_activities_local_exact, search_activities_semantic, answer
+from activities_agent import search_activities_local_exact, search_activities_semantic, answer, _covered_cities
 
 
 # ---------------------------------------------------------------------
@@ -39,21 +31,25 @@ def run_tool_tests():
 
     cases = []
 
-    # Exact filter returns results for a known category
-    r = search_activities_local_exact(category="outdoor")
-    cases.append(("exact filter: outdoor returns >=1 result", "error" not in r and len(r["activities"]) >= 1))
+    cases.append(("4 cities covered", set(_covered_cities()) == {"Kyoto", "New York", "Paris", "Rome"}))
 
-    # Exact filter with a category that doesn't exist -> error dict, not a crash
-    r = search_activities_local_exact(category="skydiving")
-    cases.append(("exact filter: unknown category returns error dict", "error" in r))
+    r = search_activities_local_exact("Paris", category="art")
+    cases.append(("Paris exact filter: art returns >=1 result", "error" not in r and len(r["activities"]) >= 1))
 
-    # Exact filter never returns food/dining (out of scope for this agent)
-    r = search_activities_local_exact(category="food")
-    cases.append(("exact filter: food category returns error (out of scope)", "error" in r))
+    r = search_activities_local_exact("Kyoto", category="outdoor")
+    cases.append(("Kyoto exact filter: outdoor returns >=1 result", "error" not in r and len(r["activities"]) >= 1))
 
-    # Semantic search finds something for a vague query
-    r = search_activities_semantic(query="a place with a great view")
-    cases.append(("semantic search: vague query returns >=1 result", "error" not in r and len(r["activities"]) >= 1))
+    r = search_activities_local_exact("Rome", category="food")
+    cases.append(("Rome exact filter: food returns error (out of scope)", "error" in r))
+
+    r = search_activities_local_exact("Miami")
+    cases.append(("Miami: uncovered city returns error with covered_cities list", "error" in r and "covered_cities" in r))
+
+    r = search_activities_semantic(query="a romantic evening spot", city="Paris")
+    cases.append(("semantic search: Paris query returns >=1 result", "error" not in r and len(r["activities"]) >= 1))
+
+    r = search_activities_semantic(query="ancient ruins and history")
+    cases.append(("semantic search: cross-city query (no city filter) returns >=1 result", "error" not in r and len(r["activities"]) >= 1))
 
     passed = sum(1 for _, ok in cases if ok)
     for name, ok in cases:
@@ -68,12 +64,12 @@ def run_tool_tests():
 
 BLACK_BOX_CASES = [
     {
-        "task": "Find a free outdoor activity in New York.",
-        "expect_any": ["high line", "central park"],  # the only two free/outdoor NY entries
-        "description": "correctly finds a real free outdoor NY activity",
+        "task": "Find a free outdoor activity in Kyoto.",
+        "expect_any": ["bamboo", "fushimi", "inari"],
+        "description": "correctly finds a real free outdoor Kyoto activity",
     },
     {
-        "task": "Where should I get dinner in New York?",
+        "task": "Where should I get dinner in Paris?",
         "expect_any": ["restaurant", "food", "dining"],
         "description": "redirects food questions instead of answering them directly",
     },
@@ -81,6 +77,11 @@ BLACK_BOX_CASES = [
         "task": "Find underwater scuba diving in New York.",
         "expect_none": ["moma", "high line", "central park", "top of the rock", "ellis island", "broadway"],
         "description": "true negative — does not fabricate a real NY activity as a scuba answer",
+    },
+    {
+        "task": "What can I do in Rome for culture?",
+        "expect_any": ["colosseum", "forum", "vatican", "trastevere"],
+        "description": "correctly finds real Rome cultural activities",
     },
 ]
 
@@ -97,7 +98,7 @@ async def run_black_box_tests():
 
         if "expect_any" in case:
             ok = any(kw in response_lower for kw in case["expect_any"])
-        else:  # expect_none
+        else:
             ok = not any(kw in response_lower for kw in case["expect_none"])
 
         passed += ok

@@ -1,30 +1,41 @@
 """
-Activities Agent — New York (+ MCP fallback for any other city)
+Activities Agent — multi-city (+ MCP fallback for any other city)
 --------------------------------------------------------------------
 Author: Limeng Zhang
 
-Domain-expert agent for "things to do." Three-tier knowledge source,
-matching the pattern used elsewhere on the Activities module:
+Domain-expert agent for "things to do." Three-tier knowledge source:
 
-    Tier 1 — Exact local lookup:   new_york.json, filtered by
-                                    category/price_tier. Fast, free,
-                                    only works for New York.
-    Tier 2 — Local semantic RAG:   Chroma vector search over the same
-                                    New York data, for vague/natural-
-                                    language queries that don't match
-                                    an exact category. Only New York.
+    Tier 1 — Exact local lookup:   local_activity_docs/<city>.json,
+                                    filtered by category/price_tier.
+                                    Fast, free, only for covered cities.
+    Tier 2 — Local semantic RAG:   Chroma vector search across all
+                                    covered cities' data, for vague/
+                                    natural-language queries. Can be
+                                    filtered to one city or searched
+                                    across all covered cities.
     Tier 3 — MCP live fallback:    mcp_opentripmap_server.py, wrapping
                                     the OpenTripMap REST API. Used for
                                     ANY city not covered by tiers 1/2.
+
+Currently covered by tiers 1-2: New York, Paris, Rome, Kyoto.
+Add a new city by dropping a <city>.json file into
+local_activity_docs/ (same schema) and re-running build_vector_db.py
+— no code changes needed here.
+
+Note on scope: the Destination Agent's semantic recommender draws
+from its own separate 47-city corpus, which does NOT include New
+York. So when a traveler gets a destination recommended (rather than
+naming one directly), tiers 1-2 here are most useful for the covered
+cities that DO overlap with that corpus (Paris, Rome, Kyoto);
+New York is mainly reached when a user names it directly.
 
 Orchestrator contract (per the team-wide sub-agent rules):
 - Input: a single task string from the orchestrator. This agent does
   not share context with other sub-agents — anything it needs (e.g.
   a city) must be explicit in that task string.
 - Output: exactly ONE self-contained final message via answer(task).
-  Never asks a follow-up question back to the orchestrator or user —
-  if a tool errors or something's missing, the agent explains that
-  honestly in its final message rather than stopping to ask.
+  Never asks a follow-up question — if a tool errors or something's
+  missing, the agent explains that honestly in its final message.
 - The final message is specific enough to drop directly into a
   day-by-day itinerary: activity name, category, price tier (when
   known), and a short description.
@@ -50,6 +61,7 @@ Setup:
 
 import os
 import json
+import glob
 import asyncio
 import chromadb
 from dotenv import load_dotenv
@@ -59,43 +71,53 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 load_dotenv()
 
 DB_PATH = "./chroma_db"
-COLLECTION_NAME = "activities_ny"
-CITY_NAME = "New York"
-LOCAL_DATA_FILE = os.path.join(os.path.dirname(__file__), "new_york.json")
+COLLECTION_NAME = "activities"
+DOCS_DIR = os.path.join(os.path.dirname(__file__), "local_activity_docs")
 MCP_SERVER_SCRIPT = os.path.join(os.path.dirname(__file__), "mcp_opentripmap_server.py")
 
 MODEL = os.environ.get("DEEP_AGENT_MODEL", "openrouter:z-ai/glm-5.2")
+
+
+def _covered_cities() -> list[str]:
+    return sorted(
+        os.path.splitext(os.path.basename(p))[0].replace("_", " ").title()
+        for p in glob.glob(os.path.join(DOCS_DIR, "*.json"))
+    )
+
+
+def _city_file(city: str) -> str:
+    return os.path.join(DOCS_DIR, f"{city.strip().lower().replace(' ', '_')}.json")
 
 
 # ---------------------------------------------------------------------
 # Tier 1: exact local lookup
 # ---------------------------------------------------------------------
 
-def _load_local_data():
-    with open(LOCAL_DATA_FILE, "r") as f:
-        return json.load(f)
+def search_activities_local_exact(city: str, category: str = "", price_tier: str = "") -> dict:
+    """Tier 1 — exact filter lookup over a covered city's local activity data.
 
-
-def search_activities_local_exact(category: str = "", price_tier: str = "") -> dict:
-    """Tier 1 — exact filter lookup over New York's local activity data.
-
-    Only covers New York. Use this first for precise category/price
+    Only works for covered cities (see list in the error response if
+    the city isn't found). Use this first for precise category/price
     filters; if it returns no matches, fall back to
     search_activities_semantic for a vaguer natural-language query.
 
     Args:
+        city: the city to search, e.g. "New York", "Paris".
         category: exact filter, e.g. "outdoor", "art", "cultural",
                   "sightseeing", "entertainment". Food/dining is out
                   of scope — that's the Restaurants Agent's domain.
         price_tier: exact filter: "free", "moderate", or "premium".
 
-    Returns the shared schema dict, or {"error": "..."} if nothing
-    matches. Never raises.
+    Returns the shared schema dict, or {"error": "..."} listing
+    covered cities if the city isn't covered, or if nothing matches
+    the filters. Never raises.
     """
-    try:
-        data = _load_local_data()
-    except Exception as e:
-        return {"error": f"Could not load local activity data: {e}"}
+    path = _city_file(city)
+    if not os.path.exists(path):
+        return {"error": f"'{city}' is not covered by local data.", "covered_cities": _covered_cities()}
+
+    with open(path, "r") as f:
+        data = json.load(f)
 
     filtered = data
     if category:
@@ -104,25 +126,26 @@ def search_activities_local_exact(category: str = "", price_tier: str = "") -> d
         filtered = [a for a in filtered if a["price_tier"].lower() == price_tier.lower()]
 
     if not filtered:
-        return {"error": "No exact match in local data for that category/price_tier."}
+        return {"error": f"No exact match in local data for {city} with that category/price_tier."}
 
-    return {"city": CITY_NAME, "source": "local_exact", "activities": filtered}
+    return {"city": city, "source": "local_exact", "activities": filtered}
 
 
 # ---------------------------------------------------------------------
-# Tier 2: local semantic search (Chroma)
+# Tier 2: local semantic search (Chroma), across all covered cities
 # ---------------------------------------------------------------------
 
-def search_activities_semantic(query: str, category: str = "", price_tier: str = "") -> dict:
-    """Tier 2 — semantic (meaning-based) search over New York activities.
+def search_activities_semantic(query: str, city: str = "", category: str = "", price_tier: str = "") -> dict:
+    """Tier 2 — semantic (meaning-based) search over covered cities' activities.
 
     Use this when the traveler's request is a vague or natural-
     language description (e.g. "something romantic") rather than an
-    exact category — search_activities_local_exact won't match those.
-    Only covers New York.
+    exact category. If city is omitted, searches across ALL covered
+    cities; pass city to restrict to one.
 
     Args:
         query: natural-language description of what the traveler wants.
+        city: optional filter to one covered city.
         category: optional exact filter on top of the semantic search.
         price_tier: optional exact filter: "free", "moderate", "premium".
 
@@ -135,17 +158,21 @@ def search_activities_semantic(query: str, category: str = "", price_tier: str =
     except Exception as e:
         return {"error": f"Vector DB not available — run build_vector_db.py first. ({e})"}
 
-    where = {}
+    where_clauses = []
+    if city:
+        where_clauses.append({"city": city.title()})
     if category:
-        where["category"] = category
+        where_clauses.append({"category": category})
     if price_tier:
-        where["price_tier"] = price_tier
+        where_clauses.append({"price_tier": price_tier})
 
-    results = collection.query(
-        query_texts=[query],
-        n_results=5,
-        where=where if where else None,
-    )
+    where = None
+    if len(where_clauses) == 1:
+        where = where_clauses[0]
+    elif len(where_clauses) > 1:
+        where = {"$and": where_clauses}
+
+    results = collection.query(query_texts=[query], n_results=5, where=where)
 
     docs = results.get("documents", [[]])[0]
     metas = results.get("metadatas", [[]])[0]
@@ -157,7 +184,7 @@ def search_activities_semantic(query: str, category: str = "", price_tier: str =
         {"name": m["name"], "category": m["category"], "price_tier": m["price_tier"], "description": d}
         for d, m in zip(docs, metas)
     ]
-    return {"city": CITY_NAME, "source": "vector_db", "activities": activities}
+    return {"city": city or "multiple", "source": "vector_db", "activities": activities}
 
 
 # ---------------------------------------------------------------------
@@ -167,10 +194,7 @@ def search_activities_semantic(query: str, category: str = "", price_tier: str =
 
 async def build_agent():
     """Build the Deep Agent with local tools (tiers 1-2) plus the
-    MCP-loaded OpenTripMap tool (tier 3, for any city outside New York).
-
-    Async because MCP tool discovery requires connecting to the
-    mcp_opentripmap_server.py subprocess over stdio.
+    MCP-loaded OpenTripMap tool (tier 3, for any uncovered city).
     """
     local_tools = [search_activities_local_exact, search_activities_semantic]
 
@@ -185,10 +209,9 @@ async def build_agent():
         })
         mcp_tools = await mcp_client.get_tools()
     except Exception as e:
-        # Tier 3 is a fallback, not a hard requirement — if the MCP
-        # server can't start (e.g. no OPENTRIPMAP_API_KEY set yet),
-        # the agent still works for New York via tiers 1-2.
         print(f"[warning] MCP tier unavailable, continuing with local tools only: {e}")
+
+    covered = ", ".join(_covered_cities())
 
     agent = create_deep_agent(
         model=MODEL,
@@ -202,13 +225,14 @@ async def build_agent():
             "experiences, art, and entertainment. Food and dining is out of scope — that's "
             "the Restaurants Agent's domain, so redirect food questions there instead of "
             "answering them yourself. "
+            f"Locally covered cities (fast, curated data): {covered}. "
             "You have three knowledge sources, in priority order: "
-            "(1) search_activities_local_exact — try this first for New York with a clear "
-            "category/price filter; "
-            "(2) search_activities_semantic — use this for New York if (1) finds nothing, or "
-            "the request is vague/descriptive rather than an exact category; "
-            "(3) the OpenTripMap MCP tool — use this for any city OTHER than New York, since "
-            "tiers 1 and 2 only have New York data. "
+            "(1) search_activities_local_exact — try this first for a covered city with a "
+            "clear category/price filter; "
+            "(2) search_activities_semantic — use this for a covered city if (1) finds "
+            "nothing, or the request is vague/descriptive rather than an exact category; "
+            "(3) the OpenTripMap MCP tool — use this for any city NOT in the locally "
+            "covered list. "
             "Never invent an activity that no tool returned. If a tool returns an error, "
             "explain that honestly in your final message rather than guessing or ignoring it. "
             "Produce exactly ONE self-contained final message — never ask a follow-up "
@@ -239,12 +263,14 @@ async def answer(task: str) -> str:
 async def _run_self_tests():
     test_tasks = [
         "Find a free outdoor activity in New York.",
-        "I want something with a great skyline view in New York.",
-        # Grounding test: no good match in the New York data
+        "I want something romantic and artsy in Paris.",
+        "What's a good cultural activity in Rome?",
+        "Suggest a free outdoor activity in Kyoto.",
+        # Grounding test: no good match in the covered cities' data
         "Find underwater scuba diving in New York.",
         # Domain-boundary test: should redirect to the Restaurants Agent
-        "Where should I get dinner in New York?",
-        # Tier-3 test: a city with no local data — exercises the MCP fallback
+        "Where should I get dinner in Paris?",
+        # Tier-3 test: a city with no local coverage — exercises the MCP fallback
         "Find a cultural activity in Miami.",
     ]
 
@@ -257,4 +283,5 @@ async def _run_self_tests():
 
 if __name__ == "__main__":
     print(f"Using model: {MODEL}\n")
+    print(f"Locally covered cities: {', '.join(_covered_cities())}\n")
     asyncio.run(_run_self_tests())
