@@ -1,5 +1,6 @@
 """
-Money & Customs Agent -- built with Deep Agents (LangChain) + Cerebras.
+Money & Customs Agent -- built with Deep Agents (LangChain) + OpenRouter
+(free tier -- meta-llama/llama-3.3-70b-instruct:free by default).
 
 Combines three tools (money_tools.py) into one agent that gives a traveller:
   - the live exchange rate between their currency and the destination's
@@ -20,14 +21,15 @@ import os
 # For shared/repo use, prefer setting this via a real .env file instead
 # (see .env.example) and python-dotenv, rather than hardcoding it here.
 # ---------------------------------------------------------------------------
-os.environ.setdefault("OPENROUTER_API_KEY", "KEYKEYKEY_THISISWHEREITGOES")
-from langchain_openrouter import ChatOpenRouter
+os.environ.setdefault("COHERE_API_KEY", "KEYKEYKEY_THISISWHEREITGOES")
+
+from langchain_cohere import ChatCohere
 from deepagents import create_deep_agent
 
-from money_tools import get_exchange_rate, get_money_customs, get_income_context
+from money_tools import get_exchange_rate, search_money_customs, get_income_context
 
 
-MODEL = os.environ.get("MONEY_AGENT_MODEL", "openrouter/free")
+MODEL = os.environ.get("MONEY_AGENT_MODEL", "command-r-plus-08-2024")
 
 SYSTEM_PROMPT = (
     "You are the Money & Customs agent in a multi-agent travel-planning "
@@ -44,10 +46,20 @@ SYSTEM_PROMPT = (
     "'correct' the date based on what you expect today's date to be. The "
     "tool's date field is always the true, current source of truth; your "
     "own sense of the current date is not.\n"
-    "2. For tipping/haggling norms, use get_money_customs. Pass a specific "
+    "2. For tipping/haggling norms, use search_money_customs. Pass a specific "
     "'service' (restaurants, taxis, hotel_housekeeping, tour_guides) if the "
     "traveller asked about one in particular; otherwise call it without a "
-    "service for the full breakdown.\n"
+    "service for the full breakdown. This tool tries an exact match first, "
+    "then a typo correction, then a semantic search over the same data if "
+    "the country name is misspelled or phrased loosely -- it will still "
+    "return the closest match rather than fail. CHECK THE 'adjusted' FIELD "
+    "ON EVERY CALL. If it is non-null, your reply MUST begin with a line "
+    "stating the correction verbatim before anything else -- for example: "
+    "'Note: I interpreted \"<input>\" as <country>.' -- copying the country "
+    "name straight from the tool's 'country' field. Do not summarize, "
+    "paraphrase away, or silently omit this line. Only after that line may "
+    "you continue with the customs details. If 'adjusted' is null, skip "
+    "this line entirely -- do not invent a correction that didn't happen.\n"
     "3. For a sense of local price scale, use get_income_context. Always "
     "state clearly that this is a national AVERAGE (GNI per capita), not a "
     "city-level median, and frame it as rough context, never a precise "
@@ -71,10 +83,10 @@ def build_agent():
     """Construct and return the Money & Customs deep agent, ready to invoke."""
     global _AGENT
     if _AGENT is None:
-        llm = ChatOpenRouter(model=MODEL)
+        llm = ChatCohere(model=MODEL)
         _AGENT = create_deep_agent(
             model=llm,
-            tools=[get_exchange_rate, get_money_customs, get_income_context],
+            tools=[get_exchange_rate, search_money_customs, get_income_context],
             system_prompt=SYSTEM_PROMPT,
         )
     return _AGENT

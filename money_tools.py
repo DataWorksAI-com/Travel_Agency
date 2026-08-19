@@ -17,6 +17,10 @@ relevant, "error") field, so a calling agent/orchestrator can check success
 programmatically instead of parsing a sentence.
 """
 
+import difflib
+import hashlib
+import os
+
 import requests
 
 # ---------------------------------------------------------------------------
@@ -211,9 +215,238 @@ def get_money_customs(country: str, service: str = "") -> dict:
 
 
 # ---------------------------------------------------------------------------
-# TOOL 3: Rough income context (World Bank GNI per capita)
+# TOOL 2b: Agentic RAG layer over the same money-customs data
 # ---------------------------------------------------------------------------
-# Free, keyless World Bank Open Data API. This is a national AVERAGE (GNI
+# get_money_customs() above is an exact, case-insensitive dict lookup --
+# fast and precise, but it fails outright on a misspelled country name, an
+# unlisted-but-similar country, or loose phrasing ("Mexican tipping norms").
+#
+# search_money_customs() is what actually gets exposed to the agent as a
+# tool. It tries the exact lookup first (same as get_money_customs), and
+# only falls back to semantic search -- a local ChromaDB vector index built
+# from MONEY_CUSTOMS_FACTS itself, same default embedding model Destination
+# uses (no API key, no service, ~80MB download on first use) -- if the exact
+# lookup fails. This mirrors the same exact-lookup + vector-RAG split used
+# by Destination (resolve_place / recommend_destinations) and Activities
+# (read_activity_docs / search_activities): one tool for known-exact input,
+# one for anything looser.
+#
+# The REFLECTION step: if even the best semantic match is a weak one (low
+# cosine similarity), this does NOT fail or ask a follow-up question -- it
+# returns the closest match anyway, with an "adjusted" field explaining
+# it's an approximation, exactly the "never ask, state what changed"
+# convention already used by Restaurants' search_with_reflection.
+
+CONFIDENCE_THRESHOLD = 0.55  # below this cosine similarity, flag as approximate
+
+_money_collection = None  # cached across calls, corpus embedded only once
+
+
+def _get_money_collection():
+    """Build or reuse the money-customs vector store. Returns (collection, None)
+    or (None, error_dict)."""
+    global _money_collection
+    if _money_collection is not None:
+        return _money_collection, None
+
+    try:
+        import chromadb
+        from chromadb.config import Settings
+    except ImportError as exc:
+        return None, {"error": f"ChromaDB is not installed ({exc}). Run: pip install chromadb"}
+
+    entries = list(MONEY_CUSTOMS_FACTS.items())
+
+    # Fingerprint the actual text being embedded, same reasoning as
+    # Destination's recommend.py: a count check alone would miss edits to
+    # existing entries and leave a stale index in place forever.
+    fingerprint = hashlib.sha256(
+        "\n".join(f"{key}|{facts['general_note']}|{facts['haggling_note']}" for key, facts in entries).encode("utf-8")
+    ).hexdigest()[:16]
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    vector_db_path = os.path.join(base_dir, "money_customs_chroma_db")
+    collection_metadata = {"hnsw:space": "cosine", "corpus_fingerprint": fingerprint}
+
+    try:
+        client = chromadb.PersistentClient(
+            path=vector_db_path,
+            settings=Settings(anonymized_telemetry=False),
+        )
+        collection = client.get_or_create_collection(
+            name="money_customs",
+            metadata=collection_metadata,
+        )
+    except Exception as exc:
+        return None, {"error": f"Vector store unavailable: could not open ChromaDB ({exc})"}
+
+    try:
+        stored_fingerprint = (collection.metadata or {}).get("corpus_fingerprint")
+        needs_load = stored_fingerprint != fingerprint or collection.count() != len(entries)
+    except Exception as exc:
+        return None, {"error": f"Vector store unavailable: could not inspect ChromaDB ({exc})"}
+
+    if needs_load:
+        try:
+            client.delete_collection("money_customs")
+            collection = client.get_or_create_collection(
+                name="money_customs",
+                metadata=collection_metadata,
+            )
+            documents, ids, metadatas = [], [], []
+            for key, facts in entries:
+                doc_text = (
+                    f"{key.title()}. {facts['general_note']} {facts['haggling_note']} "
+                    f"Tipping expected: {facts['tipping_expected']}. "
+                    f"Haggling expected: {facts['haggling_expected']}."
+                )
+                documents.append(doc_text)
+                ids.append(key)
+                metadatas.append({"country_key": key})
+            collection.add(ids=ids, documents=documents, metadatas=metadatas)
+        except Exception as exc:
+            return None, {"error": f"Vector store unavailable: could not embed the corpus ({exc})"}
+
+    _money_collection = collection
+    return _money_collection, None
+
+
+def search_money_customs(country: str, service: str = "") -> dict:
+    """Look up money customs for a country -- exact match, then fuzzy
+    match, then semantic search as a last resort (agentic RAG). This is
+    the tool to call for money customs questions; it never fails outright
+    on a misspelling or loose phrasing, and never asks a follow-up question.
+
+    Three steps, in order:
+      1. Exact match (fast, precise) -- e.g. "France".
+      2. Fuzzy match (character-level, catches typos) -- e.g. "Mexcio"
+         correctly resolves to Mexico. Vector/semantic search is the WRONG
+         tool for this: embeddings match MEANING, not scrambled spelling,
+         and a single garbled word carries no real semantic signal. A
+         string-similarity check (difflib) is what actually solves typos.
+      3. Semantic search (vector, ChromaDB) -- for genuinely different
+         phrasing that isn't just a typo, e.g. "Mexican customs" or
+         "tipping norms south of the US border".
+
+    Args:
+        country: Country name, e.g. "France". Doesn't need to be an exact
+            spelling -- "Mexcio" resolves via fuzzy match, "Mexican
+            customs" resolves via semantic search.
+        service: Optional -- one of "restaurants", "taxis",
+            "hotel_housekeeping", "tour_guides".
+
+    Returns:
+        Same shape as get_money_customs, plus:
+          - "match_score": similarity score. None for an exact match;
+            a difflib ratio (0..1) for a fuzzy match; a cosine similarity
+            (0..1) for a semantic match.
+          - "adjusted": a plain-language note if this is a corrected typo
+            or a low-confidence approximate match rather than an exact
+            hit -- None if the input matched exactly.
+        "found" is only False if there is no usable data at all (e.g. the
+        vector store itself is unavailable AND no fuzzy match existed).
+    """
+    # Step 1: try the exact lookup first -- fast, precise, no reflection needed.
+    exact = get_money_customs(country, service=service)
+    if exact.get("found"):
+        exact["match_score"] = None
+        exact["adjusted"] = None
+        return exact
+
+    # Step 2: fuzzy match against known country names -- catches typos like
+    # "Mexcio" -> "mexico" that semantic search can't, since a scrambled
+    # single word has no meaningful embedding signal to match against.
+    FUZZY_CUTOFF = 0.75  # difflib ratio; higher = stricter typo tolerance
+    close = difflib.get_close_matches(
+        country.strip().lower(), MONEY_CUSTOMS_FACTS.keys(), n=1, cutoff=FUZZY_CUTOFF
+    )
+    if close:
+        matched_key = close[0]
+        facts = MONEY_CUSTOMS_FACTS[matched_key]
+        ratio = round(
+            difflib.SequenceMatcher(None, country.strip().lower(), matched_key).ratio(), 3
+        )
+        result = {
+            "country": matched_key.title(),
+            "found": True,
+            "match_score": ratio,
+            "adjusted": (
+                f"Adjusted: interpreted '{country}' as {matched_key.title()} "
+                f"(likely a typo, {ratio} character-similarity match)."
+            ),
+            **facts,
+        }
+        if service:
+            service_key = service.strip().lower()
+            note = facts["by_service"].get(service_key)
+            if note is None:
+                result["adjusted"] += (
+                    f" No specific data for service '{service}' in {matched_key.title()}; "
+                    f"showing general note instead."
+                )
+                result["by_service"] = {}
+            else:
+                result["by_service"] = {service_key: note}
+        return result
+
+    # Step 3: no exact or fuzzy match -- fall back to semantic search over
+    # the same underlying data, for genuinely different phrasing (not typos).
+    collection, error = _get_money_collection()
+    if error:
+        return {"country": country.strip(), "found": False, "error": error["error"],
+                 "match_score": None, "adjusted": None}
+
+    try:
+        count = collection.count()
+        results = collection.query(query_texts=[country], n_results=min(1, count))
+    except Exception as exc:
+        return {"country": country.strip(), "found": False,
+                 "error": f"Semantic search failed: {exc}", "match_score": None, "adjusted": None}
+
+    ids = (results.get("ids") or [[]])[0]
+    distances = (results.get("distances") or [[]])[0]
+    if not ids:
+        return {"country": country.strip(), "found": False,
+                 "error": f"No customs data available at all for {country!r}.",
+                 "match_score": None, "adjusted": None}
+
+    best_id = ids[0]
+    match_score = round(max(0.0, min(1.0, 1.0 - float(distances[0]))), 3)
+    facts = MONEY_CUSTOMS_FACTS.get(best_id)
+    if facts is None:
+        return {"country": country.strip(), "found": False,
+                 "error": "Internal error: matched entry missing from source data.",
+                 "match_score": None, "adjusted": None}
+
+    # REFLECTION: never fail or ask a question over low confidence -- return
+    # the closest match anyway, and say plainly that it's an approximation.
+    adjusted = None
+    if match_score < CONFIDENCE_THRESHOLD:
+        adjusted = (
+            f"Adjusted: no country matched '{country}' with high confidence. "
+            f"Showing the closest match, {best_id.title()} (similarity {match_score}), "
+            f"as a best-guess approximation -- verify before relying on it."
+        )
+
+    result = {
+        "country": best_id.title(),
+        "found": True,
+        "match_score": match_score,
+        "adjusted": adjusted,
+        **facts,
+    }
+
+    if service:
+        service_key = service.strip().lower()
+        note = facts["by_service"].get(service_key)
+        if note is None:
+            extra = f"No specific data for service '{service}' in {best_id.title()}; showing general note instead."
+            result["adjusted"] = f"{adjusted} {extra}" if adjusted else f"Adjusted: {extra}"
+            result["by_service"] = {}
+        else:
+            result["by_service"] = {service_key: note}
+
+    return result
 # per capita), not a city-level median -- framed explicitly as rough scale
 # context, not a precise local benchmark, since median income data isn't
 # reliably available for free, real-time API access across countries.
