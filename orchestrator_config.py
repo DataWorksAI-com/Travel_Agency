@@ -42,7 +42,7 @@ def _build_flights_client() -> LocalFunctionClient:
 
 
 def _build_restaurants_client() -> LocalFunctionClient:
-    from restaurant_agent_ollama import answer  # placeholder import path
+    from restaurant_agent import answer  # package layout after PR #6
     return LocalFunctionClient(answer)
 
 
