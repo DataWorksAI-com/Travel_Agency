@@ -34,6 +34,57 @@ DEFAULT_TOP_K = 5
 MIN_TOP_K = 1
 MAX_TOP_K = 20
 
+# Bump this whenever the metadata written into the index changes shape. It is
+# folded into the corpus fingerprint, so an index built by an older version is
+# discarded and rebuilt instead of silently lacking the new filter fields.
+INDEX_SCHEMA_VERSION = 2
+
+# --------------------------------------------------------------------------
+# Structured filter vocabulary - edit freely, the mapping below is literal.
+#
+# Vector similarity treats "inland" as a weak hint, so a query for
+# ["cool", "historic", "Europe", "inland"] used to rank coastal Nice above
+# inland Paris. These words are lifted out of the query and applied as hard
+# metadata filters BEFORE ranking; whatever is left over is the "vibe" text
+# that actually gets embedded.
+# --------------------------------------------------------------------------
+COASTAL_WORDS = {"coastal", "coast", "beach", "beaches", "sea", "seaside", "ocean", "seafront"}
+INLAND_WORDS = {"inland", "landlocked"}
+
+CONTINENT_WORDS = {
+    "asia": "Asia",
+    "asian": "Asia",
+    "europe": "Europe",
+    "european": "Europe",
+    "africa": "Africa",
+    "african": "Africa",
+    "america": "America",
+    "americas": "America",
+    "american": "America",
+    "caribbean": "America",
+    "australia": "Australia",
+    "pacific": "Pacific",
+}
+
+WARM_WORDS = {"warm", "hot", "tropical", "sunny", "balmy"}
+COOL_WORDS = {"cool", "cold", "chilly", "mild", "temperate"}
+
+WARM_MIN_C = 20.0   # "warm" means an annual mean at or above this
+COOL_MAX_C = 18.0   # "cool" means an annual mean at or below this
+
+# Below this many survivors, filters start being dropped one at a time.
+MIN_RESULTS_BEFORE_RELAXING = 3
+
+# If ranking on the leftover vibe text alone produces a top similarity below
+# this, the same filtered set is re-ranked on the full query text instead. A
+# vibe word absent from every description ("historic") otherwise makes every
+# survivor score 0.0, which reads as broken even though the results are right.
+WEAK_VIBE_SCORE = 0.05
+
+# Least critical first: temperature is a gradient, continent is geographic,
+# coastal/inland is a binary the traveller stated outright - so it goes last.
+RELAXATION_ORDER = ("temperature", "continent", "coastal")
+
 _collection = None  # cached across calls so the corpus is embedded only once
 
 
@@ -67,6 +118,123 @@ def _load_corpus():
     return usable, None
 
 
+def _entry_metadata(entry):
+    """Build the ChromaDB metadata row for one corpus entry.
+
+    Chroma metadata values must be str/int/float/bool - never None - so a field
+    the corpus does not have is OMITTED rather than stored empty. That is
+    deliberate: an entry with unknown coastal status simply will not match an
+    explicit coastal=True or coastal=False filter, instead of being guessed at.
+    Three dynamic entries (added before structured enrichment existed) fall into
+    this category.
+    """
+    metadata = {
+        "name": str(entry.get("name")),
+        "country_code": str(entry.get("country_code") or ""),
+        "lat": float(entry["lat"]),
+        "lon": float(entry["lon"]),
+    }
+
+    source_fields = entry.get("_source_fields")
+    if not isinstance(source_fields, dict):
+        return metadata
+
+    coastal = source_fields.get("coastal")
+    if isinstance(coastal, bool):
+        metadata["coastal"] = coastal
+
+    # IANA timezones are "Continent/City", so the prefix is the continent.
+    timezone = source_fields.get("timezone")
+    if isinstance(timezone, str) and "/" in timezone:
+        metadata["continent"] = timezone.split("/")[0].replace("_", " ")
+
+    avg_temp = source_fields.get("annual_avg_temp_c")
+    if isinstance(avg_temp, (int, float)) and not isinstance(avg_temp, bool):
+        metadata["avg_temp_c"] = float(avg_temp)
+
+    return metadata
+
+
+def _extract_filters(preferences):
+    """Split preferences into hard structured filters plus leftover vibe text.
+
+    Returns (filters, vibe_text). filters keys are the RELAXATION_ORDER names.
+    Words not in any vocabulary above are left in vibe_text for the embedding.
+    """
+    if isinstance(preferences, str):
+        tokens = preferences.replace(",", " ").split()
+    elif isinstance(preferences, (list, tuple, set)):
+        tokens = []
+        for item in preferences:
+            tokens.extend(str(item).replace(",", " ").split())
+    elif isinstance(preferences, dict):
+        tokens = []
+        for key, value in preferences.items():
+            tokens.extend(f"{key} {value}".replace(",", " ").split())
+    else:
+        tokens = []
+
+    filters = {}
+    leftover = []
+
+    for token in tokens:
+        word = token.strip().strip(".!?\"'").casefold()
+        if not word:
+            continue
+
+        if word in COASTAL_WORDS:
+            filters["coastal"] = True
+        elif word in INLAND_WORDS:
+            filters["coastal"] = False
+        elif word in CONTINENT_WORDS:
+            filters["continent"] = CONTINENT_WORDS[word]
+        elif word in WARM_WORDS:
+            filters["temperature"] = "warm"
+        elif word in COOL_WORDS:
+            filters["temperature"] = "cool"
+        else:
+            # Not a structured term - it is a "vibe" word, keep it for the vector.
+            leftover.append(token.strip())
+
+    return filters, " ".join(leftover)
+
+
+def _build_where(filters):
+    """Translate extracted filters into a ChromaDB where clause, or None."""
+    clauses = []
+
+    if "coastal" in filters:
+        clauses.append({"coastal": {"$eq": bool(filters["coastal"])}})
+
+    if "continent" in filters:
+        clauses.append({"continent": {"$eq": filters["continent"]}})
+
+    if filters.get("temperature") == "warm":
+        clauses.append({"avg_temp_c": {"$gte": WARM_MIN_C}})
+    elif filters.get("temperature") == "cool":
+        clauses.append({"avg_temp_c": {"$lte": COOL_MAX_C}})
+
+    if not clauses:
+        return None
+    if len(clauses) == 1:
+        return clauses[0]
+    return {"$and": clauses}
+
+
+def _describe_filter(name, filters):
+    """Human-readable label for a filter, for the transparency note."""
+    if name == "coastal":
+        return "coastal" if filters.get("coastal") else "inland"
+    if name == "continent":
+        return f"in {filters.get('continent')}"
+    if name == "temperature":
+        band = filters.get("temperature")
+        if band == "warm":
+            return f"warm (>= {WARM_MIN_C} C)"
+        return f"cool (<= {COOL_MAX_C} C)"
+    return name
+
+
 def _get_collection():
     """Build or reuse the vector store. Returns (collection, None) or (None, error_dict)."""
     global _collection
@@ -87,7 +255,13 @@ def _get_collection():
     # enough: editing descriptions without changing how many there are would
     # otherwise leave a stale index in place forever.
     fingerprint = hashlib.sha256(
-        "\n".join(f"{e.get('name')}|{e.get('country_code')}|{e['description']}" for e in entries).encode("utf-8")
+        (
+            f"schema={INDEX_SCHEMA_VERSION}\n"
+            + "\n".join(
+                f"{e.get('name')}|{e.get('country_code')}|{e.get('rag_text') or e['description']}"
+                for e in entries
+            )
+        ).encode("utf-8")
     ).hexdigest()[:16]
 
     # Cosine space makes match_score readable as a similarity in 0..1.
@@ -120,16 +294,8 @@ def _get_collection():
             )
             collection.add(
                 ids=[f"{e['name']}|{e.get('country_code')}|{i}" for i, e in enumerate(entries)],
-                documents=[e["description"] for e in entries],
-                metadatas=[
-                    {
-                        "name": str(e.get("name")),
-                        "country_code": str(e.get("country_code") or ""),
-                        "lat": float(e["lat"]),
-                        "lon": float(e["lon"]),
-                    }
-                    for e in entries
-                ],
+                documents=[e.get("rag_text") or e["description"] for e in entries],
+                metadatas=[_entry_metadata(e) for e in entries],
             )
         except Exception as exc:
             return None, {"error": f"Vector store unavailable: could not embed the corpus ({exc})"}
@@ -172,9 +338,15 @@ def recommend_destinations(preferences, top_k=DEFAULT_TOP_K):
         similarity in roughly 0..1, higher is closer.
         On any failure, a dict {"error": "..."}.
     """
-    query_text, error = _as_query_text(preferences)
+    full_query_text, error = _as_query_text(preferences)
     if error:
         return error
+
+    # Lift the hard constraints out; whatever remains is the text we embed.
+    all_filters, vibe_text = _extract_filters(preferences)
+    # If every word was a structured term there is no vibe left, so fall back to
+    # the full query text - the filters still do the real work.
+    query_text = vibe_text.strip() or full_query_text
 
     try:
         top_k = int(top_k)
@@ -191,20 +363,79 @@ def recommend_destinations(preferences, top_k=DEFAULT_TOP_K):
     except Exception as exc:
         return {"error": f"Vector store unavailable: could not count the collection ({exc})"}
 
-    try:
-        results = collection.query(
-            query_texts=[query_text],
-            n_results=min(top_k, available),
-        )
-    except Exception as exc:
-        return {"error": f"Recommendation failed: vector search error ({exc})"}
+    # Hard gate first, vector ranking second. Filters are dropped one at a time
+    # (least critical first) only if too few destinations survive.
+    active_filters = dict(all_filters)
+    relaxed = []
 
-    documents = (results.get("documents") or [[]])[0]
-    metadatas = (results.get("metadatas") or [[]])[0]
+    while True:
+        where = _build_where(active_filters)
+        try:
+            results = collection.query(
+                query_texts=[query_text],
+                n_results=min(top_k, available),
+                **({"where": where} if where else {}),
+            )
+        except Exception as exc:
+            return {"error": f"Recommendation failed: vector search error ({exc})"}
+
+        documents = (results.get("documents") or [[]])[0]
+        if len(documents) >= min(MIN_RESULTS_BEFORE_RELAXING, top_k) or not active_filters:
+            break
+
+        # Drop the least critical filter still in play and try again.
+        for candidate_name in RELAXATION_ORDER:
+            if candidate_name in active_filters:
+                relaxed.append(_describe_filter(candidate_name, all_filters))
+                del active_filters[candidate_name]
+                break
+        else:
+            break
+
     distances = (results.get("distances") or [[]])[0]
+
+    # Weak-vibe re-rank. The filters have already decided WHO is eligible; this
+    # only changes the ORDER and the score shown. A leftover vibe word that
+    # appears nowhere in the corpus ("historic") is near-orthogonal to every
+    # description, so every survivor scores ~0 and looks broken. Re-ranking the
+    # same filtered set on the full query text gives meaningful numbers, because
+    # words like "cool", "Europe" and "inland" do appear in the descriptions.
+    reranked_on_full_text = False
+    if (
+        distances
+        and query_text != full_query_text
+        and (1.0 - float(distances[0])) < WEAK_VIBE_SCORE
+    ):
+        try:
+            retry = collection.query(
+                query_texts=[full_query_text],
+                n_results=min(top_k, available),
+                **({"where": where} if where else {}),
+            )
+        except Exception:
+            retry = None  # keep the weak-but-valid original ordering
+
+        retry_documents = (retry.get("documents") or [[]])[0] if retry else []
+        if retry_documents:
+            results = retry
+            documents = retry_documents
+            distances = (retry.get("distances") or [[]])[0]
+            reranked_on_full_text = True
+
+    metadatas = (results.get("metadatas") or [[]])[0]
 
     if not documents:
         return {"error": f"No destinations matched {query_text!r}"}
+
+    applied = [_describe_filter(name, all_filters) for name in active_filters]
+    note = None
+    if relaxed:
+        note = (
+            "No destination in the corpus matched every stated preference, so "
+            "these filters were relaxed and the results below do NOT match them: "
+            + ", ".join(relaxed)
+            + "."
+        )
 
     shortlist = []
     for document, metadata, distance in zip(documents, metadatas, distances):
@@ -221,8 +452,19 @@ def recommend_destinations(preferences, top_k=DEFAULT_TOP_K):
                 "lon": metadata.get("lon"),
                 "description": document,
                 "match_score": round(score, 3),
+                # Repeated on every candidate so the return stays a plain list
+                # while still disclosing what was and was not honoured.
+                "applied_filters": applied,
+                "relaxed_filters": relaxed,
+                "retrieval_note": note,
+                "ranked_on_full_text": reranked_on_full_text,
             }
         )
+
+    # If even the full text scores near zero, similarity carries no signal here.
+    # Sort by name so the order is at least deterministic rather than arbitrary.
+    if shortlist and max(c["match_score"] for c in shortlist) < WEAK_VIBE_SCORE:
+        shortlist.sort(key=lambda c: str(c["name"]))
 
     return shortlist
 
