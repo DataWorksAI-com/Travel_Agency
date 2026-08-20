@@ -32,3 +32,10 @@ chainlit.md
 
 # Note: destination_data/destinations.json IS committed on purpose - it is the
 # RAG corpus, and rebuilding it costs ~140 live API calls.
+
+# Restaurant agent - local database, run artefacts and pre-change backups
+restaurant_db/
+_run_logs/
+_backup_pre_reflection_15aug/
+_dev/
+_offline_runner.py
