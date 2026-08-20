@@ -47,3 +47,5 @@ _run_logs/
 _backup_pre_reflection_15aug/
 _dev/
 _offline_runner.pyintegration_test/
+
+integration_test
