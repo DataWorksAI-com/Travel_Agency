@@ -83,14 +83,37 @@ test_cases = [
     },
 
     # --------------------------------------------------------
-    # LOW-CONFIDENCE RETRIEVAL
+    # FILTERED MATCH - must NOT trip low-confidence
+    #
+    # This is the regression guard for the false negative. Low confidence used
+    # to be `match_score < 0.30`, and this query's similarity is only ~0.14 -
+    # so it used to refuse to recommend. But three hard metadata filters
+    # (cool + Europe + inland) all held, which PROVES the match regardless of
+    # the cosine value, so a recommendation is now required.
     # --------------------------------------------------------
     {
-        "name": "Low-confidence recommendation",
-        "prompt": (
-            "I want a very cold inland destination "
-            "with desert scenery and tropical diving."
-        ),
+        "name": "Filtered match recommends despite low similarity",
+        "prompt": "a cool historic European city inland",
+        "expected_keywords": [
+            "Recommended Destination:",
+            "Climate:"
+        ],
+        "forbidden_keywords": [
+            "Retrieval Note:",
+            "Which of your stated preferences"
+        ]
+    },
+
+    # --------------------------------------------------------
+    # LOW-CONFIDENCE RETRIEVAL
+    #
+    # Genuinely weak retrieval: no structured terms at all, so no hard
+    # constraint can be proved and similarity is the only evidence - and it is
+    # below threshold. This is what low-confidence is actually for.
+    # --------------------------------------------------------
+    {
+        "name": "Low-confidence recommendation (vague, no structured terms)",
+        "prompt": "I want somewhere romantic and unforgettable.",
         "expected_keywords": [
             "Retrieval Note:",
             "current shared destination corpus",
