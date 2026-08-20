@@ -96,7 +96,18 @@ returned, and applies two rules with no model involvement:
    adjustment is prepended, so a bent requirement is never silent.
 
 A faithful reply is passed through untouched, and a coverage refusal is never
-turned into a recommendation. Six tests cover it.
+turned into a recommendation. Nine tests cover it.
+
+One implementation note, because the first version of this guard did not work.
+The tool's output was stored in a `ContextVar` **set inside the tool**, and the
+guard read an empty string every time. The agent framework runs each tool call
+in a child context, and a value set in a child context never travels back to the
+parent - so nothing the tool recorded was ever visible to `answer()`. The
+direction matters: `_CURRENT_TASK` works because it is set in the parent and
+read in the child. `answer()` now installs an empty list before the model runs,
+and the tool appends through that reference, which does travel. One of the nine
+tests reproduces the original failure directly, using `copy_context()` to run
+the recorder in a child context.
 
 Worth noting how this was found: standalone testing could not have surfaced it,
 because the retrieval layer was correct and the tests over it passed. It only
@@ -236,7 +247,7 @@ The agentic win comes from the second look, not from the retriever.
 - `restaurant_finder.py` — the RAG engine (vector DB build, semantic search, hard filters), the reflection step `search_with_reflection`, plus the contract helpers `parse_task` and `format_for_itinerary`
 - `restaurants_data.py` — the mock restaurant dataset (28 records)
 - `restaurant_agent_ollama.py` — the Deep Agent: its tool, system prompt, the `answer()` orchestrator entry point, and an interactive loop
-- `test_jig.py` — automatic black-box checker (40 cases: 8 retrieval/filter, 9 contract, 17 reflection/hard-constraint/coverage, 6 model-override guard). Exits non-zero on failure, so it can gate a build
+- `test_jig.py` — automatic black-box checker (43 cases: 8 retrieval/filter, 9 contract, 17 reflection/hard-constraint/coverage, 9 model-override guard). Exits non-zero on failure, so it can gate a build
 - `run_tests_offline.py` — runs the whole suite with no network, no API key and no model download, using a deterministic stand-in embedder
 - `restaurants_live.py` — the live OpenStreetMap data path and its coverage measurement
 - `eval_retrieval.py` — the measured evaluation behind the numbers above
@@ -261,14 +272,14 @@ restaurants into the vector database. Then ask, for example:
 ```
 python test_jig.py
 ```
-Runs 40 deterministic checks with no LLM needed: 8 over the retrieval and
+Runs 43 deterministic checks with no LLM needed: 8 over the retrieval and
 hard-filter core, 9 over the orchestrator contract (task-string parsing,
 itinerary-ready formatting, no questions back, nothing invented), 17 over the
 reflection step, the hard-constraint guarantees and the coverage refusal
 (relaxation order, the two-attempt stop, dietary and city never relaxed, an
-uncovered destination declined, every adjustment reported), and 6 over the
+uncovered destination declined, every adjustment reported), and 9 over the
 model-override guard described below.
-Expected result: `SCORE: 40/40`. On a machine with no network or no embedding
+Expected result: `SCORE: 43/43`. On a machine with no network or no embedding
 model available, run `python run_tests_offline.py` instead — same suite, stand-in
 embedder, still exits non-zero on failure.
 

@@ -122,11 +122,27 @@ MODEL = os.environ.get("RESTAURANT_AGENT_MODEL", "ollama:lfm2.5")
 # place to leave a shared global.
 _CURRENT_TASK: ContextVar = ContextVar("restaurant_agent_current_task", default="")
 
-# The exact string the tool last handed the model, for this request only.
-# Same ContextVar reasoning as _CURRENT_TASK above: two travellers answered at
-# once must never see each other's tool output.
-_LAST_TOOL_OUTPUT: ContextVar = ContextVar(
-    "restaurant_agent_last_tool_output", default="")
+# Every string the tool handed the model during THIS request.
+#
+# This holds a LIST, and the direction matters. A ContextVar set inside the tool
+# would be invisible here: the agent framework runs each tool call in a child
+# context, and a value set in a child never travels back up to the parent. That
+# is exactly the bug this file had on 20 Aug - the guard below read an empty
+# string every time and never fired. answer() now installs an empty list before
+# the model runs; the list REFERENCE travels down to the tool, and anything the
+# tool appends is visible back up here. Same per-request isolation as
+# _CURRENT_TASK, so two travellers answered at once cannot see each other's
+# tool output.
+_TOOL_OUTPUTS: ContextVar = ContextVar(
+    "restaurant_agent_tool_outputs", default=None)
+
+
+def _record_tool_output(text: str) -> str:
+    """Append one tool result to this request's log, then return it unchanged."""
+    log = _TOOL_OUTPUTS.get()
+    if log is not None:
+        log.append(text)
+    return text
 
 
 def find_restaurants(
@@ -198,8 +214,7 @@ def find_restaurants(
     uncovered = parse_task(_CURRENT_TASK.get() or "")["city_uncovered"]
     if uncovered:
         refusal = format_for_itinerary([], city_uncovered=uncovered)
-        _LAST_TOOL_OUTPUT.set(refusal)
-        return refusal
+        return _record_tool_output(refusal)
 
     cuisine_clean = (cuisine or "").strip().lower()
     if cuisine_clean == "vegan":
@@ -240,8 +255,7 @@ def find_restaurants(
     # block, so the tool output, the agent answer and the fallback path all look
     # identical to the orchestrator.
     tool_output = format_for_itinerary(results, relaxations=relaxations)
-    _LAST_TOOL_OUTPUT.set(tool_output)
-    return tool_output
+    return _record_tool_output(tool_output)
 
 
 # -----------------------------------------------------------------------------
@@ -413,10 +427,22 @@ def _retrieval_only_answer(task, reason=None):
 #   2. If the tool reported an adjustment and the model's reply does not mention
 #      one, prepend the adjustment, so a bent requirement is never silent.
 # -----------------------------------------------------------------------------
-def _enforce_tool_result(model_text: str, tool_output: str) -> str:
-    """Overrule the model when it discards or hides what the tool found."""
+def _enforce_tool_result(model_text: str, tool_outputs) -> str:
+    """Overrule the model when it discards or hides what the tool found.
+
+    tool_outputs is every string the tool returned during this request, oldest
+    first. The model may call the tool more than once - narrowing after a hit,
+    for instance - so a later empty result must not erase an earlier real one.
+    The most recent output that actually committed to a restaurant is the one
+    the reply is checked against.
+    """
     model_text = model_text or ""
-    tool_output = tool_output or ""
+    if isinstance(tool_outputs, str):
+        tool_outputs = [tool_outputs]
+    tool_output = ""
+    for candidate in (tool_outputs or []):
+        if candidate and "Recommended restaurant:" in candidate:
+            tool_output = candidate
 
     if "Recommended restaurant:" not in tool_output:
         # Nothing was committed to - a coverage refusal or an empty result.
@@ -468,7 +494,7 @@ def answer(task: str) -> str:
                 "city, for example: 'dinner in San Juan, seafood, under $40'.")
 
     token = _CURRENT_TASK.set(task.strip())
-    tool_token = _LAST_TOOL_OUTPUT.set("")
+    tool_token = _TOOL_OUTPUTS.set([])
     try:
         result = get_agent().invoke(
             {"messages": [{"role": "user", "content": task.strip()}]}
@@ -478,11 +504,11 @@ def answer(task: str) -> str:
             raise ValueError("the model returned an empty message")
         # The model has spoken; now check it against what the tool actually
         # found. See _enforce_tool_result above for the measured reason why.
-        return _enforce_tool_result(text, _LAST_TOOL_OUTPUT.get())
+        return _enforce_tool_result(text, _TOOL_OUTPUTS.get())
     except Exception as error:
         return _retrieval_only_answer(task, reason=str(error)[:160])
     finally:
-        _LAST_TOOL_OUTPUT.reset(tool_token)
+        _TOOL_OUTPUTS.reset(tool_token)
         _CURRENT_TASK.reset(token)
 
 

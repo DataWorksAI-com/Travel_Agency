@@ -25,7 +25,8 @@ from restaurant_finder import (
     RELAXATION_ORDER,
     MAX_ATTEMPTS,
 )
-from restaurant_agent_ollama import find_restaurants, _enforce_tool_result
+from restaurant_agent_ollama import (find_restaurants, _enforce_tool_result,
+                                     _record_tool_output, _TOOL_OUTPUTS)
 
 # Each case: a description, the search arguments, and a check(results) -> bool
 CASES = [
@@ -350,6 +351,25 @@ _TOOL_REFUSAL = (
     "invented."
 )
 
+def _child_context_capture_works():
+    """Reproduce the 20 Aug bug directly.
+
+    The agent framework runs each tool call in a child context. The first
+    version of this guard stored the tool output in a ContextVar set inside the
+    tool, and a value set in a child context never reaches the parent - so
+    answer() always saw nothing and the guard never fired. The list is installed
+    by the caller now, so the tool appends through a reference that does travel.
+    """
+    import contextvars
+    token = _TOOL_OUTPUTS.set([])
+    try:
+        contextvars.copy_context().run(_record_tool_output, _TOOL_HIT)
+        captured = _TOOL_OUTPUTS.get()
+        return len(captured) == 1 and "Pan y Cafe" in captured[0]
+    finally:
+        _TOOL_OUTPUTS.reset(token)
+
+
 GUARD_CASES = [
     {
         "desc": "A model that discards the tool's pick is overruled, not trusted",
@@ -387,6 +407,20 @@ GUARD_CASES = [
             "coverage area.", _TOOL_REFUSAL
         ) == ("No restaurants were found in Tokyo because it is outside our "
               "coverage area."),
+    },
+    {
+        "desc": "Tool output recorded in a CHILD context still reaches answer() (the 20 Aug bug)",
+        "check": _child_context_capture_works,
+    },
+    {
+        "desc": "A later empty tool call does not erase an earlier real recommendation",
+        "check": lambda: "Pan y Cafe" in _enforce_tool_result(
+            "No restaurant was found.",
+            [_TOOL_HIT, "No restaurant matched that request."]),
+    },
+    {
+        "desc": "No tool call at all leaves the model's reply untouched",
+        "check": lambda: _enforce_tool_result("Anything at all.", []) == "Anything at all.",
     },
 ]
 
