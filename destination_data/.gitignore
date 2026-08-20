@@ -1,0 +1,22 @@
+# Virtual environment
+.venv/
+
+# Secrets - none are needed today, but protect ahead of time
+.env
+
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+
+# Local ChromaDB vector store (regenerated automatically on first query)
+chroma_db/
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Note: destinations.json IS committed on purpose - it is the corpus the RAG
+# reads, and rebuilding it requires ~140 live API calls.

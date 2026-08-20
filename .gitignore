@@ -1,0 +1,34 @@
+# Environment files
+.env
+*.env
+
+# Virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Chroma local database/cache
+chroma_db/
+**/chroma_db/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Local pre-edit backups - never commit these
+*.backup
+destinations.backup.json
+
+# Chainlit auto-generated artifacts (recreated on first launch)
+.chainlit/
+chainlit.md
+.files/
+
+# Note: destination_data/destinations.json IS committed on purpose - it is the
+# RAG corpus, and rebuilding it costs ~140 live API calls.
