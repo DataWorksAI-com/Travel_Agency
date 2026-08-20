@@ -217,20 +217,28 @@ restaurants into the vector database. Then ask, for example:
 ```
 python test_jig.py
 ```
-Runs 30 deterministic checks with no LLM needed: 8 over the retrieval and
+Runs 34 deterministic checks with no LLM needed: 8 over the retrieval and
 hard-filter core, 9 over the orchestrator contract (task-string parsing,
-itinerary-ready formatting, no questions back, nothing invented), and 13 over the
-reflection step and the hard-constraint guarantees (relaxation order, the
-two-attempt stop, dietary and city never relaxed, every adjustment reported).
+itinerary-ready formatting, no questions back, nothing invented), and 17 over the
+reflection step, the hard-constraint guarantees and the coverage refusal
+(relaxation order, the two-attempt stop, dietary and city never relaxed, an
+uncovered destination declined, every adjustment reported).
 Expected result: `SCORE: 34/34`. On a machine with no network or no embedding
 model available, run `python run_tests_offline.py` instead — same suite, stand-in
 embedder, still exits non-zero on failure.
 
 ## Switching the model / provider
-The agent runs locally on Ollama by default (`MODEL = "ollama:lfm2.5"` in
-`restaurant_agent_ollama.py`). To use OpenRouter instead, set an OpenRouter key
-in your `.env` and change that one line to an OpenRouter model string. The RAG
-engine, the filters, and the data are provider-independent.
+The agent reads its model from the `RESTAURANT_AGENT_MODEL` environment
+variable and falls back to local Ollama (`ollama:lfm2.5`) when that variable is
+unset, so the orchestrator can point this agent at whatever model the rest of
+the system uses **without editing any source file**:
+
+```
+export RESTAURANT_AGENT_MODEL="openrouter:anthropic/claude-sonnet-4.5"
+```
+
+Set the matching provider key in your `.env`. The RAG engine, the filters and
+the data are provider-independent.
 
 ## Design note — why this is agentic RAG
 Restaurant knowledge is **retrieved** from a stored corpus (the vector DB)

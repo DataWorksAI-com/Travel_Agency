@@ -154,6 +154,22 @@ def find_restaurants(
         An itinerary-ready recommendation: one top pick with a reason, plus up
         to two alternatives, each with name, cuisine, city, price per person and
         rating. Or a plain statement that nothing matched.
+
+    Weak at - stated so the model does not over-trust this tool:
+        Coverage is six tropical cities only: Aruba, Cancun, Honolulu, Montego
+        Bay, Nassau and San Juan. Any other destination is declined rather than
+        answered, so rewording the query will not help.
+
+        Occasion and mood wording ranks poorly. Measured over 20 labelled
+        questions, semantic search lost to a plain keyword baseline on abstract
+        requests such as 'somewhere romantic for an anniversary', because the
+        records describe food and setting rather than occasions. Concrete food
+        wording works better: prefer 'grilled seafood by the water' over
+        'somewhere special'.
+
+        It holds nothing on opening hours, reservations, distance from a hotel
+        or current availability, and it cannot book. Price is a typical spend
+        per person rather than a live menu price, and ratings are static.
     """
     # -------------------------------------------------------------------
     # HARD CONSTRAINTS ARE NOT LEFT TO THE LANGUAGE MODEL
