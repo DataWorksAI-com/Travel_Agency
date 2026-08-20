@@ -122,6 +122,12 @@ MODEL = os.environ.get("RESTAURANT_AGENT_MODEL", "ollama:lfm2.5")
 # place to leave a shared global.
 _CURRENT_TASK: ContextVar = ContextVar("restaurant_agent_current_task", default="")
 
+# The exact string the tool last handed the model, for this request only.
+# Same ContextVar reasoning as _CURRENT_TASK above: two travellers answered at
+# once must never see each other's tool output.
+_LAST_TOOL_OUTPUT: ContextVar = ContextVar(
+    "restaurant_agent_last_tool_output", default="")
+
 
 def find_restaurants(
     query: str,
@@ -191,7 +197,9 @@ def find_restaurants(
     # the orchestrator's task string or in the model's city argument.
     uncovered = parse_task(_CURRENT_TASK.get() or "")["city_uncovered"]
     if uncovered:
-        return format_for_itinerary([], city_uncovered=uncovered)
+        refusal = format_for_itinerary([], city_uncovered=uncovered)
+        _LAST_TOOL_OUTPUT.set(refusal)
+        return refusal
 
     cuisine_clean = (cuisine or "").strip().lower()
     if cuisine_clean == "vegan":
@@ -231,7 +239,9 @@ def find_restaurants(
     # One shared formatter (in restaurant_finder.py) writes the itinerary-ready
     # block, so the tool output, the agent answer and the fallback path all look
     # identical to the orchestrator.
-    return format_for_itinerary(results, relaxations=relaxations)
+    tool_output = format_for_itinerary(results, relaxations=relaxations)
+    _LAST_TOOL_OUTPUT.set(tool_output)
+    return tool_output
 
 
 # -----------------------------------------------------------------------------
@@ -379,6 +389,59 @@ def _retrieval_only_answer(task, reason=None):
                 "Treat the restaurant section of the itinerary as unavailable.")
 
 
+# -----------------------------------------------------------------------------
+# THE MODEL DOES NOT GET THE LAST WORD ON WHAT THE TOOL FOUND
+# -----------------------------------------------------------------------------
+# Measured on 20 Aug 2026, calling this agent through the group's orchestrator
+# shell. Asked for "cheap local seafood in San Juan", the tool did its job: no
+# seafood matched under $15, so the reflection step dropped the cuisine, found
+# Pan y Cafe at $12, and wrote the "Adjusted:" line explaining the swap. The
+# model then discarded all of it and replied "No cheap local seafood restaurant
+# in San Juan was found within a $15 per person budget" - a false negative,
+# produced from a successful search.
+#
+# That breaks two of this agent's own system-prompt rules: only report what the
+# tool returned (it returned something), and always carry the "Adjusted:" line
+# through (it did not). It is the same failure shape as the 15 Aug dietary bug,
+# one level up: a prompt asked the model to behave, and the model did not.
+#
+# So the same remedy applies. The tool's result is checked deterministically
+# after the model has spoken, and the model is overruled when it drops one.
+# Two rules, no model involvement:
+#   1. If the tool committed to a restaurant and the model's reply does not name
+#      it, return the tool's own itinerary-ready output instead.
+#   2. If the tool reported an adjustment and the model's reply does not mention
+#      one, prepend the adjustment, so a bent requirement is never silent.
+# -----------------------------------------------------------------------------
+def _enforce_tool_result(model_text: str, tool_output: str) -> str:
+    """Overrule the model when it discards or hides what the tool found."""
+    model_text = model_text or ""
+    tool_output = tool_output or ""
+
+    if "Recommended restaurant:" not in tool_output:
+        # Nothing was committed to - a coverage refusal or an empty result.
+        # There is nothing for the model to have dropped.
+        return model_text
+
+    name = tool_output.split("Recommended restaurant:", 1)[1]
+    name = name.split(" - ", 1)[0].strip()
+    if not name:
+        return model_text
+
+    # Rule 1 - the model dropped a real recommendation.
+    if name.lower() not in model_text.lower():
+        return tool_output
+
+    # Rule 2 - the model kept the pick but hid the adjustment.
+    for line in tool_output.splitlines():
+        if line.startswith("Adjusted:"):
+            if "adjusted" not in model_text.lower():
+                return line + "\n" + model_text
+            break
+
+    return model_text
+
+
 def answer(task: str) -> str:
     """Answer one orchestrator task and return one self-contained message.
 
@@ -405,6 +468,7 @@ def answer(task: str) -> str:
                 "city, for example: 'dinner in San Juan, seafood, under $40'.")
 
     token = _CURRENT_TASK.set(task.strip())
+    tool_token = _LAST_TOOL_OUTPUT.set("")
     try:
         result = get_agent().invoke(
             {"messages": [{"role": "user", "content": task.strip()}]}
@@ -412,10 +476,13 @@ def answer(task: str) -> str:
         text = _message_text(result["messages"][-1]).strip()
         if not text:
             raise ValueError("the model returned an empty message")
-        return text
+        # The model has spoken; now check it against what the tool actually
+        # found. See _enforce_tool_result above for the measured reason why.
+        return _enforce_tool_result(text, _LAST_TOOL_OUTPUT.get())
     except Exception as error:
         return _retrieval_only_answer(task, reason=str(error)[:160])
     finally:
+        _LAST_TOOL_OUTPUT.reset(tool_token)
         _CURRENT_TASK.reset(token)
 
 

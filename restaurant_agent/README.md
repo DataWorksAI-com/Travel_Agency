@@ -58,6 +58,50 @@ never. Dietary needs are now derived deterministically from the request text and
 combined with whatever the model passes, so **the model can only ever add a
 dietary requirement, never drop one.** Two tests cover it.
 
+## The model does not get the last word on what the tool found
+
+Measured on 20 August 2026, running this agent **through the group's
+orchestrator shell** rather than on its own.
+
+Asked for *"cheap local seafood in San Juan"*, the model read *cheap* as a $15
+ceiling. No seafood in San Juan matches that, so the reflection step did exactly
+what it should: it dropped the cuisine, found Pan y Cafe at $12, and wrote the
+`Adjusted:` line. The tool handed the model this:
+
+```
+Adjusted: No Seafood option matched the other requirements, so the cuisine preference was dropped for this search.
+Recommended restaurant: Pan y Cafe - Cafe, San Juan. About $12 per person, rated 4.2/5. Dietary: vegetarian.
+```
+
+The model replied:
+
+```
+No cheap local seafood restaurant in San Juan was found within a $15 per person budget.
+```
+
+**A false negative, produced from a successful search.** It breaks two of this
+agent's own system-prompt rules at once — report only what the tool returned (it
+returned something), and always carry the `Adjusted:` line through (it did not).
+
+This is the same failure as the dietary bug above, one level up. There, a prompt
+asked the model to set a flag correctly and it did not. Here, a prompt asked the
+model to report a result faithfully and it did not. The remedy is the same:
+**check it deterministically instead of asking.** After the model has spoken,
+`_enforce_tool_result()` compares the reply against what the tool actually
+returned, and applies two rules with no model involvement:
+
+1. If the tool committed to a restaurant and the reply does not name it, the
+   tool's own itinerary-ready output is returned instead.
+2. If the tool reported an adjustment and the reply does not mention one, the
+   adjustment is prepended, so a bent requirement is never silent.
+
+A faithful reply is passed through untouched, and a coverage refusal is never
+turned into a recommendation. Six tests cover it.
+
+Worth noting how this was found: standalone testing could not have surfaced it,
+because the retrieval layer was correct and the tests over it passed. It only
+appeared once the agent was called the way the orchestrator will call it.
+
 ## Orchestrator interface
 
 This agent implements the team's sub-agent contract: **one task string in, one
@@ -192,7 +236,7 @@ The agentic win comes from the second look, not from the retriever.
 - `restaurant_finder.py` — the RAG engine (vector DB build, semantic search, hard filters), the reflection step `search_with_reflection`, plus the contract helpers `parse_task` and `format_for_itinerary`
 - `restaurants_data.py` — the mock restaurant dataset (28 records)
 - `restaurant_agent_ollama.py` — the Deep Agent: its tool, system prompt, the `answer()` orchestrator entry point, and an interactive loop
-- `test_jig.py` — automatic black-box checker (34 cases: 8 retrieval/filter, 9 contract, 17 reflection, hard-constraint and coverage). Exits non-zero on failure, so it can gate a build
+- `test_jig.py` — automatic black-box checker (40 cases: 8 retrieval/filter, 9 contract, 17 reflection/hard-constraint/coverage, 6 model-override guard). Exits non-zero on failure, so it can gate a build
 - `run_tests_offline.py` — runs the whole suite with no network, no API key and no model download, using a deterministic stand-in embedder
 - `restaurants_live.py` — the live OpenStreetMap data path and its coverage measurement
 - `eval_retrieval.py` — the measured evaluation behind the numbers above
@@ -217,13 +261,14 @@ restaurants into the vector database. Then ask, for example:
 ```
 python test_jig.py
 ```
-Runs 34 deterministic checks with no LLM needed: 8 over the retrieval and
+Runs 40 deterministic checks with no LLM needed: 8 over the retrieval and
 hard-filter core, 9 over the orchestrator contract (task-string parsing,
-itinerary-ready formatting, no questions back, nothing invented), and 17 over the
+itinerary-ready formatting, no questions back, nothing invented), 17 over the
 reflection step, the hard-constraint guarantees and the coverage refusal
 (relaxation order, the two-attempt stop, dietary and city never relaxed, an
-uncovered destination declined, every adjustment reported).
-Expected result: `SCORE: 34/34`. On a machine with no network or no embedding
+uncovered destination declined, every adjustment reported), and 6 over the
+model-override guard described below.
+Expected result: `SCORE: 40/40`. On a machine with no network or no embedding
 model available, run `python run_tests_offline.py` instead — same suite, stand-in
 embedder, still exits non-zero on failure.
 

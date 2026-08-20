@@ -25,7 +25,7 @@ from restaurant_finder import (
     RELAXATION_ORDER,
     MAX_ATTEMPTS,
 )
-from restaurant_agent_ollama import find_restaurants
+from restaurant_agent_ollama import find_restaurants, _enforce_tool_result
 
 # Each case: a description, the search arguments, and a check(results) -> bool
 CASES = [
@@ -323,6 +323,74 @@ REFLECTION_CASES = [
 ]
 
 
+# -----------------------------------------------------------------------------
+# SECTION D - the model does not get the last word
+# -----------------------------------------------------------------------------
+# Measured 20 Aug 2026 through the group's orchestrator shell: the tool found
+# Pan y Cafe at $12 and wrote an "Adjusted:" line; the model replied "no
+# restaurant was found". These lock the deterministic override that stops a
+# successful search being reported as a failure. No LLM required - the guard is
+# a pure function over two strings.
+
+_TOOL_HIT = (
+    "Adjusted: No Seafood option matched the other requirements, so the "
+    "cuisine preference was dropped for this search.\n"
+    "Recommended restaurant: Pan y Cafe - Cafe, San Juan. About $12 per "
+    "person, rated 4.2/5. Dietary: vegetarian.\n"
+    "Why: Budget breakfast and coffee spot."
+)
+_TOOL_CLEAN = (
+    "Recommended restaurant: Sunset Vegan Kitchen - Vegan, Aruba. About $26 "
+    "per person, rated 4.8/5. Dietary: vegetarian, vegan, gluten-free."
+)
+_TOOL_REFUSAL = (
+    "Coverage limit: this restaurant agent holds records for Aruba, Cancun, "
+    "Honolulu, Montego Bay, Nassau, San Juan only. Tokyo is outside that "
+    "coverage, so no restaurant has been recommended and nothing has been "
+    "invented."
+)
+
+GUARD_CASES = [
+    {
+        "desc": "A model that discards the tool's pick is overruled, not trusted",
+        "check": lambda: "Pan y Cafe" in _enforce_tool_result(
+            "No cheap local seafood restaurant in San Juan was found within a "
+            "$15 per person budget.", _TOOL_HIT),
+    },
+    {
+        "desc": "Overruling carries the Adjusted line, so the swap is never silent",
+        "check": lambda: _enforce_tool_result(
+            "No restaurant was found.", _TOOL_HIT).startswith("Adjusted:"),
+    },
+    {
+        "desc": "A model that reports the pick faithfully is left alone",
+        "check": lambda: _enforce_tool_result(
+            "Adjusted: cuisine dropped. Recommended restaurant: Pan y Cafe - "
+            "Cafe, San Juan.", _TOOL_HIT).startswith("Adjusted: cuisine dropped"),
+    },
+    {
+        "desc": "A model that keeps the pick but hides the adjustment has it restored",
+        "check": lambda: _enforce_tool_result(
+            "Recommended restaurant: Pan y Cafe - Cafe, San Juan.",
+            _TOOL_HIT).startswith("Adjusted:"),
+    },
+    {
+        "desc": "A clean hit with no adjustment is passed through untouched",
+        "check": lambda: _enforce_tool_result(
+            "Recommended restaurant: Sunset Vegan Kitchen - Vegan, Aruba.",
+            _TOOL_CLEAN) == "Recommended restaurant: Sunset Vegan Kitchen - Vegan, Aruba.",
+    },
+    {
+        "desc": "A coverage refusal is never overridden into a recommendation",
+        "check": lambda: _enforce_tool_result(
+            "No restaurants were found in Tokyo because it is outside our "
+            "coverage area.", _TOOL_REFUSAL
+        ) == ("No restaurants were found in Tokyo because it is outside our "
+              "coverage area."),
+    },
+]
+
+
 def run():
     print("\n" + "=" * 60)
     print("  Restaurant Agent - Test Jig")
@@ -363,7 +431,19 @@ def run():
         if ok:
             passed += 1
 
-    total = len(CASES) + len(CONTRACT_CASES) + len(REFLECTION_CASES)
+    print("\nSECTION D - the model does not get the last word\n")
+    for c in GUARD_CASES:
+        try:
+            ok = bool(c["check"]())
+        except Exception as error:
+            ok = False
+            print("   (error:", error, ")")
+        print(f"[{'PASS' if ok else 'FAIL'}]  {c['desc']}")
+        if ok:
+            passed += 1
+
+    total = (len(CASES) + len(CONTRACT_CASES) + len(REFLECTION_CASES)
+             + len(GUARD_CASES))
     print("\n" + "-" * 60)
     print(f"  SCORE: {passed}/{total} checks passed")
     print("-" * 60 + "\n")
