@@ -1,23 +1,34 @@
-# Budget Cost Aggregator Agent
+# Budget Agent (RAG-based)
 
-A **Deep Agent** (built on LangGraph via `deepagents`) that sits
-downstream of the Flights, Restaurants, and Activities sub-agents in
-the DataWorksAI Travel Agency multi-agent system. It aggregates their
-priced outputs, checks the total against the user's stated budget, and
-suggests specific cuts/downgrades if the trip runs over.
+A standalone **Deep Agent** (built on LangGraph via `deepagents`) that
+estimates trip costs and checks budget feasibility using **real RAG**
+(Retrieval-Augmented Generation) — semantic search over a vector store
+of city cost documents, not a dict lookup.
 
-## Why this agent is different
+Runs independently, same pattern as Destination, Flights, Activities,
+and Restaurants — does not depend on any other sub-agent's output.
 
-Unlike Destination, Flights, Activities, and Restaurants, this agent:
-- **Does not run in parallel** off the orchestrator — it only runs
-  once the other three have returned priced results.
-- **Needs no external API, MCP server, or vector DB.** Its "knowledge"
-  is just the line items it's given; its logic is pure computation
-  (sum, compare, suggest).
+## How the RAG pipeline works
 
-This makes it a useful contrast case for the "classic vs agentic RAG"
-comparison: not every agent in a multi-agent system needs a retrieval
-or external-data layer to be useful.
+1. **Source of truth:** `src/budget_agent/data/city_cost_docs.py` —
+   15 short unstructured write-ups (one per city) covering flights,
+   lodging, food, and activity costs.
+2. **Embedding + indexing:** `scripts/build_vectorstore.py` chunks
+   these documents, embeds them with a local `sentence-transformers`
+   model, and persists them to a Chroma vector store (`./chroma_db`).
+3. **Retrieval:** `retrieve_cost_info` (in `tools/rag_tools.py`) embeds
+   the agent's query and does a similarity search over that vector
+   store — so it retrieves relevant info even for fuzzy queries (e.g.
+   "cheap tropical beach trip"), not just exact city-name matches.
+4. **Reasoning + math:** the agent reasons over the retrieved text to
+   estimate a total cost, then calls `check_feasibility` to compare
+   against the user's budget.
+
+## Cities currently in the knowledge base
+
+Cancun, Maui, Phuket, Bali, Punta Cana, Costa Rica (San Jose), Fiji,
+Seychelles, Maldives, Barbados, Montego Bay, Phu Quoc, Krabi, Tulum,
+Oahu.
 
 ## Folder structure
 
@@ -30,15 +41,21 @@ budget_agent/
 ├── src/
 │   └── budget_agent/
 │       ├── __init__.py
-│       ├── config.py       # loads ANTHROPIC_API_KEY / model from env
-│       ├── agent.py        # builds the Deep Agent
+│       ├── config.py
+│       ├── agent.py
+│       ├── data/
+│       │   ├── __init__.py
+│       │   └── city_cost_docs.py     # source-of-truth documents
 │       └── tools/
 │           ├── __init__.py
-│           └── budget_tools.py   # aggregate_costs, check_budget, suggest_adjustment
+│           ├── rag_tools.py           # retrieve_cost_info (real RAG)
+│           └── budget_tools.py        # check_feasibility (math only)
 ├── scripts/
-│   └── run_agent.py        # CLI entry point — hello-world + chat mode
+│   ├── build_vectorstore.py           # run once to embed + index docs
+│   └── run_agent.py                   # CLI entry point
+├── chroma_db/                          # persisted vector store (gitignored)
 └── tests/
-    └── test_tools.py       # unit tests for the tools (no API key needed)
+    └── test_tools.py
 ```
 
 ## Setup
@@ -50,54 +67,59 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Edit `.env` and add your real key under **one** of the two options:
+Edit `.env` and add your key (Anthropic preferred, OpenRouter as fallback):
 ```
-# Option A: direct Anthropic key
 ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_MODEL=claude-sonnet-4-6
-
-# Option B: OpenRouter (only used if ANTHROPIC_API_KEY is not set)
-OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_MODEL=anthropic/claude-sonnet-4.5
 ```
-If `ANTHROPIC_API_KEY` is set, it's used automatically — no other
-changes needed.
+
+## Build the vector store (do this first, before running the agent)
+
+```bash
+python scripts/build_vectorstore.py
+```
+
+This downloads a small embedding model (~80MB) on first run, so it
+needs internet access once. After that, `chroma_db/` is persisted
+locally and queries don't need internet for retrieval (only the LLM
+call itself does).
 
 ## Run it
 
-**Hello World check** (simulates a task string from the orchestrator):
 ```bash
 python scripts/run_agent.py
 ```
 
-**Interactive chat** (paste your own task string):
+Or interactively:
 ```bash
 python scripts/run_agent.py --chat
 ```
 
+Try queries like:
+- "Is $700 enough for a 4-day trip to Cancun?"
+- "What's a cheap tropical beach destination under $1,500?"
+- "How much would a 5-day trip to Fiji cost?"
+
 ## Run tests
 
-Tool logic is tested independently of the LLM (no API key required):
 ```bash
 pytest
 ```
+(RAG-specific tests are skipped automatically if `chroma_db/` hasn't
+been built yet.)
 
-## Contract compliance (per team's orchestrator/sub-agent contract)
+## Adding more cities
 
-- **Input:** one task string from the orchestrator containing priced
-  line items (category, name, cost) and the user's budget.
-- **Output:** one self-contained final message: total cost, budget
-  status (within/over), and — if over — specific items to cut or
-  downgrade. No follow-up questions back to the orchestrator.
-- **Assumptions:** if a line item is missing a category or cost, the
-  agent makes a reasonable assumption and states it in the final
-  message rather than asking for clarification.
+Just add another entry to `CITY_COST_DOCS` in
+`src/budget_agent/data/city_cost_docs.py`, then rerun
+`python scripts/build_vectorstore.py` to re-embed and re-index.
 
-## Next steps
+## Why this is genuinely RAG (and not just a lookup)
 
-- Wire into the orchestrator's routing so it's called automatically
-  after Flights/Restaurants/Activities return.
-- Consider a currency conversion tool if trips go international.
-- Decide whether "essential" vs "optional" line items should be
-  tagged explicitly (e.g. by the Activities/Restaurants agents) rather
-  than inferred by category alone.
+The earlier version of this agent used a hardcoded Python dict keyed
+by exact city name — that's a lookup, not retrieval. This version
+embeds the query and does similarity search, so it can surface
+relevant cost info even when the query doesn't name a city exactly,
+and it demonstrates the actual retrieve → augment → generate pattern
+the rest of the team's agents (Destination, Restaurants) are also
+moving toward with their own vector DBs.

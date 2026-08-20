@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """
-Hello World check for the Budget Cost Aggregator Agent.
+Run the Budget Agent.
 
-Simulates what the orchestrator would send: a task string containing
-priced line items from Flights/Restaurants/Activities, plus a budget.
+Single-shot mode simulates what the orchestrator would send: a task
+string with a destination, budget, and trip length. The agent
+retrieves cost info via RAG, does a second verification retrieval to
+cross-check the numbers, reasons over both, and checks feasibility.
+
+Chat mode lets you ask a follow-up question after the first -- e.g.
+change the destination or budget -- and the agent reuses context
+(like budget or trip length) already established earlier in the
+conversation instead of requiring you to repeat it.
 
 Run with:
     python scripts/run_agent.py
@@ -26,8 +33,9 @@ Destination: Cancun
 Trip length: 4 days
 User's stated budget: $700 total
 
-Estimate the total trip cost for this destination and check whether \
-it's feasible within the stated budget.
+Retrieve relevant cost information for this destination, estimate the \
+total trip cost, and check whether it's feasible within the stated \
+budget.
 """
 
 
@@ -54,7 +62,8 @@ def run_hello_world() -> None:
 def run_chat() -> None:
     print("Building Budget Agent (this may take a few seconds)...")
     agent = build_agent()
-    print("Chat with the Budget Agent. Paste a task string, or type 'exit' to stop.\n")
+    print("Chat with the Budget Agent. Ask about a destination + budget, then feel free")
+    print("to ask a follow-up (e.g. 'what about Bali instead?'). Type 'exit' to stop.\n")
 
     history = []
     while True:

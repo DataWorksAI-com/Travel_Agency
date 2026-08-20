@@ -9,6 +9,12 @@ langchain-anthropic>=0.3.0
 # OpenRouter model access (alternative to direct Anthropic access)
 langchain-openrouter>=0.1.0
 
+# RAG: vector store + local embeddings
+langchain-chroma>=0.2.0
+langchain-huggingface>=0.1.0
+sentence-transformers>=3.0.0
+chromadb>=0.5.0
+
 # Env var loading
 python-dotenv>=1.0.0
 
