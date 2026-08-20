@@ -87,7 +87,7 @@ def _get_collection():
     # enough: editing descriptions without changing how many there are would
     # otherwise leave a stale index in place forever.
     fingerprint = hashlib.sha256(
-        "\n".join(f"{e.get('name')}|{e.get('country_code')}|{e['description']}" for e in entries).encode("utf-8")
+        "\n".join(f"{e.get('name')}|{e.get('country_code')}|{e.get('rag_text') or e['description']}" for e in entries).encode("utf-8")
     ).hexdigest()[:16]
 
     # Cosine space makes match_score readable as a similarity in 0..1.
@@ -120,7 +120,7 @@ def _get_collection():
             )
             collection.add(
                 ids=[f"{e['name']}|{e.get('country_code')}|{i}" for i, e in enumerate(entries)],
-                documents=[e["description"] for e in entries],
+                documents=[e.get("rag_text") or e["description"] for e in entries],
                 metadatas=[
                     {
                         "name": str(e.get("name")),
