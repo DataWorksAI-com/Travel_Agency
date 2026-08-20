@@ -11,15 +11,23 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+build/
+dist/
 
-# Chroma local database/cache
+# Chroma local database/cache (per-agent, regenerated via build_vectorstore.py)
 chroma_db/
 **/chroma_db/
+budget_agent/chroma_db/
+
+# Agent workspace / run artifacts
+agent_workspace/
 
 # OS/editor
 .DS_Store
 Thumbs.db
 .vscode/
+.idea/
 
 # Local pre-edit backups - never commit these
 *.backup
