@@ -352,6 +352,54 @@ def test_changes_are_explainable():
     assert any("lodging raised" in c for c in out["changes"])
 
 
+# --- hostile input, found by adversarial probing ---------------------------
+
+def test_unpriced_item_does_not_crash_and_is_not_treated_as_zero():
+    """Limeng's live MCP tier returns price as the string "unknown".
+
+    That WILL reach this tool. int("unknown") would raise and kill the whole
+    orchestrator call. And treating it as zero would report the plan as
+    affordable when part of it has no known price.
+    """
+    out = verify_plan({"lodging": 900, "activities": "unknown"},
+                      {"lodging": 1000, "activities": 300})
+    assert out["status"] == "unverifiable"
+    assert out["violation_type"] == "unpriced"
+    assert "activities" in out["unpriced"]
+    assert out["per_category"]["activities"]["spent"] is None
+    assert out["total_spent"] == 900          # not 900 + 0
+
+
+def test_currency_formatted_strings_are_parsed():
+    """An orchestrator extracting from prose may hand back "$1,200"."""
+    out = verify_plan({"lodging": "$1,200"}, {"lodging": 1000})
+    assert out["status"] == "infeasible"
+    assert out["deficit"] == 200
+
+
+def test_negative_cost_is_rejected_not_netted():
+    """A negative line item must not reduce total_spent and mask overspend."""
+    out = verify_plan({"lodging": -500, "meals": 900},
+                      {"lodging": 100, "meals": 100})
+    assert "lodging" in out["unpriced"]
+    assert out["total_spent"] == 900
+
+
+def test_zero_preference_weights_do_not_lose_money():
+    """With both optional weights zero the discretionary pot must go
+    somewhere. Previously it vanished and the envelopes stopped summing."""
+    out = allocate_budget(5000, "BARBADOS", nights=4, travelers=2,
+                          preferences={"activities": 0, "local_transport": 0})
+    assert sum(out["envelopes"].values()) == 5000
+
+
+def test_fractional_nights_are_rejected():
+    with pytest.raises(ValueError):
+        estimate_costs("BARBADOS", nights=3.7)
+    with pytest.raises(ValueError):
+        estimate_costs("BARBADOS", nights=3, travelers=2.5)
+
+
 def test_allocate_output_feeds_verify_without_leaking_reserve():
     """The two tools must compose. This is the integration the leak broke."""
     alloc = allocate_budget(5000, "BARBADOS", nights=4, travelers=2)

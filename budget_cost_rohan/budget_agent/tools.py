@@ -87,6 +87,11 @@ def estimate_costs(destination: str, nights: int, travelers: int = 1,
     """
     # Reject nonsense before touching data. A tool that quietly accepts
     # nights=0 will happily return a $0 estimate, and the agent will report it.
+    if nights != int(nights) or travelers != int(travelers):
+        raise ValueError(
+            f"nights and travelers must be whole numbers, got "
+            f"nights={nights}, travelers={travelers}")
+    nights, travelers = int(nights), int(travelers)
     if nights < 1:
         raise ValueError(f"nights must be at least 1, got {nights}")
     if travelers < 1:
@@ -277,11 +282,23 @@ def allocate_budget(total_budget: float, destination: str, nights: int,
     # is harmless, whereas rounding up would let the envelopes total more
     # than the budget they came from.
     weights = {**DEFAULT_PREFERENCES, **(preferences or {})}
-    weight_sum = sum(max(0.0, weights.get(k, 0.0)) for k in OPTIONAL) or 1.0
+    clean = {k: max(0.0, float(weights.get(k, 0.0))) for k in OPTIONAL}
+    weight_sum = sum(clean.values())
+
     discretionary = int(total_budget - committed)
-    activities = int(discretionary * max(0.0, weights.get("activities", 0)) // weight_sum)
-    local_transport = int(
-        discretionary * max(0.0, weights.get("local_transport", 0)) // weight_sum)
+
+    # If every optional weight is zero or negative there is nothing to split
+    # against. Falling through would leave the discretionary money allocated
+    # to nothing at all — the envelopes would silently stop summing to the
+    # budget. Fold it into the reserve instead, and say so.
+    if weight_sum <= 0:
+        reserve += discretionary
+        discretionary = 0
+        clean = {k: 0.0 for k in OPTIONAL}
+        weight_sum = 1.0
+
+    activities = int(discretionary * clean["activities"] // weight_sum)
+    local_transport = int(discretionary * clean["local_transport"] // weight_sum)
 
     return {
         "status": "feasible",
@@ -453,10 +470,37 @@ def verify_plan(plan: dict, envelopes: dict, reserve: int | None = None) -> dict
     per_category: dict[str, dict] = {}
     deficit = 0
     uncategorised: list[str] = []
+    unpriced: list[str] = []
 
     # Step 1 — check every category the plan actually spends on.
-    for name, spent in plan.items():
-        spent = int(spent)
+    for name, raw in plan.items():
+        # Real subagent output is not guaranteed numeric. Limeng's live MCP
+        # tier reports price as the string "unknown", and an orchestrator
+        # extracting figures from prose can pass through anything at all.
+        # int() would raise and kill the whole orchestrator call, so an
+        # unusable cost is recorded as UNPRICED instead.
+        #
+        # Unpriced is not zero. Treating it as zero would quietly report a
+        # plan as affordable when part of it has no known price.
+        try:
+            if isinstance(raw, bool) or raw is None:
+                raise TypeError
+            spent = int(float(str(raw).replace("$", "").replace(",", "").strip()))
+        except (TypeError, ValueError):
+            unpriced.append(name)
+            per_category[name] = {
+                "spent": None, "ceiling": envelopes.get(name),
+                "over_by": 0, "ok": False, "reason": f"unusable cost: {raw!r}",
+            }
+            continue
+
+        if spent < 0:
+            unpriced.append(name)
+            per_category[name] = {
+                "spent": spent, "ceiling": envelopes.get(name),
+                "over_by": 0, "ok": False, "reason": "negative cost",
+            }
+            continue
 
         # A cost with no matching envelope is not free. It is unbudgeted, and
         # it must not be silently dropped from the total.
@@ -494,6 +538,11 @@ def verify_plan(plan: dict, envelopes: dict, reserve: int | None = None) -> dict
     if uncategorised:
         status, violation_type = "infeasible", "uncategorised"
         reserve_used = 0
+    elif unpriced:
+        # Cannot be called feasible: part of the plan has no usable price, so
+        # affordability is unknown rather than confirmed.
+        status, violation_type = "unverifiable", "unpriced"
+        reserve_used = min(deficit, reserve)
     elif deficit == 0:
         status, violation_type = "feasible", None
         reserve_used = 0
@@ -511,10 +560,14 @@ def verify_plan(plan: dict, envelopes: dict, reserve: int | None = None) -> dict
         "deficit": deficit,
         "violation_type": violation_type,
         "per_category": per_category,
-        "total_spent": sum(int(v) for v in plan.values()),
+        # total_spent counts only what could actually be priced. Anything
+        # unpriced is listed separately rather than folded in as zero.
+        "total_spent": sum(c["spent"] for c in per_category.values()
+                           if isinstance(c["spent"], int) and c["spent"] > 0),
         "total_ceiling": sum(int(v) for v in envelopes.values()),
         "reserve": reserve,
         "reserve_used": reserve_used,
         "reserve_remaining": reserve - reserve_used,
         "uncategorised": uncategorised,
+        "unpriced": unpriced,
     }

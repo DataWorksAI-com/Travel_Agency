@@ -328,6 +328,13 @@ def run_task(task: str, agent=None) -> str:
     return ask(agent or build_agent(), task)
 
 
+# Team-standard entry point. Every other subagent exposes `answer(task)` —
+# Vrushti's, Emily's and Limeng's all do — and orchestrator_config.py wires
+# subagents by importing that name. Same function, the name the orchestrator
+# expects.
+answer = run_task
+
+
 # ---------------------------------------------------------------------------
 # Demo path — tools only, no model, no API key, no tokens.
 # ---------------------------------------------------------------------------
@@ -368,7 +375,22 @@ def demo() -> None:
                   f"${c['ceiling']} — over by ${c['over_by']}")
     print()
 
-    print("5. out-of-scope destination")
+    print("5. reallocate — Accommodation says it needs $300 more")
+    revised = reallocate(alloc, {"lodging": 300})
+    print(f"   {revised['status']}, drawn from reserve: "
+          f"${revised['drawn_from_reserve']}")
+    for line in revised["changes"]:
+        print(f"     {line}")
+    print()
+
+    print("6. reserve scales with data quality")
+    for place in (req["destination"], "PANAMA"):
+        a = allocate_budget(4000, place, nights=3, travelers=1)
+        print(f"   {place:<12} stale={str(a['stale']):<5} "
+              f"reserve ${a['envelopes']['reserve']}")
+    print()
+
+    print("7. out-of-scope destination")
     miss = estimate_costs("MALDIVES", nights=3)
     print(f"   covered={miss['covered']} — {miss['reason'][:80]}...")
 
