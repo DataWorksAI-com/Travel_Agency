@@ -20,6 +20,7 @@ import truststore
 truststore.inject_into_ssl()
 
 import datetime
+import statistics
 
 import requests
 
@@ -28,15 +29,30 @@ TIMEOUT_SECONDS = 60
 YEARS_OF_HISTORY = 5
 
 # --------------------------------------------------------------------------
-# Best / avoid month thresholds - tune these freely, the rule below is literal.
+# Best / avoid month thresholds - tune these freely, the rules below are literal.
+#
+# Rainfall is judged RELATIVE to the location's own year, not against a global
+# millimetre constant. An absolute cut-off cannot work for both a wet/dry-split
+# climate and an equatorial one: Singapore's driest month is ~101 mm, so a
+# "drier than 100 mm" rule made best_months permanently empty there while
+# marking two thirds of the year as avoid.
+#
+# Temperature stays absolute, because "comfortable" really is a fixed human
+# range - but it is only a filter on which months can be "best", never a veto
+# that empties the list on its own.
 # --------------------------------------------------------------------------
-COMFORTABLE_MIN_C = 18.0   # a "best" month is at least this warm on average
-COMFORTABLE_MAX_C = 30.0   # ...and no warmer than this on average
-WET_MONTH_MM = 100.0       # ...and drier than this in total monthly rainfall
+COMFORT_MIN_C = 15.0       # a "best" month must be at least this warm on average
+COMFORT_MAX_C = 32.0       # ...and no warmer than this on average
 
-TOO_COLD_C = 10.0          # avoid: monthly mean at or below this
-TOO_HOT_C = 32.0           # avoid: monthly mean at or above this
-VERY_WET_MONTH_MM = 200.0  # avoid: monthly rainfall at or above this
+HARD_COLD_C = 8.0          # counts toward "avoid": monthly mean at or below this
+HARD_HOT_C = 34.0          # counts toward "avoid": monthly mean at or above this
+
+# A month counts as "wet for this place" when its rainfall is at least this
+# multiple of the location's own median month. 1.3 = 30% wetter than typical.
+WET_RATIO = 1.3
+
+BEST_MONTHS_MAX = 4        # report at most this many best months
+AVOID_MONTHS_MAX = 4       # hard cap, so "avoid" is never most of the year
 
 MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
@@ -45,32 +61,65 @@ MONTH_NAMES = [
 
 NOTE = (
     f"Historical typical conditions averaged over the last {YEARS_OF_HISTORY} "
-    "complete years (ERA5 reanalysis via Open-Meteo). This is not a forecast "
-    "and not a guarantee of conditions in any future month."
+    "complete years (ERA5 reanalysis via Open-Meteo). Best and avoid months are "
+    "ranked relative to this location's own year, so they describe the better and "
+    "worse months for this place rather than an absolute standard. This is not a "
+    "forecast and not a guarantee of conditions in any future month."
 )
 
 
-def _classify_month(avg_temp_c, avg_precip_mm):
-    """Label one month as 'best', 'avoid', or None. Deliberately literal."""
-    if avg_temp_c is None or avg_precip_mm is None:
-        return None
+def _pick_best_months(months):
+    """The driest months among those in the comfortable temperature range.
 
-    is_best = (
-        COMFORTABLE_MIN_C <= avg_temp_c <= COMFORTABLE_MAX_C
-        and avg_precip_mm < WET_MONTH_MM
+    "Driest" is relative: the months are ranked against each other, so a place
+    that rains every month still has a best few. Returns calendar order.
+    """
+    comfortable = [
+        m for m in months if COMFORT_MIN_C <= m["avg_temp_c"] <= COMFORT_MAX_C
+    ]
+    # No comfortable month is a real answer, not a failure - a destination whose
+    # warmest month is 12 C has no "best time to visit" on a comfort basis.
+    if not comfortable:
+        return []
+
+    driest = sorted(comfortable, key=lambda m: (m["avg_precip_mm"], m["month_number"]))
+    chosen = driest[:BEST_MONTHS_MAX]
+    return [m["month"] for m in sorted(chosen, key=lambda m: m["month_number"])]
+
+
+def _pick_avoid_months(months, median_precip_mm):
+    """The location's genuinely worst months, capped so it is never most of the year.
+
+    Temperature extremes rank first (they rule a trip out more decisively than
+    rain), then the months that are wettest relative to this location's median.
+    Returns calendar order.
+    """
+    # Coldest first, then hottest first - worst offender leads each group.
+    too_cold = sorted(
+        (m for m in months if m["avg_temp_c"] <= HARD_COLD_C),
+        key=lambda m: (m["avg_temp_c"], m["month_number"]),
     )
-    if is_best:
-        return "best"
-
-    is_avoid = (
-        avg_temp_c <= TOO_COLD_C
-        or avg_temp_c >= TOO_HOT_C
-        or avg_precip_mm >= VERY_WET_MONTH_MM
+    too_hot = sorted(
+        (m for m in months if m["avg_temp_c"] >= HARD_HOT_C),
+        key=lambda m: (-m["avg_temp_c"], m["month_number"]),
     )
-    if is_avoid:
-        return "avoid"
 
-    return None
+    too_wet = []
+    if median_precip_mm and median_precip_mm > 0:
+        wet_threshold = median_precip_mm * WET_RATIO
+        too_wet = sorted(
+            (m for m in months if m["avg_precip_mm"] >= wet_threshold),
+            key=lambda m: (-m["avg_precip_mm"], m["month_number"]),
+        )
+
+    ranked = []
+    for group in (too_cold, too_hot, too_wet):
+        for month in group:
+            if month["month_number"] not in {m["month_number"] for m in ranked}:
+                ranked.append(month)
+
+    chosen = ranked[:AVOID_MONTHS_MAX]
+    return [m["month"] for m in sorted(chosen, key=lambda m: m["month_number"])]
 
 
 def get_climate(lat, lon):
@@ -174,8 +223,6 @@ def get_climate(lat, lon):
             precip_year_totals[(year, month)] = precip_year_totals.get((year, month), 0.0) + float(precip)
 
     monthly = []
-    best_months = []
-    avoid_months = []
 
     for month in range(1, 13):
         if temp_counts[month] > 0:
@@ -199,14 +246,27 @@ def get_climate(lat, lon):
             }
         )
 
-        label = _classify_month(avg_temp, avg_precip)
-        if label == "best":
-            best_months.append(name)
-        elif label == "avoid":
-            avoid_months.append(name)
-
     if all(entry["avg_temp_c"] is None and entry["avg_precip_mm"] is None for entry in monthly):
         return {"error": f"No usable historical climate values returned for lat={lat}, lon={lon}"}
+
+    # Classification runs across the whole year at once, because "dry" and "wet"
+    # are now judged against this location's own months rather than a constant.
+    complete = [
+        entry
+        for entry in monthly
+        if entry["avg_temp_c"] is not None and entry["avg_precip_mm"] is not None
+    ]
+    median_precip_mm = (
+        statistics.median(entry["avg_precip_mm"] for entry in complete) if complete else None
+    )
+
+    best_months = _pick_best_months(complete)
+    avoid_months = _pick_avoid_months(complete, median_precip_mm)
+
+    # A month cannot be both. Temperature comfort wins: if a month is warm
+    # enough and among the driest here, being wetter than median does not
+    # disqualify it in a climate where every month is wet.
+    avoid_months = [name for name in avoid_months if name not in best_months]
 
     return {
         "monthly": monthly,
