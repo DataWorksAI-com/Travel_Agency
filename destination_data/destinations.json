@@ -2663,6 +2663,63 @@
         "dynamic": true,
         "source": "Geoapify + resolve_place"
       }
+    },
+    {
+      "name": "Tokyo",
+      "country_code": "JP",
+      "lat": 35.6895,
+      "lon": 139.69171,
+      "description": "Tokyo is a coastal major city (population 9,733,276) in Tokyo, Japan, in Asia. Typical annual average temperature is 16.2°C, a mild temperate climate. It sits on the sea, with beaches and coastal scenery.",
+      "geoapify_profile": {
+        "destination": "Tokyo",
+        "features": [
+          "beaches",
+          "attractions",
+          "nature",
+          "diving"
+        ],
+        "places": {
+          "beaches": [
+            "ビーチコート",
+            "おだいばビーチ",
+            "勝島の海（砂浜）",
+            "白砂の浜辺",
+            "つばさ浜"
+          ],
+          "attractions": [
+            "東京都庁展望室 南",
+            "東京都庁展望室 北"
+          ],
+          "nature": [
+            "西ヶ原自然観察園",
+            "バードサンクチュアリー",
+            "バードサンクチュアリ",
+            "小鳥の森",
+            "サンクチュアリ",
+            "狛江弁財天池特別緑地保全地区",
+            "タカの森",
+            "せせらぎ観察園",
+            "ホタルの里",
+            "自然観察園"
+          ],
+          "diving": [
+            "Divezone Tokyo",
+            "ザ ダイブファクトリー"
+          ]
+        }
+      },
+      "rag_text": "Tokyo is a coastal major city (population 9,733,276) in Tokyo, Japan, in Asia. Typical annual average temperature is 16.2°C, a mild temperate climate. It sits on the sea, with beaches and coastal scenery. Travel features: beaches, attractions, nature, diving. Beaches: ビーチコート, おだいばビーチ, 勝島の海（砂浜）, 白砂の浜辺, つばさ浜. Attractions: 東京都庁展望室 南, 東京都庁展望室 北. Nature: 西ヶ原自然観察園, バードサンクチュアリー, バードサンクチュアリ, 小鳥の森, サンクチュアリ. Diving: Divezone Tokyo, ザ ダイブファクトリー.",
+      "_source_fields": {
+        "dynamic": true,
+        "source": "Geoapify + resolve_place",
+        "country": "Japan",
+        "admin1": "Tokyo",
+        "population": 9733276,
+        "timezone": "Asia/Tokyo",
+        "elevation": 44.0,
+        "coastal": true,
+        "annual_avg_temp_c": 16.2
+      }
     }
   ]
 }

@@ -7,7 +7,12 @@ from destination_agent.geoapify_data import (
 )
 
 
-CORPUS_FILE = Path("destination_data/destinations.json")
+# Anchor the corpus path to this file's location, not the working directory.
+# destination_agent/ and destination_data/ are siblings under the repo root, so
+# parents[1] is the repo root. The previous relative path only resolved when the
+# script happened to be run from the repo root.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CORPUS_FILE = REPO_ROOT / "destination_data" / "destinations.json"
 
 
 def enrich_corpus():

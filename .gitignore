@@ -20,3 +20,15 @@ chroma_db/
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Local pre-edit backups - never commit these
+*.backup
+destinations.backup.json
+
+# Chainlit auto-generated artifacts (recreated on first launch)
+.chainlit/
+chainlit.md
+.files/
+
+# Note: destination_data/destinations.json IS committed on purpose - it is the
+# RAG corpus, and rebuilding it costs ~140 live API calls.

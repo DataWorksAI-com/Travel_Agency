@@ -3,6 +3,14 @@ import json
 import time
 from pathlib import Path
 
+# truststore MUST be injected before requests is imported. This network
+# intercepts HTTPS with a certificate Windows trusts but Python does not;
+# without the injection, Geoapify calls hang ~5 minutes and then fail with no
+# useful error. This mirrors the pattern used across destination_data/.
+import truststore
+
+truststore.inject_into_ssl()
+
 import requests
 from dotenv import load_dotenv
 
