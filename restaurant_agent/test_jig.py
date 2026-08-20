@@ -26,7 +26,8 @@ from restaurant_finder import (
     MAX_ATTEMPTS,
 )
 from restaurant_agent_ollama import (find_restaurants, _enforce_tool_result,
-                                     _record_tool_output, _TOOL_OUTPUTS)
+                                     _record_tool_output, _TOOL_OUTPUTS,
+                                     _cuisine_claims_are_faithful)
 
 # Each case: a description, the search arguments, and a check(results) -> bool
 CASES = [
@@ -370,6 +371,17 @@ def _child_context_capture_works():
         _TOOL_OUTPUTS.reset(token)
 
 
+# A tool reply carrying three restaurants, used by the cuisine-fidelity checks.
+_TOOL_SAN_JUAN = (
+    "Recommended restaurant: La Marea Grill - Seafood, San Juan. "
+    "About $40 per person, rated 4.5/5. Dietary: gluten-free.\n"
+    "\n"
+    "Alternatives:\n"
+    "- Casa Boricua - Puerto Rican, San Juan. About $24 per person, rated 4.6/5.\n"
+    "- El Fuego Steak - Steakhouse, San Juan. About $58 per person, rated 4.4/5."
+)
+
+
 GUARD_CASES = [
     {
         "desc": "A model that discards the tool's pick is overruled, not trusted",
@@ -421,6 +433,35 @@ GUARD_CASES = [
     {
         "desc": "No tool call at all leaves the model's reply untouched",
         "check": lambda: _enforce_tool_result("Anything at all.", []) == "Anything at all.",
+    },
+    {
+        "desc": "A cuisine the tool never said is caught (El Fuego Steak was a Steakhouse, not Seafood)",
+        "check": lambda: not _cuisine_claims_are_faithful(
+            "La Marea Grill - Seafood, San Juan. Alternatives: "
+            "El Fuego Steak - Seafood, San Juan, about $58 per person.",
+            _TOOL_SAN_JUAN),
+    },
+    {
+        "desc": "An em dash does not let a wrong cuisine through",
+        "check": lambda: not _cuisine_claims_are_faithful(
+            "El Fuego Steak \u2014 Seafood, San Juan", _TOOL_SAN_JUAN),
+    },
+    {
+        "desc": "Correct cuisines are left alone, in both dash and bracket styles",
+        "check": lambda: _cuisine_claims_are_faithful(
+            "La Marea Grill - Seafood, San Juan. El Fuego Steak (Steakhouse, $58).",
+            _TOOL_SAN_JUAN),
+    },
+    {
+        "desc": "Prose about a restaurant is not mistaken for a cuisine claim",
+        "check": lambda: _cuisine_claims_are_faithful(
+            "La Marea Grill serves great seafood, and El Fuego Steak is worth a look.",
+            _TOOL_SAN_JUAN),
+    },
+    {
+        "desc": "A mislabelled cuisine makes the tool's own wording win",
+        "check": lambda: "Steakhouse" in _enforce_tool_result(
+            "El Fuego Steak - Seafood, San Juan.", [_TOOL_SAN_JUAN]),
     },
 ]
 

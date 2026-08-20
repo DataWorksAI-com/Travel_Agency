@@ -42,6 +42,7 @@
 # STEP 1 - BRING IN CODE
 # -----------------------------------------------------------------------------
 import logging
+import re
 import os
 from contextvars import ContextVar
 
@@ -427,6 +428,45 @@ def _retrieval_only_answer(task, reason=None):
 #   2. If the tool reported an adjustment and the model's reply does not mention
 #      one, prepend the adjustment, so a bent requirement is never silent.
 # -----------------------------------------------------------------------------
+# The tool writes every restaurant as "Name - Cuisine, City. About $N per
+# person, rated R/5." so the true cuisine for anything it returned can be read
+# straight back out of its own output.
+_HEADLINE_RE = re.compile(r"^(?:Recommended restaurant: |- )(.+?) - ([^,]+), ",
+                          re.MULTILINE)
+
+# Matches ONLY the "Name - Cuisine" / "Name (Cuisine" shape the tool itself
+# uses. Deliberately narrow: the model writes prose too, and a phrase such as
+# " serves great seafood" must never be read as a cuisine claim.
+_CUISINE_SLOT_RE = re.compile(
+    r"^\s*[-\u2013\u2014(]\s*([A-Za-z][A-Za-z /&'-]{1,24})$")
+
+
+def _cuisine_claims_are_faithful(model_text: str, tool_output: str) -> bool:
+    """False when the model gives a restaurant a cuisine the tool did not.
+
+    Measured on 20 Aug through the orchestrator: asked for cheap seafood in San
+    Juan, the model wrote "El Fuego Steak - Seafood". The tool had returned it
+    as a Steakhouse. Price, city and rating were all carried across correctly -
+    only the cuisine was rewritten, which is the hardest kind of error to catch
+    by eye and the one that puts a diner in the wrong restaurant.
+
+    Only the slot immediately after the name is examined, up to the first comma,
+    and only when it has the tool's own "Name - Cuisine" shape. Prose like
+    "La Marea Grill serves great seafood" makes no cuisine claim and is ignored.
+    """
+    for name, true_cuisine in _HEADLINE_RE.findall(tool_output or ""):
+        at = (model_text or "").find(name)
+        if at == -1:
+            continue
+        slot = model_text[at + len(name):].split(",", 1)[0][:40]
+        claimed = _CUISINE_SLOT_RE.match(slot)
+        if not claimed:
+            continue
+        if claimed.group(1).strip().lower() != true_cuisine.strip().lower():
+            return False
+    return True
+
+
 def _enforce_tool_result(model_text: str, tool_outputs) -> str:
     """Overrule the model when it discards or hides what the tool found.
 
@@ -448,6 +488,12 @@ def _enforce_tool_result(model_text: str, tool_outputs) -> str:
         # Nothing was committed to - a coverage refusal or an empty result.
         # There is nothing for the model to have dropped.
         return model_text
+
+    # A cuisine the tool never said is a fabrication, even when the rest of the
+    # reply is faithful. Hand back the tool's own wording rather than a message
+    # that is right about the price and wrong about the food.
+    if not _cuisine_claims_are_faithful(model_text, tool_output):
+        return tool_output
 
     name = tool_output.split("Recommended restaurant:", 1)[1]
     name = name.split(" - ", 1)[0].strip()
