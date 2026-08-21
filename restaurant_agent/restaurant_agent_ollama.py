@@ -467,8 +467,130 @@ def _cuisine_claims_are_faithful(model_text: str, tool_output: str) -> bool:
     return True
 
 
+# A restaurant name sitting in the "Name - Cuisine," / "Name (Cuisine" slot the
+# tool itself uses. Used to catch a restaurant the tool never returned.
+_CLAIMED_NAME_RE = re.compile(
+    r"([A-Z][\w&'.\-]*(?:\s+[A-Z0-9][\w&'.\-]*)*)\s*[-\u2013\u2014(]\s*"
+    r"[A-Z][A-Za-z /&'\-]{1,24}[,)]")
+
+
+def _tool_restaurant_names(tool_output: str):
+    """Every restaurant the tool actually returned, top pick and alternatives."""
+    return {n.strip().lower() for n, _ in _HEADLINE_RE.findall(tool_output or "")}
+
+
+def _invents_a_restaurant(model_text: str, tool_output: str):
+    """A restaurant named in the reply that the tool never returned.
+
+    Rule 3 of the system prompt - only recommend what the tool returned - was
+    the last guarantee still resting on the prompt alone. It also covers the
+    "at most two alternatives" rule from the other side: the model cannot pad
+    the list, because a fourth restaurant would have to be one the tool never
+    gave it.
+
+    Only the "Name - Cuisine," slot is examined, the same narrow shape the
+    cuisine check uses, so ordinary prose cannot trip it. A false positive here
+    is harmless anyway - the reply is replaced by the tool's own wording, which
+    was always correct.
+    """
+    known = _tool_restaurant_names(tool_output)
+    if not known:
+        return None
+    for claimed in _CLAIMED_NAME_RE.findall(model_text or ""):
+        name = claimed.strip().lower()
+        if name and name not in known and not any(name in k or k in name for k in known):
+            return claimed.strip()
+    return None
+
+
+def _why_line(tool_output: str) -> str:
+    """The tool's one-line reason for the top pick, if it wrote one."""
+    for line in (tool_output or "").splitlines():
+        if line.startswith("Why:"):
+            return line.strip()
+    return ""
+
+
+def _tool_headline(tool_output: str) -> str:
+    """The tool's own one-line description of the restaurant it committed to."""
+    for line in (tool_output or "").splitlines():
+        if line.startswith("Recommended restaurant:"):
+            return line.split("Recommended restaurant:", 1)[1].strip()
+    return ""
+
+
+def _norm(text: str) -> str:
+    """Whitespace- and case-insensitive form, so re-wrapping is not a failure."""
+    return " ".join((text or "").split()).lower()
+
+
+def _reply_is_faithful(model_text: str, tool_output: str):
+    """Is the model's reply a faithful presentation of what the tool returned?
+
+    Returns (ok, reason). The reason is for tests and logs, never for the user.
+
+    THE DIVISION OF AUTHORITY, and the reason this function exists.
+
+    The model decides INTERPRETATION - what the traveller meant, and therefore
+    which filters to search with. That is the genuinely hard part and the part a
+    model is good at. The tool then decides CONTENT: which restaurant, at what
+    price, with which dietary tags. Between the two sits the only remaining job
+    the model has, which is phrasing - and phrasing is where it kept going
+    wrong. Measured across 20 Aug, in four separate ways:
+
+      it dropped a dietary requirement before the search;
+      it reported a successful search as "none found";
+      it relabelled a Steakhouse as Seafood;
+      and it flattened a committed recommendation into a bare list, with no
+      reason line and no dietary tags at all.
+
+    Only the first is caught before the fact. The other three are the model
+    rewriting a correct answer into a worse one, so the test is simple: the
+    tool's headline for the top pick must appear in the reply exactly as the
+    tool wrote it. Reproduce it and every field - name, cuisine, city, price,
+    rating, dietary tags - is right by construction, and no separate check for
+    each is needed. Re-wrap the line or change the spacing and that is fine.
+    Reword it, drop a field, or turn one pick into a list of three, and the
+    tool's own wording is returned instead.
+    """
+    tool_output = tool_output or ""
+    model_text = model_text or ""
+    head = _tool_headline(tool_output)
+    if not head:
+        return True, "the tool committed to nothing, so there is nothing to check"
+
+    if _norm(head) not in _norm(model_text):
+        return False, "the top pick was not reproduced as the tool wrote it"
+
+    # Rule 4 of the system prompt: never ask the orchestrator a question. A
+    # sub-agent gets exactly one turn, and a question back is a dead end.
+    if "?" in model_text:
+        return False, "the reply asks a question back"
+
+    # Rule 5: commit to one pick and give a reason. A recommendation with no
+    # reason is a listing, which is what the rule exists to prevent.
+    why = _why_line(tool_output)
+    if why and _norm(why) not in _norm(model_text):
+        return False, "the reason for the pick was dropped"
+
+    # Rule 3: only recommend what the tool returned.
+    invented = _invents_a_restaurant(model_text, tool_output)
+    if invented:
+        return False, "named a restaurant the tool never returned: " + invented
+
+    # An adjustment or an assumption that is not carried through is an answer
+    # that looks like it met the request when it did not.
+    for line in tool_output.splitlines():
+        if line.startswith("Adjusted:") and "adjusted" not in _norm(model_text):
+            return False, "the adjustment was dropped"
+        if line.startswith("Assumption:") and "assumption" not in _norm(model_text):
+            return False, "the assumption was dropped"
+
+    return True, "faithful"
+
+
 def _enforce_tool_result(model_text: str, tool_outputs) -> str:
-    """Overrule the model when it discards or hides what the tool found.
+    """Return the model's reply, or the tool's wording when the reply is unfaithful.
 
     tool_outputs is every string the tool returned during this request, oldest
     first. The model may call the tool more than once - narrowing after a hit,
@@ -479,39 +601,23 @@ def _enforce_tool_result(model_text: str, tool_outputs) -> str:
     model_text = model_text or ""
     if isinstance(tool_outputs, str):
         tool_outputs = [tool_outputs]
+
     tool_output = ""
     for candidate in (tool_outputs or []):
         if candidate and "Recommended restaurant:" in candidate:
             tool_output = candidate
 
-    if "Recommended restaurant:" not in tool_output:
-        # Nothing was committed to - a coverage refusal or an empty result.
-        # There is nothing for the model to have dropped.
+    if not tool_output:
+        # A coverage refusal, an empty result, or no tool call at all. There is
+        # nothing the model could have rewritten, so leave the reply alone.
         return model_text
 
-    # A cuisine the tool never said is a fabrication, even when the rest of the
-    # reply is faithful. Hand back the tool's own wording rather than a message
-    # that is right about the price and wrong about the food.
-    if not _cuisine_claims_are_faithful(model_text, tool_output):
-        return tool_output
-
-    name = tool_output.split("Recommended restaurant:", 1)[1]
-    name = name.split(" - ", 1)[0].strip()
-    if not name:
+    ok, reason = _reply_is_faithful(model_text, tool_output)
+    if ok:
         return model_text
 
-    # Rule 1 - the model dropped a real recommendation.
-    if name.lower() not in model_text.lower():
-        return tool_output
-
-    # Rule 2 - the model kept the pick but hid the adjustment.
-    for line in tool_output.splitlines():
-        if line.startswith("Adjusted:"):
-            if "adjusted" not in model_text.lower():
-                return line + "\n" + model_text
-            break
-
-    return model_text
+    _LOG.info("overruling the model: %s", reason)
+    return tool_output
 
 
 def answer(task: str) -> str:

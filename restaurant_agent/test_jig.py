@@ -27,7 +27,8 @@ from restaurant_finder import (
 )
 from restaurant_agent_ollama import (find_restaurants, _enforce_tool_result,
                                      _record_tool_output, _TOOL_OUTPUTS,
-                                     _cuisine_claims_are_faithful)
+                                     _cuisine_claims_are_faithful,
+                                     _reply_is_faithful, _invents_a_restaurant)
 
 # Each case: a description, the search arguments, and a check(results) -> bool
 CASES = [
@@ -382,7 +383,66 @@ _TOOL_SAN_JUAN = (
 )
 
 
+
+
+# A full tool reply - adjustment, top pick, reason and one alternative - used by
+# the faithfulness checks below.
+_TOOL_FULL = (
+    "Adjusted: No Seafood option matched, so the cuisine preference was dropped.\n"
+    "Recommended restaurant: Pan y Cafe - Cafe, San Juan. About $12 per person, "
+    "rated 4.2/5. Dietary: vegetarian.\n"
+    "Why: Budget breakfast and coffee spot.\n"
+    "\n"
+    "Alternatives:\n"
+    "- Casa Boricua - Puerto Rican, San Juan. About $24 per person, rated 4.6/5."
+)
+_FULL_HEAD = ("Recommended restaurant: Pan y Cafe - Cafe, San Juan. About $12 per "
+              "person, rated 4.2/5. Dietary: vegetarian.")
+_FULL_WHY = "Why: Budget breakfast and coffee spot."
+_FULL_ADJ = ("Adjusted: No Seafood option matched, so the cuisine preference "
+             "was dropped.")
+
+
+def _faithful(reply):
+    return _reply_is_faithful(reply, _TOOL_FULL)[0]
+
+
+def _fuzz_dropped_fields_are_always_caught():
+    """Drop each field of the headline in turn; every one must be overruled.
+
+    Not a hand-picked list - it walks the headline token by token, removes one
+    piece at a time, and asserts the guard notices. A field that could be
+    dropped silently would be a field the tool guarantees and the reply does not.
+    """
+    pieces = ["Pan y Cafe", "Cafe", "San Juan", "$12", "4.2/5", "vegetarian"]
+    for piece in pieces:
+        mangled = _FULL_ADJ + "\n" + _FULL_HEAD.replace(piece, "") + "\n" + _FULL_WHY
+        if _faithful(mangled):
+            return False
+    return True
+
+
+def _fuzz_cosmetic_changes_are_never_punished():
+    """Whitespace and casing must not trigger an overrule.
+
+    The guard has to tolerate the model re-wrapping a long line, or the console
+    changing spacing, or it would fire constantly and the model's phrasing would
+    never survive. Every variant below is the same message.
+    """
+    base = _FULL_ADJ + "\n" + _FULL_HEAD + "\n" + _FULL_WHY
+    variants = [
+        base,
+        base.replace(" ", "  "),
+        base.replace("\n", "\n\n"),
+        "   " + base + "   ",
+        base.replace(" - ", " -   "),
+        "Here you go.\n" + base + "\nEnjoy the trip.",
+    ]
+    return all(_faithful(v) for v in variants)
+
+
 GUARD_CASES = [
+    # -- the model rewrote a correct answer into a worse one -------------------
     {
         "desc": "A model that discards the tool's pick is overruled, not trusted",
         "check": lambda: "Pan y Cafe" in _enforce_tool_result(
@@ -395,23 +455,50 @@ GUARD_CASES = [
             "No restaurant was found.", _TOOL_HIT).startswith("Adjusted:"),
     },
     {
-        "desc": "A model that reports the pick faithfully is left alone",
+        "desc": "A faithful reply, re-wrapped and re-spaced, is left alone",
+        "check": lambda: _enforce_tool_result(
+            "Adjusted: cuisine dropped.\nRecommended restaurant: Pan y Cafe - "
+            "Cafe,\n   San Juan. About $12 per person, rated 4.2/5.\n"
+            "Dietary: vegetarian.\nWhy: Budget breakfast and coffee spot.",
+            _TOOL_HIT).startswith("Adjusted: cuisine dropped"),
+    },
+    {
+        "desc": "Dropping the price and rating from the headline is overruled",
         "check": lambda: _enforce_tool_result(
             "Adjusted: cuisine dropped. Recommended restaurant: Pan y Cafe - "
-            "Cafe, San Juan.", _TOOL_HIT).startswith("Adjusted: cuisine dropped"),
+            "Cafe, San Juan.", _TOOL_HIT) == _TOOL_HIT,
     },
     {
-        "desc": "A model that keeps the pick but hides the adjustment has it restored",
+        "desc": "Dropping the dietary tags is overruled (they are the point of this agent)",
         "check": lambda: _enforce_tool_result(
-            "Recommended restaurant: Pan y Cafe - Cafe, San Juan.",
-            _TOOL_HIT).startswith("Adjusted:"),
+            "Recommended restaurant: Sunset Vegan Kitchen - Vegan, Aruba. "
+            "About $26 per person, rated 4.8/5.", _TOOL_CLEAN) == _TOOL_CLEAN,
     },
     {
-        "desc": "A clean hit with no adjustment is passed through untouched",
+        "desc": "Flattening one committed pick into a bare list is overruled",
         "check": lambda: _enforce_tool_result(
-            "Recommended restaurant: Sunset Vegan Kitchen - Vegan, Aruba.",
-            _TOOL_CLEAN) == "Recommended restaurant: Sunset Vegan Kitchen - Vegan, Aruba.",
+            "Diamond Steak & Fish (Steakhouse) in Honolulu - $62 per person, 4.5/5.\n"
+            "- Banyan Vegan Cafe (Vegan) in Honolulu - $25 per person, 4.8/5.",
+            _TOOL_CLEAN) == _TOOL_CLEAN,
     },
+    {
+        "desc": "A model that keeps the pick but hides the adjustment is overruled",
+        "check": lambda: _enforce_tool_result(
+            "Recommended restaurant: Pan y Cafe - Cafe, San Juan. About $12 per "
+            "person, rated 4.2/5. Dietary: vegetarian.", _TOOL_HIT) == _TOOL_HIT,
+    },
+    {
+        "desc": "A question back to the orchestrator is overruled",
+        "check": lambda: _enforce_tool_result(
+            _TOOL_CLEAN + "\nWould you like me to look at other cities?",
+            _TOOL_CLEAN) == _TOOL_CLEAN,
+    },
+    {
+        "desc": "A clean, complete reply is passed through untouched",
+        "check": lambda: _enforce_tool_result(_TOOL_CLEAN, _TOOL_CLEAN) == _TOOL_CLEAN,
+    },
+
+    # -- the tool committed to nothing, so there is nothing to enforce ---------
     {
         "desc": "A coverage refusal is never overridden into a recommendation",
         "check": lambda: _enforce_tool_result(
@@ -421,8 +508,8 @@ GUARD_CASES = [
               "coverage area."),
     },
     {
-        "desc": "Tool output recorded in a CHILD context still reaches answer() (the 20 Aug bug)",
-        "check": _child_context_capture_works,
+        "desc": "No tool call at all leaves the model's reply untouched",
+        "check": lambda: _enforce_tool_result("Anything at all.", []) == "Anything at all.",
     },
     {
         "desc": "A later empty tool call does not erase an earlier real recommendation",
@@ -430,10 +517,19 @@ GUARD_CASES = [
             "No restaurant was found.",
             [_TOOL_HIT, "No restaurant matched that request."]),
     },
+
+    # -- the plumbing the guard depends on ------------------------------------
     {
-        "desc": "No tool call at all leaves the model's reply untouched",
-        "check": lambda: _enforce_tool_result("Anything at all.", []) == "Anything at all.",
+        "desc": "Tool output recorded in a CHILD context still reaches answer() (the 20 Aug bug)",
+        "check": _child_context_capture_works,
     },
+    {
+        "desc": "The overrule reason is reported, so a failure can be diagnosed",
+        "check": lambda: _reply_is_faithful("nothing like it", _TOOL_CLEAN)[1]
+                         == "the top pick was not reproduced as the tool wrote it",
+    },
+
+    # -- cuisine fidelity, kept as its own check and its own evidence ----------
     {
         "desc": "A cuisine the tool never said is caught (El Fuego Steak was a Steakhouse, not Seafood)",
         "check": lambda: not _cuisine_claims_are_faithful(
@@ -459,9 +555,45 @@ GUARD_CASES = [
             _TOOL_SAN_JUAN),
     },
     {
-        "desc": "A mislabelled cuisine makes the tool's own wording win",
-        "check": lambda: "Steakhouse" in _enforce_tool_result(
-            "El Fuego Steak - Seafood, San Juan.", [_TOOL_SAN_JUAN]),
+        "desc": "The reason for the pick cannot be dropped",
+        "check": lambda: not _faithful(_FULL_ADJ + "\n" + _FULL_HEAD),
+    },
+    {
+        "desc": "A restaurant the tool never returned is caught (invention)",
+        "check": lambda: not _faithful(
+            _FULL_ADJ + "\n" + _FULL_HEAD + "\n" + _FULL_WHY +
+            "\nAlso try Ocean Blue Bistro - Seafood, San Juan."),
+    },
+    {
+        "desc": "The invented restaurant is named, so the failure can be diagnosed",
+        "check": lambda: _invents_a_restaurant(
+            "Ocean Blue Bistro - Seafood, San Juan.", _TOOL_FULL) == "Ocean Blue Bistro",
+    },
+    {
+        "desc": "An alternative the tool DID return is not mistaken for invention",
+        "check": lambda: _invents_a_restaurant(
+            "Casa Boricua - Puerto Rican, San Juan.", _TOOL_FULL) is None,
+    },
+    {
+        "desc": "Padding past two alternatives is caught, since a third must be invented",
+        "check": lambda: not _faithful(
+            _FULL_ADJ + "\n" + _FULL_HEAD + "\n" + _FULL_WHY +
+            "\n- Casa Boricua - Puerto Rican, San Juan."
+            "\n- Marina Tapas - Spanish, San Juan."),
+    },
+    {
+        "desc": "Comparing the options in prose is allowed - it adds, it does not rewrite",
+        "check": lambda: _faithful(
+            _FULL_ADJ + "\n" + _FULL_HEAD + "\n" + _FULL_WHY +
+            "\nBoth are casual and local, but one is cheaper."),
+    },
+    {
+        "desc": "FUZZ: dropping any single field of the headline is always caught",
+        "check": _fuzz_dropped_fields_are_always_caught,
+    },
+    {
+        "desc": "FUZZ: whitespace and wrapping changes are never punished",
+        "check": _fuzz_cosmetic_changes_are_never_punished,
     },
 ]
 

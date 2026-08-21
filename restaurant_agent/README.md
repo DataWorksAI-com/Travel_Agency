@@ -172,6 +172,50 @@ Contract guarantees:
 - **Invents nothing.** If no record matches, it says so and names the filter
   most likely responsible.
 
+## Who decides what, and why the model does not get the last word
+
+The model decides **interpretation** - what the traveller meant, and therefore
+which filters to search with. That is the hard part, and the part a model is
+good at. The tool decides **content**: which restaurant, at what price, with
+which dietary tags. Between the two sits the only job left to the model, which
+is phrasing - and phrasing is where it kept going wrong.
+
+Measured on 20 August, four separate failures, three of them found only by
+running the agent through the orchestrator rather than on its own:
+
+1. **It dropped a dietary requirement before the search.** Asked for a highly
+   rated vegan dinner, it called the tool with `cuisine='Vegan'` and
+   `vegan=False`, turning a requirement into a relaxable preference.
+2. **It reported a successful search as a failure.** The tool relaxed one
+   constraint, found a $12 record and wrote the `Adjusted:` line. The model
+   replied "none found".
+3. **It rewrote a cuisine.** A Steakhouse was reported as Seafood, with price,
+   city and rating all correct - the hardest kind of error to catch by eye.
+4. **It flattened a committed recommendation into a bare list**, with no reason
+   line and no dietary tags at all.
+
+Only the first is preventable before the fact, and it is - dietary needs are
+derived deterministically from the request text. The other three are the model
+rewriting a correct answer into a worse one, so the test is one rule rather than
+a patch per failure: **the tool's headline for the top pick must appear in the
+reply exactly as the tool wrote it.** Reproduce it and every field - name,
+cuisine, city, price, rating, dietary tags - is right by construction. Re-wrap
+the line, change the spacing, add prose around it, compare the options: all
+fine. Reword the facts, drop a field, ask a question back, name a restaurant the
+tool never returned, or turn one pick into a list of three, and the tool's own
+wording is returned instead.
+
+This closes seven guarantees that previously rested on the prompt alone:
+commits to one pick, gives a reason, carries the dietary tags, at most two
+alternatives, never asks a question back, invents nothing, and carries every
+adjustment and assumption through.
+
+The failure mode is deliberately benign. If the check is ever too strict, the
+result is the tool's own wording - which was correct all along. Twenty-six tests
+cover it, including two fuzz checks: one drops each field of the headline in
+turn and asserts every drop is caught, the other asserts that whitespace,
+wrapping and casing changes are never punished.
+
 ## Coverage, and what happens outside it
 
 This agent holds records for **Aruba, Cancun, Honolulu, Montego Bay, Nassau and
@@ -258,7 +302,7 @@ The agentic win comes from the second look, not from the retriever.
 - `restaurant_finder.py` — the RAG engine (vector DB build, semantic search, hard filters), the reflection step `search_with_reflection`, plus the contract helpers `parse_task` and `format_for_itinerary`
 - `restaurants_data.py` — the mock restaurant dataset (28 records)
 - `restaurant_agent_ollama.py` — the Deep Agent: its tool, system prompt, the `answer()` orchestrator entry point, and an interactive loop
-- `test_jig.py` — automatic black-box checker (48 cases: 8 retrieval/filter, 9 contract, 17 reflection/hard-constraint/coverage, 14 model-override guard). Exits non-zero on failure, so it can gate a build
+- `test_jig.py` — automatic black-box checker (60 cases: 8 retrieval/filter, 9 contract, 17 reflection/hard-constraint/coverage, 26 model-override guard). Exits non-zero on failure, so it can gate a build
 - `run_tests_offline.py` — runs the whole suite with no network, no API key and no model download, using a deterministic stand-in embedder
 - `restaurants_live.py` — the live OpenStreetMap data path and its coverage measurement
 - `eval_retrieval.py` — the measured evaluation behind the numbers above
@@ -283,14 +327,14 @@ restaurants into the vector database. Then ask, for example:
 ```
 python test_jig.py
 ```
-Runs 48 deterministic checks with no LLM needed: 8 over the retrieval and
+Runs 60 deterministic checks with no LLM needed: 8 over the retrieval and
 hard-filter core, 9 over the orchestrator contract (task-string parsing,
 itinerary-ready formatting, no questions back, nothing invented), 17 over the
 reflection step, the hard-constraint guarantees and the coverage refusal
 (relaxation order, the two-attempt stop, dietary and city never relaxed, an
-uncovered destination declined, every adjustment reported), and 14 over the
+uncovered destination declined, every adjustment reported), and 26 over the
 model-override guard described below.
-Expected result: `SCORE: 48/48`. On a machine with no network or no embedding
+Expected result: `SCORE: 60/60`. On a machine with no network or no embedding
 model available, run `python run_tests_offline.py` instead — same suite, stand-in
 embedder, still exits non-zero on failure.
 
