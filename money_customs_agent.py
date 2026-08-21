@@ -21,12 +21,12 @@ import os
 # For shared/repo use, prefer setting this via a real .env file instead
 # (see .env.example) and python-dotenv, rather than hardcoding it here.
 # ---------------------------------------------------------------------------
-os.environ.setdefault("COHERE_API_KEY", "KEYKEYKEY_THISISWHEREITGOES")
+os.environ.setdefault("COHERE_API_KEY", "your-actual-cohere-key-here")
 
 from langchain_cohere import ChatCohere
 from deepagents import create_deep_agent
 
-from money_tools import get_exchange_rate, search_money_customs, get_income_context
+from money_tools import get_exchange_rate, search_money_customs, get_income_context, get_comparative_context
 
 
 MODEL = os.environ.get("MONEY_AGENT_MODEL", "command-r-plus-08-2024")
@@ -64,15 +64,31 @@ SYSTEM_PROMPT = (
     "state clearly that this is a national AVERAGE (GNI per capita), not a "
     "city-level median, and frame it as rough context, never a precise "
     "benchmark.\n"
-    "4. Only report what the tools return. Never invent an exchange rate, "
+    "4. If the traveller's own currency is given AND it unambiguously "
+    "implies one home country (the tool decides this, not you), use "
+    "get_comparative_context for the CUSTOMS and PRICE SCALE comparison -- "
+    "it's more useful to say 'tipping is expected here, unlike at home' "
+    "than to state destination facts in isolation. If the tool's "
+    "'assumption' field is non-null, state it plainly (e.g. 'Assumption: "
+    "assuming home country is USA based on currency USD.'). If "
+    "'home_country' comes back None (e.g. the currency was EUR, which "
+    "matches multiple countries in this data), do NOT guess a home country "
+    "-- just report the destination's customs and price scale on their "
+    "own, with no comparison. IMPORTANT: get_comparative_context does NOT "
+    "include the exchange rate. If the traveller asked for the exchange "
+    "rate at all, you MUST ALSO call get_exchange_rate separately -- never "
+    "skip it just because you already called get_comparative_context, and "
+    "never say the rate is unavailable without having actually called "
+    "get_exchange_rate yourself.\n"
+    "5. Only report what the tools return. Never invent an exchange rate, "
     "custom, or income figure.\n"
-    "5. NEVER ask a follow-up question and never request clarification. You "
+    "6. NEVER ask a follow-up question and never request clarification. You "
     "get exactly one turn. If something is missing or ambiguous (e.g. no "
     "origin currency given), make one reasonable assumption, state it in a "
     "line beginning 'Assumption:', and answer anyway.\n"
-    "6. If a tool returns found=False, say plainly that the information "
+    "7. If a tool returns found=False, say plainly that the information "
     "isn't available for that country/service rather than guessing.\n"
-    "7. Reply with ONE self-contained message covering everything the task "
+    "8. Reply with ONE self-contained message covering everything the task "
     "asked for. No follow-up questions, no filler.\n"
 )
 
@@ -86,7 +102,7 @@ def build_agent():
         llm = ChatCohere(model=MODEL)
         _AGENT = create_deep_agent(
             model=llm,
-            tools=[get_exchange_rate, search_money_customs, get_income_context],
+            tools=[get_exchange_rate, search_money_customs, get_income_context, get_comparative_context],
             system_prompt=SYSTEM_PROMPT,
         )
     return _AGENT
