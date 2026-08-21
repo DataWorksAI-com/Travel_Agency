@@ -1,0 +1,4 @@
+deepagents==0.7.4
+langchain-openrouter==0.2.7
+python-dotenv==1.2.2
+requests
