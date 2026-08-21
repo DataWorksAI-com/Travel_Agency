@@ -245,14 +245,20 @@ def search_destinations(
     ):
         return candidates
 
-    # Record the top semantic similarity score.
-    # This is used only to judge retrieval confidence,
-    # not destination quality.
-    top_score = None
+    # Record how well-evidenced the retrieval was.
+    #
+    # This used to be `candidates[0]["match_score"] < 0.30`, but a raw cosine
+    # score is the wrong test: a candidate that survived a hard metadata filter
+    # (coastal + Asia + warm) is a proven match even at a low similarity, and
+    # flagging it as "no strong match" made the agent refuse to recommend
+    # perfectly valid results. The data layer now reports whether a structural
+    # constraint actually held, and only falls back to the score when the query
+    # contained no structured terms at all.
+    retrieval_confidence = None
 
     if candidates:
-        top_score = candidates[0].get(
-            "match_score"
+        retrieval_confidence = candidates[0].get(
+            "retrieval_confidence"
         )
 
     enriched_candidates = []
@@ -279,6 +285,20 @@ def search_destinations(
             "lon": longitude,
             "description": candidate["description"],
             "match_score": candidate["match_score"],
+            # Forwarded from the data layer so the model can see WHICH hard
+            # constraints were honoured and which had to be dropped, instead of
+            # inferring quality from the similarity score alone.
+            "applied_filters": candidate.get(
+                "applied_filters",
+                []
+            ),
+            "relaxed_filters": candidate.get(
+                "relaxed_filters",
+                []
+            ),
+            "retrieval_confidence": candidate.get(
+                "retrieval_confidence"
+            ),
         }
 
         if profile:
@@ -304,10 +324,7 @@ def search_destinations(
 
     retrieval_note = None
 
-    if (
-        top_score is not None
-        and top_score < 0.30
-    ):
+    if retrieval_confidence == "low":
         retrieval_note = (
             "The retrieved destinations are the closest matches "
             "from the current shared destination corpus. "

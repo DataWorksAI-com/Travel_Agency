@@ -85,6 +85,22 @@ WEAK_VIBE_SCORE = 0.05
 # coastal/inland is a binary the traveller stated outright - so it goes last.
 RELAXATION_ORDER = ("temperature", "continent", "coastal")
 
+# --------------------------------------------------------------------------
+# Retrieval confidence - a SEPARATE signal from match_score.
+#
+# match_score is cosine similarity and nothing else; it is deliberately left
+# untouched. But similarity alone is a poor confidence test: a candidate that
+# survived a hard coastal+Asia+warm metadata filter is a proven match even at a
+# low cosine value, while a vague one-word query can only ever be judged by
+# similarity. So confidence is judged on whether a structural constraint
+# actually held, falling back to the score only when nothing structural applied.
+# --------------------------------------------------------------------------
+CONFIDENCE_HIGH = "high"
+CONFIDENCE_LOW = "low"
+
+# Used only when NO filter survived, i.e. similarity is the sole evidence.
+CONFIDENCE_SCORE_THRESHOLD = 0.30
+
 _collection = None  # cached across calls so the corpus is embedded only once
 
 
@@ -219,6 +235,36 @@ def _build_where(filters):
     if len(clauses) == 1:
         return clauses[0]
     return {"$and": clauses}
+
+
+def _retrieval_confidence(applied_filters, relaxed_filters, match_score):
+    """Rate how well-evidenced a result is: CONFIDENCE_HIGH or CONFIDENCE_LOW.
+
+    high - at least one filter is still applied. A surviving metadata filter
+           PROVED the constraint, so the candidate is a genuine match whatever
+           its cosine value happens to be.
+    high - no filters applied, but similarity cleared the threshold.
+    low  - every filter had to be relaxed, or nothing structural applied and
+           similarity is weak. Either way, no hard evidence backs the result.
+
+    Deliberately does not look at match_score when a filter survived: that is
+    the whole point of the fix. Never raises.
+    """
+    if applied_filters:
+        return CONFIDENCE_HIGH
+
+    # Every stated constraint had to be abandoned. A strong cosine score does
+    # not rescue that - the result is not the thing the traveller asked for.
+    if relaxed_filters:
+        return CONFIDENCE_LOW
+
+    # No structured terms in the query at all - similarity is the only evidence.
+    try:
+        score = float(match_score)
+    except (TypeError, ValueError):
+        return CONFIDENCE_LOW
+
+    return CONFIDENCE_HIGH if score >= CONFIDENCE_SCORE_THRESHOLD else CONFIDENCE_LOW
 
 
 def _describe_filter(name, filters):
@@ -458,6 +504,12 @@ def recommend_destinations(preferences, top_k=DEFAULT_TOP_K):
                 "relaxed_filters": relaxed,
                 "retrieval_note": note,
                 "ranked_on_full_text": reranked_on_full_text,
+                # Additive signal for the agent layer: lets low-confidence be
+                # driven by whether a hard constraint held, rather than by a
+                # raw cosine score. match_score above is unchanged.
+                "retrieval_confidence": _retrieval_confidence(
+                    applied, relaxed, round(score, 3)
+                ),
             }
         )
 
