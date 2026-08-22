@@ -31,8 +31,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from budget_agent.corpus import Corpus            # noqa: E402
-from budget_agent.tools import allocate_budget    # noqa: E402
+from proposed_envelope_agent.corpus import Corpus            # noqa: E402
+from proposed_envelope_agent.tools import allocate_budget    # noqa: E402
 
 CORPUS = Corpus()
 

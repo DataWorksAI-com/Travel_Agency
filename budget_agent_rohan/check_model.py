@@ -83,7 +83,7 @@ def main() -> int:
     # 4. The real agent, one task.
     print("4. full agent")
     try:
-        from budget_agent.agent import run_task
+        from proposed_envelope_agent.agent import run_task
         print("   ", run_task("4 nights in Barbados for 2 people, budget 2000"))
     except Exception:                             # noqa: BLE001
         traceback.print_exc()

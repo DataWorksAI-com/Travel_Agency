@@ -2,14 +2,14 @@
 test_tools.py — the contract for the three budget tools.
 
 Run:  pytest -q
-These fail until you write the bodies in budget_agent/tools.py.
+These fail until you write the bodies in proposed_envelope_agent/tools.py.
 Read each failure, write the smallest thing that makes it pass, run again.
 """
 
 import pytest
 
-from budget_agent.corpus import Corpus
-from budget_agent.tools import (
+from proposed_envelope_agent.corpus import Corpus
+from proposed_envelope_agent.tools import (
     FIRST_LAST_DAY_FACTOR,
     RESERVE_FRACTION,
     RESERVE_STALE_BONUS,

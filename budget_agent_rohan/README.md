@@ -115,7 +115,7 @@ python -m pytest -q
 ## Run the agent
 
 ```powershell
-python -m budget_agent.agent
+python -m proposed_envelope_agent.agent
 ```
 
 ---
@@ -123,11 +123,11 @@ python -m budget_agent.agent
 ## Layout
 
 ```
-budget_agent/
+budget_agent_rohan/
 ├── build_corpus.py         build-time only; not imported by the agent
 ├── raw/perdiem_raw.csv     source data as transcribed from State
 ├── data/perdiem.json       committed corpus + provenance
-├── budget_agent/
+├── proposed_envelope_agent/
 │   ├── corpus.py           load and query the corpus
 │   ├── tools.py            the three tools
 │   └── agent.py            deepagents wrapper

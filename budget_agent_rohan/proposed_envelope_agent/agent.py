@@ -2,8 +2,8 @@
 agent.py — the Budget & Cost domain-expert agent.
 
 Run it:
-    python -m budget_agent.agent            interactive
-    python -m budget_agent.agent --demo     no LLM, no API key, tools only
+    python -m proposed_envelope_agent.agent            interactive
+    python -m proposed_envelope_agent.agent --demo     no LLM, no API key, tools only
 
 The --demo path exercises the tools directly. Use it to confirm the wiring
 before spending tokens, and as the harness for the test jig later.
@@ -401,11 +401,11 @@ def main() -> int:
         return 0
 
     # Single-shot mode, the way the orchestrator will call this agent:
-    #   python -m budget_agent.agent --task "4 nights in Barbados for 2, $2000"
+    #   python -m proposed_envelope_agent.agent --task "4 nights in Barbados for 2, $2000"
     if "--task" in sys.argv:
         i = sys.argv.index("--task")
         if i + 1 >= len(sys.argv):
-            print('Usage: python -m budget_agent.agent --task "your task string"')
+            print('Usage: python -m proposed_envelope_agent.agent --task "your task string"')
             return 1
         try:
             print(run_task(sys.argv[i + 1]))

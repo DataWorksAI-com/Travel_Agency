@@ -27,7 +27,7 @@ Don't explain more than that up front. The rest comes out through the demo.
 
 **Run:**
 ```
-python -m budget_agent.agent --task "Recommend me a nice hotel in Nassau"
+python -m proposed_envelope_agent.agent --task "Recommend me a nice hotel in Nassau"
 ```
 
 **Expect:** it declines and offers to set a budget instead.
@@ -47,7 +47,7 @@ verified. Showing it as a test rather than a rule is the point.
 
 **Run:**
 ```
-python -m budget_agent.agent --task "5 days in the Maldives, budget 3000"
+python -m proposed_envelope_agent.agent --task "5 days in the Maldives, budget 3000"
 ```
 
 **Expect:** a single refusal naming all 18 covered countries. No retries.
@@ -82,7 +82,7 @@ python -m budget_agent.agent --task "5 days in the Maldives, budget 3000"
 
 **Run:**
 ```
-python -m budget_agent.agent --demo
+python -m proposed_envelope_agent.agent --demo
 ```
 
 **Point at steps 3 and 4** — a plan that passes, and one that fails.
@@ -235,7 +235,7 @@ python evaluation/run_jig.py --runs 1 --target "python evaluation/direct_path.py
 ## Before the demo
 
 - [ ] `python -m pytest -q` → 42 passed
-- [ ] `python -m budget_agent.agent --demo` runs clean
+- [ ] `python -m proposed_envelope_agent.agent --demo` runs clean
 - [ ] Ollama running, one live `--task` warmed up so the first call isn't slow
 - [ ] The $952 transcript open in a window
 - [ ] `--runs 3` completed if there's time, so variance is a number not an

@@ -38,7 +38,7 @@ seeing the result it produced makes the number meaningless.
 Usage
 -----
     python evaluation/run_jig.py --runs 3
-    python evaluation/run_jig.py --runs 3 --target "python -m budget_agent.agent --task {task}"
+    python evaluation/run_jig.py --runs 3 --target "python -m proposed_envelope_agent.agent --task {task}"
     python evaluation/run_jig.py --runs 1 --target "python ../budget_agent/scripts/run_agent.py --task {task}"
 """
 
@@ -88,7 +88,7 @@ def money_in(text: str) -> set[int]:
 
 def local_target():
     """Our own agent, in-process. Builds the model once and reuses it."""
-    from budget_agent.agent import ask, build_agent
+    from proposed_envelope_agent.agent import ask, build_agent
     agent = build_agent()
     return lambda task: ask(agent, task)
 

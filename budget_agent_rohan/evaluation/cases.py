@@ -16,7 +16,7 @@ Each case declares:
 
 from __future__ import annotations
 
-from budget_agent.tools import allocate_budget, estimate_costs
+from proposed_envelope_agent.tools import allocate_budget, estimate_costs
 
 
 def _money_from(*results: dict) -> set[int]:

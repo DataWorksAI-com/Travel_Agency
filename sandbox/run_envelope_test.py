@@ -28,7 +28,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "budget_agent_rohan"))
 
-from budget_agent.orchestration import ceilings_for  # noqa: E402
+from proposed_envelope_agent.orchestration import ceilings_for  # noqa: E402
 from sandbox import fakes  # noqa: E402
 
 TASK = ("Plan a 4 night trip to Barbados for 2 people who like snorkeling "
