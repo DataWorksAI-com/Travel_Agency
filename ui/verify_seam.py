@@ -9,9 +9,12 @@ What this checks, and why each matters for the UI:
      the same hook app.py turns into Chainlit steps (acceptance #4).
   3. No reply reaching the UI is an error string. Specifically, an
      UNCONNECTED agent put in REAL mode degrades to its stand-in instead of
-     "[flights unavailable] ..." (orchestrator_config.py:122) or
+     "[flights unavailable] ..." (orchestrator_config.py:130) or
      "[subagent error] ..." (subagent_client.py:98) -- acceptance #5.
-  4. Budget's own refusal paths render as ordinary prose, not a crash.
+
+Every slot is a stand-in by default now, including budget: the budget slot's
+real path is Shashank's repo-root RAG agent (orchestrator_config.py:
+_build_budget_client), which needs deps, a key and a built vectorstore.
 
 Run:  python ui/verify_seam.py
 """
@@ -85,7 +88,7 @@ def report(request, overrides, final, observed) -> None:
 
 async def main() -> int:
     # -- Case 1: the happy path, defaults (everything unconnected -> stand-in,
-    #    Budget on its real no-LLM direct path).
+    #    every slot including budget on its stand-in).
     rule("CASE 1 -- happy path, default modes")
     request = "Plan a week in Aruba from Boston, budget $3000"
     final, observed = await run_case(request)
@@ -109,24 +112,12 @@ async def main() -> int:
         str(forced),
     )
 
-    # -- Case 3: Budget's refusal paths, rendered directly. These are the
-    #    "legitimately refuses" cases: they must be prose, not exceptions.
-    rule("CASE 3 -- Budget's refusal paths are prose, not crashes")
-    from evaluation.direct_path import render
-
-    for label, task in (
-        ("covered=False (uncovered destination)",
-         "Plan a 5 night trip to Lisbon, Portugal, budget $2500"),
-        ("missing budget / length",
-         "Plan a trip to Aruba"),
-    ):
-        try:
-            out = render(task)
-            ok = isinstance(out, str) and bool(out.strip())
-        except Exception as exc:  # noqa: BLE001
-            out, ok = f"RAISED {exc!r}", False
-        check(f"{label}: returns prose", ok)
-        print(f"        {out[:150]}")
+    # -- Case 3 used to check the envelope agent's refusal prose via
+    #    evaluation/direct_path.render. That agent (now
+    #    proposed_envelope_agent) is no longer an orchestrator option --
+    #    proposed future work -- so its behaviour is not part of the UI's
+    #    surface and is not asserted here. Its own checks live in
+    #    budget_agent_rohan/tests/ and sandbox/run_envelope_test.py.
 
     rule("RESULT")
     if FAILURES:

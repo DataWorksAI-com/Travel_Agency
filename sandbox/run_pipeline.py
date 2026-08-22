@@ -8,9 +8,12 @@ intervention is monkeypatching `orchestrator.get_client` (bound at
 orchestrator.py:30 by `from orchestrator_config import get_client`) so each
 slot returns a recording client instead of a real one.
 
-Budget is REAL, via budget_agent_rohan/evaluation/direct_path.render() --
-the no-LLM path over the actual per diem tools. Every other slot is a
-deterministic fake (see fakes.py).
+Every slot, budget included, returns a deterministic fake (see fakes.py).
+Budget used to run the real no-LLM envelope path here, but that agent
+(proposed_envelope_agent) is no longer wired to any orchestrator slot -- it
+is proposed future work, and its own harness is sandbox/run_envelope_test.py.
+What this script exists to show is the OUTBOUND task strings, which do not
+depend on any reply's content.
 
 Run:  python sandbox/run_pipeline.py
 """
@@ -21,11 +24,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))                       # orchestrator, config
-sys.path.insert(0, str(ROOT / "budget_agent_rohan"))  # budget_agent, evaluation
 
 import orchestrator  # noqa: E402
-from evaluation.direct_path import render as budget_render  # noqa: E402
 from sandbox import fakes  # noqa: E402
+
+# fakes.REPLIES has no budget entry -- it was written when budget ran the real
+# envelope path. fakes.py is deliberately left untouched, so the stand-in for
+# this slot lives here, matching ui/agent_seam.py's own budget fallback.
+BUDGET_STANDIN = (
+    "Sample allocation: lodging $1,400, meals $760, activities $480, local "
+    "transport $160, reserve $200. Stand-in figures, not a costed plan."
+)
 
 OUTBOUND: list[tuple[str, str]] = []   # (slot, exact task string received)
 
@@ -44,7 +53,7 @@ class RecordingClient:
 
 def _get_client(name: str):
     if name == "budget":
-        return RecordingClient("budget", budget_render)
+        return RecordingClient("budget", lambda _task: BUDGET_STANDIN)
     return RecordingClient(name, lambda _task, n=name: fakes.REPLIES[n])
 
 

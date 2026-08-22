@@ -25,8 +25,9 @@ Step 0 gate, before touching anything: **[RUN]**
 python sandbox/run_pipeline.py     -> exit 0, no exceptions, no keys
 ```
 
-It needs **zero third-party packages** — Budget's direct path is stdlib only
-(`budget_agent_rohan/budget_agent/corpus.py:16-18`, `tools.py:25-29`). **[CODE]**
+It needs **zero third-party packages** — every slot is a stdlib stand-in. (At the
+time of that run, budget ran the envelope agent's stdlib-only direct path:
+`budget_agent_rohan/proposed_envelope_agent/corpus.py:16-18`, `tools.py:25-29`.) **[CODE]**
 
 ---
 
@@ -132,13 +133,13 @@ Two error-string escape hatches, either of which would land in the browser: **[C
 
 | Source | String | When |
 |---|---|---|
-| `orchestrator_config.py:122` | `[{name} unavailable] {error_message}` | builder raised |
+| `orchestrator_config.py:130` | `[{name} unavailable] {error_message}` | builder raised |
 | `subagent_client.py:98` | `[subagent error] {exc}` | the call raised |
 | `subagent_client.py:182` | `[subagent unreachable over SLIM] {exc}` | SLIM stub |
 
 Note for the inventory: the `[subagent error]` string lives at
 **`subagent_client.py:98`**, not `orchestrator_config.py:~108`. The line near
-`orchestrator_config.py:108-122` is the *build*-failure wrapper, which emits the
+`orchestrator_config.py:116-130` is the *build*-failure wrapper, which emits the
 different `[{name} unavailable]` shape. The seam catches **both**.
 
 `ui/agent_seam.py:_looks_like_error()` matches those shapes; a match routes to
@@ -147,17 +148,25 @@ that slot's stand-in and reports effective mode `dummy` to the UI.
 ### Modes
 
 `ui/agent_seam.py:MODES` — one entry per slot, matching the six keys of
-`orchestrator_config._BUILDERS` (`orchestrator_config.py:91-98`): **[CODE]**
+`orchestrator_config._BUILDERS` (`orchestrator_config.py:99-106`): **[CODE]**
 
 | Mode | Meaning |
 |---|---|
 | `real` | built via `orchestrator_config.get_client()`; needs branch + deps + key |
 | `dummy` | the deterministic stand-in in `sandbox/fakes.py` |
-| `direct` | **Budget only** — `budget_agent_rohan/evaluation/direct_path.render`: real code, real per-diem tools, no model, no key |
 
-Defaults: everything `dummy` **except** `budget: direct`. Budget is the one slot
-that can be genuinely real with no key, because its work is arithmetic — which is
-the concrete form of the tools-not-a-sub-agent argument.
+Defaults: **everything `dummy`**, budget included. There were three modes: a
+`direct` mode routed the budget slot to the per-diem envelope proposer
+(`evaluation/direct_path.render`) with no model and no key. That agent is now
+`proposed_envelope_agent` and is **proposed future work, not an orchestrator
+option** — so the mode was removed outright, not just defaulted off, since
+leaving it selectable would let a stray `TRAVEL_UI_AGENTS` value put unreleased
+work in front of a user.
+
+The budget slot's `real` path is **Shashank's repo-root RAG cost estimator**
+(`budget_agent/agent.py:86`, wired at `_build_budget_client`) — the only budget
+agent the orchestrator can reach. **Consequence: no slot is live today; the
+honest count of real agents in the UI is zero.**
 
 **The fakes' prose is untouched.** `sandbox/fakes.py` was not edited. `fakes.REPLIES`
 has no Budget key, so the seam keeps its own one-line Budget fallback in
@@ -167,7 +176,7 @@ has no Budget key, so the seam keeps its own one-line Budget fallback in
 
 `install_seam(after=...)` takes an async hook called once per agent with
 `(slot, effective_mode, task, reply)`. `app.py:_on_agent_done` turns each into a
-`cl.Step` labelled `Flights (sample data)` / `Budget (live tools, no model)`.
+`cl.Step` labelled `Flights (sample data)` / `Destination (live agent)`.
 The UI supplies the label; it never learns *how* the mode was decided.
 
 Each step is opened and closed inside that one coroutine, not held open across
@@ -213,7 +222,7 @@ events the browser renders.
 [tool] Flights (sample data)           B6: $538, 5h10m, direct, arrives BGI …
 [tool] Restaurants (sample data)       Champers -- seafood, waterfront, around $95 for two …
 [tool] Activities (sample data)        Catamaran snorkel cruise -- outdoor, around $110 …
-[tool] Budget (live tools, no model)   <Budget's own reply>
+[tool] Budget (sample data)            Sample allocation: lodging $1,400, meals $760 …
 [assistant_message] === Destination === … === Budget ===
 ```
 
@@ -238,21 +247,17 @@ Both error shapes occurred naturally in one run (`[… unavailable]` ×5,
 `[subagent error]` ×1) and both were absorbed. This is the acceptance test the
 seam exists for.
 
-### #5b — Budget's own refusals are prose, not crashes
+### #5b — the envelope agent's refusals *(no longer part of the UI's surface)*
 
-`ui/verify_seam.py` Case 3, calling `render` directly: **[RUN]**
+This sub-case asserted that the envelope proposer's refusal paths render as prose
+rather than raising — `covered=False` and missing budget/length, both verified at
+the time **[RUN]**. That agent (`proposed_envelope_agent`) is now proposed future
+work and is not wired to any slot, so its behaviour is no longer a UI guarantee
+and `ui/verify_seam.py` no longer asserts it. Its own checks live in
+`budget_agent_rohan/tests/` and `sandbox/run_envelope_test.py`.
 
-- `covered=False` → *"That destination is not covered by the published cost data
-  available here. Covered destinations are: ANTIGUA AND BARBUDA, Aruba, …"*
-  (`evaluation/direct_path.py:98-101`)
-- missing budget/length → *"This needs a total budget and a trip length before it
-  can be costed."* (`direct_path.py:104-107`)
-
-Both return prose; neither raises.
-
-**But `covered=False` is currently unreachable through the pipeline** — see
-finding 1. That is an integration bug, not a UI bug, and I have not "fixed" it by
-papering over it in the UI.
+The `covered=False` path was also unreachable through the pipeline — worth fixing
+before the agent is ever wired in, not papered over in the UI.
 
 ### #5c — unparseable input
 
@@ -336,7 +341,7 @@ this report. This file is untracked by request.
 | Flights | `TRAVELPAYOUTS_TOKEN`; `OPENROUTER_API_KEY` | env |
 | Restaurants | `GEOAPIFY_API_KEY`; `OPENROUTER_API_KEY` (or local Ollama, no key) | env |
 | Activities | `OPENTRIPMAP_API_KEY`; `GEOAPIFY_API_KEY`; `OPENROUTER_API_KEY` | env |
-| Budget (Rohan) | `OPENROUTER_API_KEY` — **agent path only**; `direct` mode needs none | env |
+| Budget (Rohan) — *not wired, future work* | `OPENROUTER_API_KEY` — agent path only; the no-LLM path needs none | env |
 | Money & Customs | `COHERE_API_KEY` / `CEREBRAS_API_KEY` (two variants exist) | `.env`, see `.env.example` |
 | Optional | `LANGSMITH_API_KEY` | tracing only |
 
@@ -368,7 +373,7 @@ behind the code. Worth fixing before anyone else tries to go live. **[CODE]**
 | Restaurants | `restaurant_agent/restaurant_agent_ollama.py:96` | `ollama:lfm2.5` | **STALE-RISK** — needs local Ollama *and* `ollama pull lfm2.5`; dies on any machine without it |
 | Activities | `activities-agent-limeng/activities_agent.py:78` | `openrouter:z-ai/glm-5.2` | **VERIFY** — confirm this slug exists on OpenRouter |
 | Activities (dup) | `activities/local_activity_docs/activities_agent.py:187` | `openrouter:z-ai/glm-5.2` | duplicate copy of the agent |
-| Budget (Rohan) | `budget_agent_rohan/budget_agent/agent.py:232` | `openrouter:openai/gpt-oss-20b:free` | **VERIFY** — free tier; `:free` slugs get retired |
+| Budget (Rohan) | `budget_agent_rohan/proposed_envelope_agent/agent.py:232` | `openrouter:openai/gpt-oss-20b:free` | **VERIFY** — free tier; `:free` slugs get retired |
 | Budget (Shashank) | `budget_agent/config.py:35,40` | `claude-sonnet-4-6` / `anthropic/claude-sonnet-4.5` | **VERIFY** — previous-generation IDs |
 | Money & Customs | `money_customs_agent.py:32` | `command-r-plus-08-2024` (Cohere) | **VERIFY** |
 | Money & Customs (dup) | `agent.py:31` | `gpt-oss-120b` (Cerebras) | **CONFLICT** — two files, two different providers/defaults for the same agent |
@@ -396,7 +401,7 @@ Capability matched to task, not one model everywhere:
 | Flights | fast/cheap | lookup-and-format over cached Travelpayouts rows |
 | Money & Customs | fast/cheap | lookup-and-format: one rate + one tipping norm |
 | Holidays / climate | fast/cheap | pure lookup-and-format |
-| **Budget allocation** | **no model at all** | It is arithmetic. `direct` mode already runs it with no model and no key, and it is the only slot that is genuinely real today with zero credentials. This is the tools-not-a-sub-agent argument in its concrete form. |
+| **Budget allocation** | **no model at all** | It is arithmetic. The envelope proposer runs it with no model and no key — demonstrated, though now unwired as future work. This is the tools-not-a-sub-agent argument in its concrete form; note it argues against Shashank's RAG-plus-model budget agent, which is what the slot actually points at. |
 
 Two things I'd want settled alongside this: pick **one** Money & Customs
 implementation (the `agent.py` / `money_customs_agent.py` conflict above), and
@@ -421,12 +426,22 @@ end-to-end. The guard should be applied to the **user's request**, not to text t
 orchestrator composed from other agents. This is my file — happy to fix on the
 budget branch on your say-so.
 
-**2. `budget_agent` is an ambiguous import name.** Two different packages claim
-it: `budget_agent/` at the repo root (Shashank's — `config.py`, `tools/`, `data/`)
-and `budget_agent_rohan/budget_agent/` (mine — `corpus.py`, `tools.py`). Which one
-`import budget_agent` resolves to depends purely on `sys.path` order. It works
-today only because `direct_path.py:32` inserts its own parent at position 0. **[CODE]**
-This will bite someone on `main`; one of them needs renaming.
+**2. ~~`budget_agent` is an ambiguous import name.~~ FIXED — renamed.** Two
+different packages claimed it: `budget_agent/` at the repo root (Shashank's RAG
+cost estimator — `config.py`, `tools/`, `data/`) and, formerly,
+`budget_agent_rohan/budget_agent/` (mine — the per-diem envelope proposer). Which
+one `import budget_agent` resolved to depended purely on `sys.path` **and
+`sys.modules`** order: whichever package was imported first won the name for the
+whole process. It worked only because `direct_path.py:32` inserts its own parent
+at position 0 — but that is defeated once the root package is already in
+`sys.modules`, e.g. after forcing `budget=real` in the same session, at which
+point Budget's direct path died on `No module named 'budget_agent.corpus'` and
+silently degraded to a stand-in. **[CODE]**
+
+Mine is now **`proposed_envelope_agent`** (`budget_agent_rohan/proposed_envelope_agent/`).
+`budget_agent` unambiguously means the root RAG agent, noted at
+`orchestrator_config.py:67-75`. Verified by importing the root package *first*
+and confirming the envelope path still renders a real allocation. **[RUN]**
 
 **3. `sys.path.insert(0, …)` is unsafe under Chainlit.** `chainlit/config.py:592`
 inserts the app's directory at index 0, then `:624` does an **unconditional**

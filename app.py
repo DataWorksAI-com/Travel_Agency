@@ -37,7 +37,7 @@ if str(REPO_ROOT) not in sys.path:
 import chainlit as cl
 
 from orchestrator import plan_trip
-from ui.agent_seam import DIRECT, DUMMY, LABELS, REAL, install_seam
+from ui.agent_seam import DUMMY, LABELS, REAL, install_seam
 from ui.request_parse import describe, parse_request
 
 WELCOME = (
@@ -69,7 +69,6 @@ EMPTY_MESSAGE = (
 # these are labels; it does not know how the seam decides between them.
 MODE_LABEL = {
     REAL: "live agent",
-    DIRECT: "live tools, no model",
     DUMMY: "sample data",
 }
 

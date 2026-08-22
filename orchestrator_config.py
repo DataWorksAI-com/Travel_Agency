@@ -65,7 +65,25 @@ def _build_activities_client() -> LocalFunctionClient:
 
 
 def _build_budget_client() -> LocalFunctionClient:
-    from budget_agent.agent import build_agent  # placeholder import path
+    # The budget slot is Shashank's repo-root RAG cost estimator: vector
+    # search over city cost docs -> total estimate -> feasibility check.
+    # build_agent() is at budget_agent/agent.py:86 and returns an
+    # .invoke()-able agent, which is the shape called below.
+    #
+    # This used to be ambiguous: budget_agent_rohan/ shipped a SECOND package
+    # also named `budget_agent` (the per-diem envelope proposer), so
+    # `import budget_agent` resolved to whichever landed in sys.modules
+    # first -- import order, not intent, picked the agent. That package is
+    # now `proposed_envelope_agent` and is NOT wired to any slot; it is
+    # proposed future work. This name means one thing again.
+    #
+    # Going live needs three things, not just the import: `langchain` +
+    # `deepagents` installed, ANTHROPIC_API_KEY or OPENROUTER_API_KEY set
+    # (budget_agent/config.py:29-49 raises RuntimeError with neither), and
+    # the Chroma vectorstore built via
+    # budget_agent/scripts/build_vectorstore.py (enforced at
+    # budget_agent/tools/rag_tools.py:33-37).
+    from budget_agent.agent import build_agent
 
     def _answer(task: str) -> str:
         agent = build_agent()

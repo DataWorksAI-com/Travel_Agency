@@ -57,7 +57,7 @@ R = required, O = optional. "Branch" is where the read site lives.
 | `ANTHROPIC_API_KEY` | Destination | **R** | `ChatAnthropic` is constructed at module level, so failure is at import of the package, not first call **[code]** — the package docstring states this **[code]** | `destination_agent/destination_agent.py:346`; documented `destination_agent/__init__.py:14-16` | main |
 | `ANTHROPIC_API_KEY` | Budget (Shashank) | O | Optional *if* `OPENROUTER_API_KEY` is set. With neither, `load_settings()` raises `RuntimeError` at first `build_agent()` **[run]** | `budget_agent/config.py:30`, raise at `:43-49` | main |
 | `OPENROUTER_API_KEY` | Budget (Shashank) | O | Fallback provider. See row above | `budget_agent/config.py:31` | main |
-| `OPENROUTER_API_KEY` | Budget (Rohan) | **R** | Default model slug is `openrouter:…`, so the provider SDK has no credential; runtime auth failure at first model call **[inf]** | `budget_agent_rohan/budget_agent/agent.py:260`, default at `:232`, used at `:265` | `budget_cost_rohan` |
+| `OPENROUTER_API_KEY` | Budget (Rohan) | **R** | Default model slug is `openrouter:…`, so the provider SDK has no credential; runtime auth failure at first model call **[inf]** | `budget_agent_rohan/proposed_envelope_agent/agent.py:260`, default at `:232`, used at `:265` | `budget_cost_rohan` |
 | `OPENROUTER_API_KEY` | Activities | **R** | Same shape — `DEEP_AGENT_MODEL` defaults to an `openrouter:` slug **[inf]** | `activities/local_activity_docs/activities_agent.py:187`; `activities-agent-limeng/activities_agent.py:78` | both Activities branches |
 | `OPENROUTER_API_KEY` | Restaurants | O | Only if you override the model to an `openrouter:` slug; the default is local Ollama **[code]** | `restaurant_agent/.env.template:1-4` | main |
 | `COHERE_API_KEY` | Money & Customs | **R** | Runtime auth failure at first call, **not** a config error — see §4 | `money_customs_agent.py:24` (setdefault), consumed `:102` | `exchange_rate_emily` |
@@ -78,7 +78,7 @@ call and is out of scope.
 |---|---|---|---|
 | `MONEY_AGENT_MODEL` | Money & Customs (wired) | `command-r-plus-08-2024` | `money_customs_agent.py:32` |
 | `MONEY_AGENT_MODEL` | `agent.py` (unwired) | `gpt-oss-120b` | `agent.py:31` |
-| `BUDGET_AGENT_MODEL` | Budget (Rohan) | `openrouter:openai/gpt-oss-20b:free` | read `budget_agent_rohan/budget_agent/agent.py:260`, literal `:232`; also `check_model.py:22` |
+| `BUDGET_AGENT_MODEL` | Budget (Rohan) | `openrouter:openai/gpt-oss-20b:free` | read `budget_agent_rohan/proposed_envelope_agent/agent.py:260`, literal `:232`; also `check_model.py:22` |
 | `ANTHROPIC_MODEL` | Budget (Shashank) | `claude-sonnet-4-6` | `budget_agent/config.py:35` |
 | `OPENROUTER_MODEL` | Budget (Shashank) | `anthropic/claude-sonnet-4.5` | `budget_agent/config.py:40` |
 | `RESTAURANT_AGENT_MODEL` | Restaurants | `ollama:lfm2.5` | `restaurant_agent/restaurant_agent_ollama.py:96` |
@@ -113,7 +113,7 @@ Destination is a third — `destination_agent/destination_agent.py:347` pins
 
 Variables whose absence breaks `import`, not the first call. These are the ones
 that bite in integration, because the orchestrator's lazy-build guard
-(`orchestrator_config.py:103-125`) turns them into a `"[<slot>
+(`orchestrator_config.py:111-133`) turns them into a `"[<slot>
 unavailable] …"` string rather than a visible crash — the failure is
 swallowed and shows up as a degraded itinerary.
 
@@ -169,7 +169,7 @@ here for one practical reason worth a group decision, not as a criticism:
 the key gets a Cohere/Cerebras **authentication error** on the first model
 call, rather than a "key not configured" message at startup. In a six-agent
 pipeline where the orchestrator already converts subagent build failures into
-prose (`orchestrator_config.py:122`), that difference costs real debugging
+prose (`orchestrator_config.py:130`), that difference costs real debugging
 time — the itinerary comes back plausible-looking with one section replaced by
 an error string.
 
@@ -296,14 +296,13 @@ returned nothing) and **no credential env vars set** (a scan of `Env:` for
 nothing relevant). It produced the full six-slot itinerary and the gap checks.
 **[run]**
 
-Why it costs nothing: five slots are fixed strings (`sandbox/fakes.py`), and
-Budget runs the real no-LLM direct path
-(`budget_agent_rohan/evaluation/direct_path.render`, wired at
-`sandbox/run_pipeline.py:47`) — real per-diem tools, no model call. **[code]**
+Why it costs nothing: every slot is a fixed string (`sandbox/fakes.py`, plus a
+budget stand-in defined in `run_pipeline.py`), so there is no model call at all.
+Budget used to run the envelope agent's real no-LLM path here; that agent is no
+longer wired to any slot. **[code]**
 
-The **Chainlit UI** is the same story by construction: `ui/agent_seam.py:93-99`
-defaults every slot to `dummy` except `budget=direct`. Its extra cost is
-packages, not keys — `truststore` and `chainlit` (§6).
+The **Chainlit UI** is the same story by construction: `ui/agent_seam.py:MODES`
+defaults **every** slot to `dummy`. Its extra cost is packages, not keys — `truststore` and `chainlit` (§6).
 
 One caveat that cost me a moment: **`TRAVEL_UI_AGENTS` was already set to
 `money_customs=real`** in the shell I audited from. **[run]** That does not
@@ -320,7 +319,7 @@ variable in your shell first.
 | Destination | `ANTHROPIC_API_KEY`; `GEOAPIFY_API_KEY` for the Geoapify tools | ~80 MB embedding download on first corpus query |
 | Restaurants | **none** | Ollama running with `lfm2.5`; ~80 MB embedding download. Add `OPENROUTER_API_KEY` only if you override the model |
 | Budget (Shashank) | `ANTHROPIC_API_KEY` **or** `OPENROUTER_API_KEY` | `python scripts/build_vectorstore.py` first — hard `RuntimeError` otherwise |
-| Budget (Rohan) | `OPENROUTER_API_KEY` | none for the direct/no-LLM path |
+| Budget (Rohan) — *not wired; proposed future work* | `OPENROUTER_API_KEY` | none for the no-LLM path |
 | Activities | `OPENROUTER_API_KEY`; `OPENTRIPMAP_API_KEY` for tier 3 | vector build step; `python` on `PATH` for the MCP subprocess; Ollama + `nomic-embed-text` for Jainam's variant |
 | Money & Customs | `COHERE_API_KEY` | ~80 MB embedding download; vector index self-builds |
 
