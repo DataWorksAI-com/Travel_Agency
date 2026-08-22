@@ -197,6 +197,63 @@ the step people miss:
 
 Full detail, with `file:line` for every variable: [`ENVIRONMENT.md`](ENVIRONMENT.md).
 
+### You do not need everyone else's keys
+
+This is the part people get wrong, because the instinct is to think the UI needs
+the whole table above filled in before it is useful. It doesn't.
+
+**To verify your own agent, you need exactly one key: yours.** Turn on your slot
+and leave the other five as stand-ins:
+
+```powershell
+$env:TRAVEL_UI_AGENTS = "flights=real"     # your slot only
+chainlit run app.py -w
+```
+
+Your agent is live, runs on your key, and you see it inside the real pipeline —
+receiving the real task string the orchestrator composes, with its output landing
+in the real assembled itinerary. The other five slots return fixed strings and
+cost nothing. This is the intended daily workflow.
+
+### Why the *full* pipeline is a different problem
+
+Every agent is imported into one Python process today
+(`orchestrator_config.py` → `LocalFunctionClient`). So running all six live at
+once means one machine holding **all six agents' keys and all six agents'
+dependencies simultaneously**.
+
+That does not compose out of per-person `.env` files, and it has two consequences
+worth knowing before anyone tries:
+
+- **Keys.** Nobody can run the whole thing without collecting every teammate's
+  credentials onto one machine — and whoever's key is used pays for the calls.
+- **Dependencies.** Six stacks share one venv, so they can conflict for reasons
+  nobody caused. The already-found example: `destination_data` builds its Chroma
+  collection with `all-MiniLM-L6-v2` while the restaurant corpus uses Chroma's
+  default embedding function, and two collections built with different embedding
+  functions cannot share one index.
+
+So: **per-slot for development, all-slots only for a rehearsed demo.** For the
+demo, one machine assembles one `.env` once. If the team standardises the LLM
+provider (an open question — see `UI_STATUS.md`), that shrinks to roughly one
+model key plus the three domain API keys (Travelpayouts, Geoapify, OpenTripMap),
+which are per-provider and unavoidable.
+
+The longer-term fix is architectural, not a secrets problem: agents behind a
+transport rather than imported, so each one carries its own deps and its own key
+and the orchestrator holds neither. `subagent_client.py` already sketches that
+path (`SlimSubagentClient`), and it is the reason the per-agent diagrams label
+the orchestrator↔agent link A2A.
+
+### Rules for keys
+
+- `.env` is gitignored. **Never commit it**, and don't paste keys into Slack or
+  into a source file — check `git diff` before you commit if you've been editing
+  near config.
+- If your agent reads a key at *import* time, a missing key shows up as
+  `[<slot> unavailable]` rather than a runtime error. That's the `flights`
+  behaviour today, and it's why a missing token looks like a build failure.
+
 ---
 
 ## 7. Known problems that are not your fault
