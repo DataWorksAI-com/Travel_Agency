@@ -1,0 +1,51 @@
+# Environment files
+.env
+*.env
+
+# Virtual environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+build/
+dist/
+
+# Chroma local database/cache (per-agent, regenerated via build_vectorstore.py)
+chroma_db/
+**/chroma_db/
+budget_agent/chroma_db/
+
+# Agent workspace / run artifacts
+agent_workspace/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local pre-edit backups - never commit these
+*.backup
+destinations.backup.json
+
+# Chainlit auto-generated artifacts (recreated on first launch)
+.chainlit/
+chainlit.md
+.files/
+
+# Note: destination_data/destinations.json IS committed on purpose - it is the
+# RAG corpus, and rebuilding it costs ~140 live API calls.
+
+# Restaurant agent - local database, run artefacts and pre-change backups
+restaurant_db/
+_run_logs/
+_backup_pre_reflection_15aug/
+_dev/
+_offline_runner.pyintegration_test/
+
+integration_test

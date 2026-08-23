@@ -244,9 +244,65 @@ def build_description(record, coastal, avg_temp):
     return " ".join(parts)
 
 
+# Fields written by the downstream agent layer (Geoapify enrichment). The
+# builder never creates these, but it must not destroy them either.
+ENRICHMENT_FIELDS = ("rag_text", "geoapify_profile")
+
+
+def _entry_key(name, country_code):
+    """Stable identity for a destination: case-insensitive name + country."""
+    return (
+        str(name or "").strip().casefold(),
+        str(country_code or "").strip().upper(),
+    )
+
+
+def _is_dynamic(entry):
+    """True if this entry was added at runtime rather than from CITY_SEEDS."""
+    source_fields = entry.get("_source_fields")
+    if not isinstance(source_fields, dict):
+        return False
+    return source_fields.get("dynamic") is True
+
+
+def _load_existing_entries():
+    """Read the current corpus so a rebuild can preserve what it did not create.
+
+    Returns a list of entry dicts, or [] when there is nothing readable. Never
+    raises: a missing or corrupt corpus simply means there is nothing to carry
+    over, and the build proceeds exactly as it would on a first run.
+    """
+    if not os.path.exists(OUTPUT_PATH):
+        return []
+
+    try:
+        with open(OUTPUT_PATH, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError) as exc:
+        print(f"  ! existing corpus could not be read, nothing will be preserved ({exc})")
+        return []
+
+    entries = payload.get("destinations") if isinstance(payload, dict) else None
+    if not isinstance(entries, list):
+        return []
+
+    return [entry for entry in entries if isinstance(entry, dict)]
+
+
 def main():
     print(f"Building corpus from {len(CITY_SEEDS)} seed destinations...\n")
+
+    # Load before building: a rebuild must not discard enrichment added by the
+    # agent layer, nor the dynamically added destinations absent from CITY_SEEDS.
+    existing = _load_existing_entries()
+    existing_by_key = {
+        _entry_key(entry.get("name"), entry.get("country_code")): entry for entry in existing
+    }
+    if existing:
+        print(f"Found {len(existing)} existing destination(s); enrichment will be preserved.\n")
+
     entries = []
+    preserved_count = 0
 
     for name, country_code in CITY_SEEDS:
         record = geocode(name, country_code)
@@ -282,8 +338,34 @@ def main():
                 "annual_avg_temp_c": avg_temp,
             },
         }
+        # Carry over enrichment the agent layer attached to this destination.
+        previous = existing_by_key.get(_entry_key(entry["name"], entry["country_code"]))
+        if previous:
+            carried_any = False
+            for field in ENRICHMENT_FIELDS:
+                if field in previous:
+                    entry[field] = previous[field]
+                    carried_any = True
+            if carried_any:
+                preserved_count += 1
+
         entries.append(entry)
         print(f"  + {entry['name']} ({entry['country_code']})")
+
+    rebuilt_count = len(entries)
+    rebuilt_keys = {_entry_key(e["name"], e["country_code"]) for e in entries}
+
+    # Dynamic entries came from runtime expansion and are not in CITY_SEEDS, so
+    # rebuilding would otherwise delete them without warning.
+    dynamic_carried = []
+    for entry in existing:
+        if _entry_key(entry.get("name"), entry.get("country_code")) in rebuilt_keys:
+            continue
+        if _is_dynamic(entry):
+            dynamic_carried.append(entry)
+            print(f"  = {entry.get('name')} ({entry.get('country_code')}) [dynamic, carried over]")
+
+    entries.extend(dynamic_carried)
 
     payload = {
         "built_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
@@ -303,7 +385,10 @@ def main():
         json.dump(payload, handle, ensure_ascii=False, indent=2)
 
     print(f"\nWrote {len(entries)} destinations to {OUTPUT_PATH}")
-    skipped = len(CITY_SEEDS) - len(entries)
+    print(f"  rebuilt from seeds      : {rebuilt_count}")
+    print(f"  enrichment preserved    : {preserved_count}")
+    print(f"  dynamic entries carried : {len(dynamic_carried)}")
+    skipped = len(CITY_SEEDS) - rebuilt_count
     if skipped:
         print(f"({skipped} seed(s) skipped - see '!' lines above)")
 
