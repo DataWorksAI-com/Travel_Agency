@@ -27,6 +27,7 @@ directly -- so swapping Local -> Slim for one subagent, or all of them,
 is a one-line change in orchestrator_config.py, not a rewrite.
 """
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Callable
 
@@ -93,7 +94,7 @@ class LocalFunctionClient(SubagentClient):
 
     async def call(self, task: str) -> str:
         try:
-            return self._answer_fn(task)
+            return await asyncio.to_thread(self._answer_fn, task)
         except Exception as exc:  # a transport-agnostic client never raises
             return f"[subagent error] {exc}"
 
