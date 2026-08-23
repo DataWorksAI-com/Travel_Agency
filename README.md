@@ -1,227 +1,160 @@
-# Travel Agency — Destination Agent
+# Money & Customs Agent
 
-A multi-agent RAG travel chatbot. This repository holds the **Destination Agent**: it
-recommends a destination from a traveller's stated preferences, or reports typical
-climate and public holidays for a place they name, and serves both through a Chainlit
-chat UI.
+## What it does
+Gives a traveller four things in one answer: the live exchange rate between
+their home currency and the destination's, money-related customs for the
+destination (tipping and haggling norms, broken down per service where
+relevant), a rough sense of local price scale via national income context,
+and -- if their currency unambiguously implies a home country -- a direct
+comparison between home and destination. Built to be called by the
+group's **Orchestrator Agent**, which folds the relevant parts into
+whichever subagent's task string needs them -- this agent's knowledge is
+not shared directly among subagents themselves.
 
-**This branch (`climate_timing_joel`) is a complete working copy** — the agent, the
-data layer, the corpus, and the UI, all runnable together.
+## Contract
+- **Input:** one plain-language task string from the orchestrator (e.g.
+  origin + destination + what the traveller wants to know).
+- **Output:** one self-contained message, itinerary-ready.
+- **Ask-vs-assume policy:** never asks a follow-up question. If something
+  is missing or ambiguous, it states one reasonable assumption (prefixed
+  `Assumption:`) and answers anyway -- same policy as the Budget and
+  Restaurants agents.
 
----
-
-## Architecture
-
-Three layers, each independently usable.
-
-### 1. The agent — `destination_agent/`
-
-A deep agent (`deepagents` + LangChain + `claude-haiku-4-5`) that does the reasoning and
-routing. It exposes exactly two tools to the model:
-
-| Tool | Purpose |
-|---|---|
-| `get_destination_info(destination_name)` | Case 1 — a named place |
-| `search_destinations(preferences)` | Case 2 — preference-based search |
-
-Entry point: `run_destination_agent(user_query: str) -> str` in
-`destination_agent/destination_agent.py`.
-
-It also owns **Geoapify enrichment** (`geoapify_data.py`), which attaches real
-points of interest in four categories — `beaches`, `attractions`, `nature` (nature
-reserves) and `diving` (dive centres) — cached to `destination_profiles.json`.
-
-### 2. The data layer — `destination_data/`
-
-Four tools. Each returns plain Python dicts/lists, and **never raises** — every failure
-returns `{"error": "..."}`.
-
-| Tool | File | Source |
+## Knowledge sources
+| Tool | Source | Type |
 |---|---|---|
-| `recommend_destinations(preferences, top_k=5)` | `recommend.py` | RAG over the local corpus (ChromaDB + MiniLM) |
-| `resolve_place(city_name)` | `resolve_place.py` | Open-Meteo Geocoding |
-| `get_climate(lat, lon)` | `climate.py` | Open-Meteo ERA5 archive |
-| `get_holidays(country_code, year=None)` | `holidays.py` | Nager.Date |
+| `get_exchange_rate` | Frankfurter API (ECB-backed) | Live, free, no key |
+| `search_money_customs` | **Hand-curated data, not sourced from a verified external dataset** (see note below); agentic RAG: exact match \u2192 fuzzy typo correction \u2192 semantic search (local ChromaDB) | Static + local vector search |
+| `get_income_context` | World Bank Open Data API (GNI per capita) | Live, free, no key |
+| `get_comparative_context` | No new data source -- calls the two tools above twice each (home + destination) | Composite |
 
-### 3. The UI — `app.py`
+**Country coverage today (17 total):** France, India, USA, Japan, Mexico,
+Morocco, Germany, Jamaica, Dominican Republic, Bahamas, Thailand, Bali,
+Philippines, Costa Rica, Belize, Fiji, Hawaii. Add more by extending
+`MONEY_CUSTOMS_FACTS`, `GEOGRAPHY`, and `COUNTRY_ISO3` in `money_tools.py`
+(all three use the same country-name keys, kept in sync intentionally).
 
-A Chainlit chat app at the repo root. It wraps `run_destination_agent` and adds nothing
-else: the call is async-wrapped (it blocks ~10–15 s), replies are normalised to text,
-and errors surface as a message instead of a crashed session.
+**Honesty note on the customs data itself:** every country's entry in
+`MONEY_CUSTOMS_FACTS` carries a `source` field, so provenance travels with
+the data itself rather than living only in this README. Confidence varies
+by tier, not uniform across all 17:
+- **France** -- Rick Steves (ricksteves.com/travel-tips/money/tipping-in-europe
+  and his community forum), a well-regarded, published European travel
+  authority. The strongest-sourced entry.
+- **Thailand, Bali, Philippines** -- corroborated across multiple sources
+  including Lonely Planet's tipping-customs guide, itself a well-regarded
+  travel authority.
+- **Jamaica, Dominican Republic, Bahamas, Costa Rica, Fiji, Hawaii** --
+  corroborated across several independent travel guides each, though no
+  single named authority like Rick Steves or Lonely Planet.
+- **Belize** -- a single source (Upgraded Points' worldwide tipping guide);
+  the weakest-corroborated entry in the dataset.
+- **India, USA, Japan, Mexico, Morocco, Germany** -- hand-written from
+  general knowledge, **not** independently verified. Say so explicitly in
+  their own `source` field.
 
-### 4. The corpus — `destination_data/destinations.json`
+Anyone extending this data should check the `source` field first and
+prioritize verifying the unverified entries over adding new countries.
 
-51 destinations. Every field is fetched from a real API — population, region, coastal
-status, annual mean temperature — and the description is composed from those fields.
-`build_corpus.py` regenerates it from a hand-picked list of 47 seed cities; the
-remaining entries were added at runtime (see *Known issues*).
+**Scope note:** the actual assignment describes a travel agent for
+**tropical vacation tours**. The 10 destinations above (Jamaica through
+Hawaii) were added specifically to cover that scope with real, sourced
+content. The original 7 (France, India, USA, Japan, Mexico, Morocco,
+Germany) are mostly not tropical -- kept intentionally as a broader,
+more inclusive dataset alongside the assignment's actual focus, rather
+than removed.
 
-### Query flow
+**Honesty note on `get_income_context`:** this reports GNI per capita, a
+national *average*, not a city-level *median* -- true free, real-time median
+income data isn't reliably available across countries. The tool's own
+output says this explicitly so it's never presented as more precise than
+it is.
 
+## Setup
 ```
-                        user
-                         |
-                    app.py (Chainlit)
-                         |
-              run_destination_agent()
-                         |
-              agent decides the case
-                 /                \
-        CASE 1                    CASE 2
-   named a place            gave preferences
-        |                          |
-   resolve_place()        recommend_destinations()
-   (any city, live)        (RAG over 51-entry corpus)
-        |                          |
-        |                   picks ONE candidate
-        \                        /
-         +----------+-----------+
-                    |
-          Geoapify profile (POIs)
-          get_climate(lat, lon)
-          get_holidays(country_code)
-                    |
-                 answer
-```
-
-Both paths return `name`, `country_code`, `lat`, `lon`, so climate and holidays can be
-called straight afterwards with no re-resolving.
-
----
-
-## The two cases
-
-**Case 1 — the user names a place.** `resolve_place` geocodes it live, so this works for
-*any* city on earth, not just corpus entries. The agent then enriches with Geoapify POIs,
-climate, and holidays.
-
-**Case 2 — the user describes what they want.** `recommend_destinations` embeds the query
-and returns the 5 nearest corpus entries by cosine similarity. Each is enriched with
-Geoapify data, the agent picks exactly **one** recommendation (mentioning up to two
-alternatives), then calls Case 1's tool on the winner for full detail. When the top
-`match_score` is below 0.30 the tool returns a `retrieval_note`, and the agent asks a
-clarifying question instead of recommending.
-
----
-
-## Data sources and keys
-
-**Free and keyless** — the entire data layer:
-
-- **Open-Meteo Historical Weather API** (`/v1/archive`, ERA5 reanalysis) — climate.
-  Deliberately the archive endpoint, not `/v1/climate`, which serves model projections.
-- **Open-Meteo Geocoding API** — place resolution and corpus fields.
-- **Open-Meteo Marine API** — coastal/inland test at corpus build time.
-- **Nager.Date** — public holidays.
-- **ChromaDB + `all-MiniLM-L6-v2`** — vector store and embeddings, entirely local.
-
-**Requires an API key** — the agent layer only:
-
-- **`ANTHROPIC_API_KEY`** — required. The LLM (`claude-haiku-4-5`). Without it the app
-  fails at startup.
-- **`GEOAPIFY_API_KEY`** — optional. POI enrichment. Without it the agent still returns
-  climate and holidays, and reports travel features as unavailable.
-- **`LANGSMITH_API_KEY` / `LANGSMITH_TRACING` / `LANGSMITH_PROJECT`** — optional tracing.
-
----
-
-## Running it
-
-**Python 3.13, Windows.** Packages, from the actual imports:
-
-```powershell
-pip install deepagents langchain-anthropic chainlit chromadb requests truststore python-dotenv
+pip install -r requirements.txt
+cp .env.example .env   # then fill in your real CEREBRAS_API_KEY
+python agent.py
 ```
 
-Create `destination_agent/.env` — **gitignored, so it must be created locally**. Variable
-names only:
+## Known limitations
+- **Ambiguous requests with no country/city mentioned** (e.g. "Do I tip for
+  room service?") may return an error rather than the agent stating an
+  assumption and picking a reasonable default, even though the system
+  prompt's rule 6 calls for the latter. Not yet fixed -- worth revisiting
+  the prompt wording if this agent gets picked back up.
+- **Exchange rate dates may lag a few days on weekends/holidays** -- this
+  reflects the European Central Bank's actual publishing schedule via
+  Frankfurter, not stale or broken data.
+- **Semantic search only knows what's written in its own corpus.** Geography
+  was added specifically so phrasing like "south of the US border" can
+  resolve correctly, but coverage is limited to the borders/regions
+  actually written into `GEOGRAPHY` -- it has no general world knowledge
+  beyond that text. Confirmed working for the Mexico/US case; other
+  geographic phrasing may still miss depending on wording.
+- **The local ChromaDB cache can go stale after editing the corpus,
+  despite the fingerprint check meant to auto-invalidate it.** Hit once
+  during this session (geography was added, but the old index kept being
+  served) -- fixed by manually deleting the `money_customs_chroma_db`
+  folder to force a full rebuild. Worth deleting that folder if search
+  results ever look like they're ignoring a recent data change.
+- **`get_comparative_context`'s currency-to-home-country inference only
+  covers 5 unambiguous currencies** (USD, JPY, INR, MXN, MAD). EUR is
+  deliberately excluded, since this data covers both France and Germany --
+  guessing between them from "EUR" alone would be a real guess, not a
+  reasonable assumption. Any other currency also skips the comparison
+  rather than guess.
+- **Cohere (the current LLM provider) intermittently returns odd
+  responses** -- either an empty 200-status response (raw `ApiError`), or
+  occasionally a generic refusal ("I'm sorry, I can't help you with that
+  request") to a perfectly ordinary question it answers correctly on
+  other runs. Confirmed to happen even when run as a plain `.py` file (not
+  just in one-line shell commands, which rules out shell-quoting as the
+  cause). Retrying the same question has resolved it every time so far;
+  worth wrapping in a retry loop if this becomes disruptive.
+- **Geography text must never name an unsupported neighboring country.**
+  Found and fixed during testing: Philippines' geography originally said
+  "east of Vietnam" -- since Vietnam isn't itself one of our destinations,
+  asking about Vietnam matched the Philippines' document purely because
+  it contained the literal word "Vietnam," not because of genuine
+  similarity, and returned Philippines' customs with false confidence
+  instead of correctly saying "not found." Fixed by only naming
+  neighboring countries that are themselves in `MONEY_CUSTOMS_FACTS`;
+  every other neighbor is now described generically (region/coastline)
+  instead of by name. Worth re-checking this rule any time a new country
+  is added.
+- **Provider history, for context:** this agent has run on Cerebras
+  (hit a one-time trial-credit wall, not a daily reset), OpenRouter (free
+  models require a purchase-history that this account didn't have), and
+  now Cohere (currently working, 1,000 free calls/month). Worth knowing if
+  picking this back up and the current provider stops working too.
+- **Untested:** malformed currency codes, live API failures (Frankfurter or
+  World Bank being down/slow), and service names outside the four defined
+  in `by_service` (restaurants, taxis, hotel_housekeeping, tour_guides).
 
+## Example
+```python
+from agent import answer
+
+answer(
+    "I'm traveling from the USA to France. What's the current exchange "
+    "rate, should I tip at restaurants and hotels, and what's the general "
+    "price scale like there?"
+)
 ```
-ANTHROPIC_API_KEY=
-GEOAPIFY_API_KEY=
-LANGSMITH_API_KEY=
-LANGSMITH_TRACING=false
-LANGSMITH_PROJECT=destination-agent
+
+Running `python agent.py` directly executes a hello-world check followed by
+this exact scenario, so you can confirm the whole pipeline works end to end
+without writing any extra code.
+
+## Reusing just the tools (no agent needed)
+`money_tools.py` has no dependency on deepagents, Cerebras, or any agent
+framework -- it's three plain Python functions with type hints and
+docstrings. Any teammate's agent, in any framework, can do:
+
+```python
+from money_tools import get_exchange_rate, get_money_customs, get_income_context
 ```
 
-Launch the UI **from the repo root** — the agent uses package-absolute imports
-(`destination_agent.*`, `destination_data.*`) which only resolve from there:
-
-```powershell
-chainlit run app.py
-```
-
-Opens `http://localhost:8000`. To run the agent headless instead:
-
-```powershell
-python -m destination_agent.destination_agent
-```
-
-**First run** downloads the ~80 MB MiniLM embedding model to `~/.cache/chroma` and builds
-the Chroma index under `destination_data/chroma_db/`, so the first preference query is
-slow. Both are cached afterwards, and `chroma_db/` is gitignored because it rebuilds
-itself — the corpus text is SHA-256 fingerprinted, so editing `destinations.json`
-re-embeds automatically.
-
-### truststore
-
-Every file that makes network calls runs `import truststore; truststore.inject_into_ssl()`
-**before** importing `requests`. This network intercepts HTTPS with a certificate Windows
-trusts but Python does not; without the injection, calls hang about five minutes and then
-fail with no useful error. It is not optional on this network.
-
----
-
-## Known issues and limitations
-
-**The agent is stateless.** Every call builds a fresh single-message list, so there is no
-conversation memory. Follow-ups like *"what about Thailand instead?"* arrive with no
-context and are treated as new requests. This particularly affects the low-confidence
-flow: the agent asks *"which preference matters most?"*, but the answer comes back with no
-memory of the question. Fixing it means passing message history into `agent.invoke`.
-
-**Medical and health queries route through the RAG** rather than deferring to an
-authoritative source. Asked about vaccinations or health risks, the agent answers from
-retrieved destination text instead of pointing at CDC/WHO. There is no medical guardrail.
-
-**Geoapify sometimes mislabels inland cities.** Category radius searches can return
-beaches or dive centres for a landlocked place — Paris being the clearest case. The POIs
-are real records, but their relevance to the named city is not verified.
-
-**Holidays are unavailable for some countries.** Nager.Date covers 204 countries;
-Thailand and Fiji, among others, are not included. `get_holidays` returns an error dict —
-treat "no holidays" as a normal outcome, not a failure to retry.
-
-**`match_score` is semantic similarity, not quality.** It measures text closeness and is
-meaningful only as a relative rank; values cluster around 0.3–0.5 even for good matches.
-It is never a rating of how good a destination is.
-
-**Recommendations are limited to the corpus** (51 entries). Named cities via
-`resolve_place` are not — that path is worldwide.
-
-**The corpus grows at runtime.** `expand_rag_corpus.py` writes newly queried destinations
-into `destinations.json`. Four entries arrived this way — Aruba, Seychelles, Fiji, and
-Tokyo, the last added during a live demo. Useful, but it means the committed corpus can
-change from ordinary use, and `build_corpus.py` must not clobber it (see changelog).
-
----
-
-## Recent changes on this branch
-
-- **Climate months are now location-relative.** Rainfall is judged against the location's
-  own median month rather than a fixed millimetre threshold. The absolute rule made
-  `best_months` permanently empty for equatorial climates — Singapore's driest month is
-  ~101 mm — while flagging two thirds of the year as avoid. Temperature stays absolute
-  (`COMFORT_MIN_C` 15 °C, `HARD_COLD_C` 8 °C) but no longer vetoes on its own, and
-  `avoid_months` is capped at 4 so it can never be most of the year.
-- **`build_corpus.py` is non-destructive.** A rebuild preserves `rag_text` and
-  `geoapify_profile` written by the agent layer, and carries over runtime-added entries
-  instead of deleting them.
-- **Dynamic entries are field-complete (prototype).** Runtime-added destinations now get
-  real `_source_fields` and a composed description, reusing `build_corpus.py`'s fetchers,
-  instead of the placeholder `"<name> is a travel destination."`
-- **truststore and path fixes in the agent scripts.** `geoapify_data.py` now injects
-  truststore before `requests`; `enrich_rag_corpus.py` and `expand_rag_corpus.py` resolve
-  the corpus path from `__file__` rather than the working directory, so they work from any
-  directory.
-- **Chainlit UI added** (`app.py`).
+and register them as tools directly, without needing this repo's agent,
+model choice, or system prompt at all.

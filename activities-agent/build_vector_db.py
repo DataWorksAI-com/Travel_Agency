@@ -12,6 +12,13 @@ description) and re-running this script — no code changes needed.
 
 Run once to (re)build the DB, or any time a city file changes:
     python build_vector_db.py
+
+Offline mode: set ACTIVITIES_OFFLINE_TEST=true to build the index
+with a deterministic, no-download embedding function instead of
+Chroma's default (which needs a one-time ~80MB model download and
+therefore fails with no internet access). This writes to a separate
+DB path/collection so it never mixes with real embeddings — see
+offline_embedding.py and run_tests_offline.py.
 """
 
 import json
@@ -19,8 +26,12 @@ import glob
 import os
 import chromadb
 
-DB_PATH = "./chroma_db"
-COLLECTION_NAME = "activities"
+from offline_embedding import OfflineFakeEmbeddingFunction
+
+OFFLINE_MODE = os.environ.get("ACTIVITIES_OFFLINE_TEST", "").lower() in ("1", "true", "yes")
+
+DB_PATH = "./chroma_db_offline" if OFFLINE_MODE else "./chroma_db"
+COLLECTION_NAME = "activities_offline" if OFFLINE_MODE else "activities"
 DOCS_DIR = os.path.join(os.path.dirname(__file__), "local_activity_docs")
 
 
@@ -45,8 +56,11 @@ def build_collection():
     except Exception:
         pass
 
+    embedding_function = OfflineFakeEmbeddingFunction() if OFFLINE_MODE else None
+
     collection = client.create_collection(
         name=COLLECTION_NAME,
+        embedding_function=embedding_function,
         metadata={"description": "Multi-city activities/attractions for the Travel Agent capstone"},
     )
 
@@ -67,7 +81,8 @@ def build_collection():
     )
 
     cities = sorted(set(city for city, _ in entries))
-    print(f"Loaded {len(entries)} activities across {len(cities)} cities into Chroma collection '{COLLECTION_NAME}' at {DB_PATH}")
+    mode_note = " (offline / fake embedder)" if OFFLINE_MODE else ""
+    print(f"Loaded {len(entries)} activities across {len(cities)} cities into Chroma collection '{COLLECTION_NAME}' at {DB_PATH}{mode_note}")
     print(f"Cities: {', '.join(cities)}")
     return collection
 
