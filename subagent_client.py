@@ -28,6 +28,7 @@ is a one-line change in orchestrator_config.py, not a rewrite.
 """
 
 import asyncio
+import inspect
 from abc import ABC, abstractmethod
 from typing import Callable
 
@@ -94,6 +95,19 @@ class LocalFunctionClient(SubagentClient):
 
     async def call(self, task: str) -> str:
         try:
+            # Activities' answer() is a native coroutine function; every
+            # other subagent's is an ordinary blocking function. Await the
+            # first directly, and push the second to a worker thread so a
+            # slow subagent doesn't stall the event loop the other parallel
+            # calls are sharing.
+            #
+            # The coroutine branch is not just a tidiness fix: wrapping an
+            # async answer() in asyncio.run() (as orchestrator_config used
+            # to) raises RuntimeError when a loop is already running, which
+            # is always true here -- _run_parallel_subagents() calls this
+            # from inside asyncio.gather().
+            if inspect.iscoroutinefunction(self._answer_fn):
+                return await self._answer_fn(task)
             return await asyncio.to_thread(self._answer_fn, task)
         except Exception as exc:  # a transport-agnostic client never raises
             return f"[subagent error] {exc}"
