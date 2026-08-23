@@ -1,0 +1,7 @@
+deepagents
+python-dotenv
+langchain-openrouter
+chromadb
+mcp
+langchain-mcp-adapters
+requests
