@@ -37,7 +37,7 @@ if str(REPO_ROOT) not in sys.path:
 import chainlit as cl
 
 from orchestrator import plan_trip
-from ui.agent_seam import DUMMY, LABELS, REAL, install_seam
+from ui.agent_seam import DUMMY, FAILED, LABELS, REAL, install_seam
 from ui.request_parse import describe, parse_request
 
 WELCOME = (
@@ -70,6 +70,11 @@ EMPTY_MESSAGE = (
 MODE_LABEL = {
     REAL: "live agent",
     DUMMY: "sample data",
+    # An outcome, not a configurable mode -- a slot set to REAL whose agent
+    # could not be reached. Labelled distinctly from "sample data" because
+    # the difference is the whole point: sample data was asked for, this was
+    # not. The step body carries the cause.
+    FAILED: "NOT CONNECTED",
 }
 
 
@@ -123,10 +128,20 @@ AGENT_MODES = install_seam(after=_on_agent_done)
 
 
 def _modes_summary() -> str:
+    """What each slot is CONFIGURED as -- not what it will manage to do.
+
+    A slot configured `real` still reports NOT CONNECTED at run time if
+    its agent cannot be reached, so this list is an intent, not a
+    promise. The per-agent steps are the record of what actually ran.
+    """
     lines = []
     for slot, label in LABELS.items():
         mode = AGENT_MODES.get(slot, DUMMY)
         lines.append(f"- {label}: {MODE_LABEL.get(mode, mode)}")
+    lines.append(
+        "\nConfigured, not confirmed -- a `live agent` slot still reports "
+        "**NOT CONNECTED** if it cannot be reached. Watch the per-agent steps."
+    )
     return "\n".join(lines)
 
 

@@ -12,19 +12,32 @@ rebind the module attribute `orchestrator.get_client`. Emily's
 orchestrator_config.py is NOT edited; its builders are still what produce a
 real client, reached here through its own public get_client().
 
-Why the UI can't just use orchestrator_config.get_client unchanged: it has
-two error-string escape hatches, and either would land in the browser as
-text that reads like a crash --
+What this seam does NOT do, deliberately: it does not hide a failed agent
+behind sample data. It used to. The layers below have two error-string
+escape hatches --
 
     orchestrator_config.py:130   "[{name} unavailable] {error_message}"   build failed
     subagent_client.py:98        "[subagent error] {exc}"                 call failed
 
-For a work-in-progress demo those are the wrong impression. "Flights:
-sample data" reads as not-wired-yet; "Flights: [subagent error] No module
-named 'deepagents'" reads as broken. So this seam catches both shapes and
-falls back to that slot's deterministic stand-in.
+-- and this seam used to catch both and substitute that slot's stand-in, so
+the browser never showed an error. That was the right call for a demo where
+nothing should look broken. It is the wrong call for THIS UI, whose job is
+to connect the orchestrator to live agents and show which ones actually
+ran. Substituting plausible prose for the one honest signal the stack
+produces means a complete, believable itinerary can be assembled entirely
+from agents that never executed -- the hazard HANDOFF.md called "the one
+thing most likely to mislead someone".
 
-Swapping one agent from stand-in to real is a config change here and
+So a REAL slot that fails now reports FAILED and says so in the UI, with
+the cause. The orchestrator already tolerates this: it never raises, and
+_assemble_itinerary passes whatever came back straight through
+(ORCHESTRATOR_DESIGN.md #4), so an honest failure string breaks nothing
+that a stand-in was protecting.
+
+DUMMY is still here, but it is now an EXPLICIT CHOICE for a key-free demo,
+never an automatic fallback. Nothing silently becomes a stand-in.
+
+Swapping one agent between real and stand-in is a config change here and
 nowhere else -- see MODES below and UI_BUILD_REPORT.md.
 """
 
@@ -89,12 +102,20 @@ from sandbox import fakes  # noqa: E402  deterministic stand-ins, prose left as-
 # deliberate future change here, not a config flip.
 #
 # THE SWAP: flip one value to REAL (or set TRAVEL_UI_AGENTS, below). No UI
-# edit, no orchestrator edit. Anything not connected stays on DUMMY, which
-# is why the browser never shows an error string.
+# edit, no orchestrator edit. A slot left on DUMMY shows stand-in content
+# because that was chosen; a slot set to REAL shows either the live agent
+# or an honest "not connected" with its cause. What it never shows is a
+# stand-in standing in for a failure.
 # ---------------------------------------------------------------------------
 
 REAL = "real"
 DUMMY = "dummy"
+
+# Not a selectable mode -- an OUTCOME. Nothing can be configured to FAILED;
+# it is what a REAL slot reports when its agent could not be reached. Kept
+# distinct from DUMMY so the UI can say "not connected" rather than
+# implying a stand-in was chosen on purpose.
+FAILED = "failed"
 
 MODES: dict[str, str] = {
     "destination": DUMMY,
@@ -131,6 +152,43 @@ _BUDGET_DUMMY = (
 
 def _dummy_reply(slot: str) -> str:
     return fakes.REPLIES.get(slot, _BUDGET_DUMMY)
+
+
+def _extract_cause(reply) -> str:
+    """Pull the human-useful cause out of a layered error string.
+
+    The shapes below wrap the real cause in a bracketed tag that names the
+    layer, not the problem:
+
+        "[flights unavailable] No module named 'deepagents'"
+        "[subagent error] Rate limit exceeded: free-models-per-day"
+
+    The tag is noise to a reader and, more practically, keeping it would put
+    the literal text "unavailable]" into the assembled itinerary, which is
+    exactly the internal-leakage that verify_seam.py checks for. So the tag
+    is stripped and only the cause is surfaced.
+    """
+    if not isinstance(reply, str) or not reply.strip():
+        return "the agent returned an empty reply"
+    text = reply.strip()
+    if text.startswith("[") and "]" in text:
+        text = text.split("]", 1)[1].strip()
+    return text or "no cause reported"
+
+
+def _failure_reply(slot: str, cause: str) -> str:
+    """What a failed REAL slot puts in front of the user.
+
+    Written to be unmistakable in an itinerary full of prose: it must not
+    read as a result. It says the agent did not run, and it carries the
+    cause, because the cause is usually the entire actionable content --
+    a missing dep, an absent key, a spent quota.
+    """
+    label = LABELS.get(slot, slot.title())
+    return (
+        f"Not connected -- the {label} agent did not run, so there is no "
+        f"real data for this section.\nCause: {cause}"
+    )
 
 
 def resolve_modes(overrides: dict[str, str] | None = None) -> dict[str, str]:
@@ -171,9 +229,10 @@ def _looks_like_error(reply) -> bool:
 class SeamClient:
     """Implements the SubagentClient interface: await call(task) -> str.
 
-    Never raises and never returns an error string -- an unreachable real
-    agent degrades to its stand-in, and the caller is told which actually
-    happened via `after`, so the UI can label it honestly.
+    Never raises. An unreachable REAL agent does NOT degrade to a stand-in:
+    it reports FAILED with its cause, so the UI can say "not connected"
+    rather than showing sample data that reads like a result. The caller
+    learns which of the three outcomes happened via `after`.
     """
 
     def __init__(self, slot: str, mode: str, before=None, after=None):
@@ -194,14 +253,14 @@ class SeamClient:
             self._real = get_client(self.slot)
         return self._real
 
-    def _log_fallback(self, why: str) -> None:
-        """The browser gets the stand-in; the terminal gets the truth.
+    def _log_failure(self, why: str) -> None:
+        """The browser gets the short cause; the terminal gets the traceback.
 
-        Degrading silently is how a genuinely broken agent hides behind
-        plausible-looking sample data, so every fallback is announced here
-        even though nothing about it reaches the UI.
+        The UI line is deliberately one sentence, so an itinerary stays
+        readable. The full traceback still goes to the terminal, since that
+        is where someone debugging a dep or key problem is looking.
         """
-        print(f"[seam] {self.slot}: falling back to stand-in -- {why}", flush=True)
+        print(f"[seam] {self.slot}: NOT CONNECTED -- {why}", flush=True)
         if sys.exc_info()[0] is not None:
             traceback.print_exc()
 
@@ -211,21 +270,28 @@ class SeamClient:
         if self._before is not None:
             await self._before(self.slot, self.mode, task)
 
-        effective = self.mode
-        reply = None
-
-        if self.mode == REAL:
+        # DUMMY is a choice, so it is honoured without ever touching the
+        # real client. REAL means real: it either succeeds or it reports
+        # why not. There is no path from REAL to a stand-in.
+        if self.mode == DUMMY:
+            effective, reply = DUMMY, _dummy_reply(self.slot)
+        else:
             try:
-                reply = await self._real_client().call(task)
-            except Exception:
-                self._log_fallback("call raised")
-                reply = None
-            if _looks_like_error(reply):
-                self._log_fallback(f"error-shaped reply: {str(reply)[:120]}")
-                reply, effective = None, DUMMY
-
-        if reply is None:
-            reply, effective = _dummy_reply(self.slot), DUMMY
+                raw = await self._real_client().call(task)
+            except Exception as exc:
+                # subagent_client already promises not to raise, so this is
+                # the belt-and-braces path -- a client that broke its own
+                # contract still must not take the whole run down.
+                self._log_failure(f"call raised: {type(exc).__name__}: {exc}")
+                effective = FAILED
+                reply = _failure_reply(self.slot, f"{type(exc).__name__}: {exc}")
+            else:
+                if _looks_like_error(raw):
+                    cause = _extract_cause(raw)
+                    self._log_failure(cause)
+                    effective, reply = FAILED, _failure_reply(self.slot, cause)
+                else:
+                    effective, reply = REAL, raw
 
         if self._after is not None:
             await self._after(self.slot, effective, task, reply)
