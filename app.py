@@ -104,7 +104,7 @@ def _as_text(value):
     return str(value)
 
 
-async def _on_agent_done(slot, effective_mode, task, reply):
+async def _on_agent_done(slot, effective_mode, task, reply, elapsed):
     """Seam `after` hook: render one finished agent as a Chainlit step.
 
     The step is opened and closed inside this coroutine rather than spanning
@@ -117,7 +117,14 @@ async def _on_agent_done(slot, effective_mode, task, reply):
     label = LABELS.get(slot, slot.title())
     suffix = MODE_LABEL.get(effective_mode, effective_mode)
 
-    async with cl.Step(name=f"{label} ({suffix})", type="tool") as step:
+    # The elapsed time is shown because the mode label alone cannot be
+    # trusted as evidence: `live agent` is what the slot was CONFIGURED as,
+    # while the duration is what actually happened. Sample data returns in
+    # ~0.0s; a real agent cannot. Reading the two together is how someone
+    # watching the demo tells a live answer from a plausible-looking one.
+    async with cl.Step(
+        name=f"{label} ({suffix}, {elapsed:.1f}s)", type="tool"
+    ) as step:
         step.input = task
         step.output = _as_text(reply)
 

@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -270,6 +271,15 @@ class SeamClient:
         if self._before is not None:
             await self._before(self.slot, self.mode, task)
 
+        # Wall-clock around the whole branch, including _real_client()'s
+        # lazy build. This is the one piece of evidence the UI can show that
+        # a stand-in cannot fake: _dummy_reply is a dict lookup and returns
+        # in microseconds, while any real agent has to cross a network or a
+        # local model. A "live agent" badge is a claim about configuration;
+        # this is a measurement of what happened. perf_counter, not time(),
+        # because it is monotonic and immune to a clock adjustment mid-call.
+        started = time.perf_counter()
+
         # DUMMY is a choice, so it is honoured without ever touching the
         # real client. REAL means real: it either succeeds or it reports
         # why not. There is no path from REAL to a stand-in.
@@ -293,8 +303,10 @@ class SeamClient:
                 else:
                     effective, reply = REAL, raw
 
+        elapsed = time.perf_counter() - started
+
         if self._after is not None:
-            await self._after(self.slot, effective, task, reply)
+            await self._after(self.slot, effective, task, reply, elapsed)
 
         return reply
 
@@ -302,9 +314,12 @@ class SeamClient:
 def install_seam(before=None, after=None, overrides=None) -> dict[str, str]:
     """Route every orchestrator slot through SeamClient. Returns the modes.
 
-    `before(slot, mode, task)` and `after(slot, effective_mode, task, reply)`
-    are optional async hooks -- how the UI gets per-agent visibility without
-    the UI knowing anything about real-vs-dummy.
+    `before(slot, mode, task)` and
+    `after(slot, effective_mode, task, reply, elapsed)` are optional async
+    hooks -- how the UI gets per-agent visibility without the UI knowing
+    anything about real-vs-dummy. `elapsed` is wall-clock seconds for the
+    call; it is passed positionally, so an `after` written against the old
+    four-argument shape raises TypeError rather than silently dropping it.
     """
     import orchestrator
 

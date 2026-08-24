@@ -88,7 +88,12 @@ async def run_case(
     """
     observed: list[tuple[str, str, str]] = []
 
-    async def after(slot, effective_mode, task, reply):
+    async def after(slot, effective_mode, task, reply, elapsed):
+        # `elapsed` is recorded but not asserted on: this harness runs
+        # unconnected agents, so a duration here proves nothing. It is
+        # accepted explicitly so the signature stays in lockstep with
+        # app.py's hook -- if the seam's contract changes again, both
+        # callers fail loudly instead of only the browser one.
         observed.append((slot, effective_mode, reply))
 
     prior = os.environ.get(ENV_VAR)
@@ -187,13 +192,29 @@ async def main() -> int:
     #       retrieval-only when the Ollama tag at that file's line 36 is not
     #       pulled -- still REAL, the seam only cares that it came back
     #       usable, not which internal path produced it.
-    #   flights -> FAILED, but NOT because it is unconnected. It is wired and
-    #       working (flights_agent.py:184 pins a free OpenRouter model). It
-    #       fails only while the free tier's daily quota is spent:
-    #       "[subagent error] Rate limit exceeded: free-models-per-day".
-    #       So this entry is QUOTA-DEPENDENT and will legitimately flip to
-    #       REAL when the quota resets. If it fails here, read the [seam]
-    #       line above before assuming a regression.
+    #   flights -> REAL. FLIPPED FROM FAILED on 2026-08-24. It was never
+    #       unconnected: flights_agent.py:184 pins a free OpenRouter model,
+    #       and the old FAILED entry only recorded a spent daily quota
+    #       ("Rate limit exceeded: free-models-per-day"). The quota reset and
+    #       it now returns real Travelpayouts data -- verified live returning
+    #       "AA: $256, 7h 33m, 2 stops, arrives AUA (widened-month data)",
+    #       which matches the line format built at flights_agent.py:157.
+    #       Still QUOTA-DEPENDENT in the other direction: if this reports
+    #       FAILED, read the [seam] cause line before assuming a regression,
+    #       because a spent quota and a broken wiring look identical here.
+    #
+    #   activities -> deliberately NOT asserted, though it IS live as of
+    #       2026-08-24. Its default model (activities_agent.py:419,
+    #       openrouter:z-ai/glm-5.2) asks for 65536 max_tokens and is refused
+    #       on a low OpenRouter balance, so reaching it needs
+    #       DEEP_AGENT_MODEL=openrouter:openrouter/free in the environment.
+    #       This harness pins TRAVEL_UI_AGENTS but deliberately does not pin
+    #       DEEP_AGENT_MODEL, so asserting activities here would make the
+    #       result depend on an ambient var and on spending credit. It is
+    #       verified by direct probe instead. Note also that when it does
+    #       run, it correctly reports having no Aruba data -- its corpus
+    #       covers only boston/chicago/kyoto/new_york/paris/rome. Live is
+    #       not the same as useful, and this file should not imply it is.
     #
     #   restaurants -> REAL: went live on the local Ollama RAG path
     #       (restaurant_agent/restaurant_agent_ollama.py). THIS ENTRY FAILS
@@ -215,7 +236,7 @@ async def main() -> int:
     EXPECTED_MODES = {
         "destination": FAILED,
         "restaurants": REAL,
-        "flights": FAILED,
+        "flights": REAL,
     }
     for slot, expected in EXPECTED_MODES.items():
         actual = forced.get(slot)
@@ -235,7 +256,11 @@ async def main() -> int:
     # failure text" on purpose: the failure text carries a cause that
     # differs per environment (missing dep here, spent quota there), so
     # pinning the exact string would make this fail for the wrong reason.
-    for slot in ("destination", "flights"):
+    # Only slots EXPECTED_MODES marks FAILED belong here: these two checks
+    # assert failure-shaped output, so running them over a live slot would
+    # fail for the wrong reason. Derived from the map rather than hardcoded,
+    # so flipping a slot above cannot leave this list contradicting it.
+    for slot in [s for s, m in EXPECTED_MODES.items() if m == FAILED]:
         reply = next((r for s, _, r in observed2 if s == slot), "")
         check(
             f"{slot}: unreachable agent did NOT silently become a stand-in",
