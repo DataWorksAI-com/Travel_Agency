@@ -86,7 +86,7 @@ async def _run_parallel_subagents(task: str, money_context: str) -> dict:
     }
 
 
-def _build_budget_task(destination_result: str, parallel_results: dict, stated_budget: str) -> str:
+def _build_budget_task(task: str, destination_result: str, parallel_results: dict, stated_budget: str) -> str:
     """Turn the other subagents' free-text replies into the line-item
     format Budget's tools actually expect (aggregate_costs wants a list
     of {"category", "name", "cost"} dicts).
@@ -106,6 +106,17 @@ def _build_budget_task(destination_result: str, parallel_results: dict, stated_b
     Neither is implemented below -- this is a placeholder pass-through.
     """
     return (
+        # The traveller's own words, first. Without this, Budget received
+        # the stated budget and the other subagents' prose but never the
+        # request itself, so it could not know trip length, party size or
+        # dates. On "Plan a week in Aruba from Boston, budget $3000" it
+        # costed THREE DAYS and reported "Assumed 3 days (a reasonable
+        # default when not specified)" -- correct reasoning over inputs
+        # that had the duration stripped out of them. Every other subagent
+        # already receives `task` (_run_destination at :163,
+        # _run_parallel_subagents at :165); Budget was the only one that
+        # did not.
+        f"Traveler's request: {task}\n\n"
         f"Budget: {stated_budget}\n\n"
         f"Destination info: {destination_result}\n\n"
         f"Flights: {parallel_results['flights']}\n\n"
@@ -164,7 +175,7 @@ async def plan_trip(
 
     parallel_results = await _run_parallel_subagents(task, money_context)
 
-    budget_task = _build_budget_task(destination_result, parallel_results, stated_budget)
+    budget_task = _build_budget_task(task, destination_result, parallel_results, stated_budget)
     budget_result = await _run_budget(budget_task)
 
     return _assemble_itinerary(destination_result, parallel_results, budget_result)
