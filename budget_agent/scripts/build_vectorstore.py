@@ -30,8 +30,16 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 from budget_agent.data import CITY_COST_DOCS
 
-PERSIST_DIR = str(Path(__file__).resolve().parent.parent / "chroma_db")
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+# Imported, not redeclared. These were defined independently here and in
+# budget_agent/tools/rag_tools.py, and they drifted: this file resolved
+# parent.parent -> budget_agent/chroma_db, while the reader resolves
+# parent.parent.parent -> <repo root>/chroma_db. The builder wrote to one
+# directory and the reader looked in the other, so a freshly built store
+# was invisible and rag_tools.py:34-37 raised "Vector store not found".
+# The module docstring above already says "persisted to ./chroma_db", so
+# the reader's path was the intended one and this file was off by a level.
+# Sharing the constant makes the two physically incapable of diverging again.
+from budget_agent.tools.rag_tools import EMBEDDING_MODEL, PERSIST_DIR
 
 
 def build_vectorstore() -> None:
