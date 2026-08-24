@@ -43,3 +43,5 @@ integration_test
 restaurant_db/
 Thumbs.db
 venv/
+verify_out.txt
+money_customs_chroma_db/
