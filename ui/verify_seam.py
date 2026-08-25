@@ -183,10 +183,15 @@ async def main() -> int:
     # changes -- that is the signal, not the noise. When one flips, update
     # the map and the reason, do not relax the check.
     #
-    #   destination -> FAILED: genuinely unconnected. Its builder needs
-    #       ANTHROPIC_API_KEY, absent by design on this path, so the real
-    #       call returns "[subagent error] Anthropic authentication failed".
-    #       That used to become a stand-in; it is now surfaced as a cause.
+    #   destination -> REAL. FLIPPED FROM FAILED on 2026-08-24, when the
+    #       ANTHROPIC_API_KEY arrived. Its builder constructs ChatAnthropic at
+    #       MODULE level (destination_agent.py:346), so without the key the
+    #       import itself fails and the slot reported a cause rather than
+    #       silently becoming a stand-in. With the key it returns real data --
+    #       verified live: Eagle Beach, Arikok National Park, and the 2026
+    #       Aruban public holidays incl. Betico Croes Day.
+    #       If this reports FAILED again, check the key before suspecting
+    #       the wiring.
     #   restaurants -> REAL: went live on the local Ollama RAG path
     #       (restaurant_agent/restaurant_agent_ollama.py). Note it answers
     #       retrieval-only when the Ollama tag at that file's line 36 is not
@@ -234,7 +239,7 @@ async def main() -> int:
     #       narrowing that except would make the seam's cause line accurate
     #       for this slot.
     EXPECTED_MODES = {
-        "destination": FAILED,
+        "destination": REAL,
         "restaurants": REAL,
         "flights": REAL,
     }
@@ -292,6 +297,56 @@ async def main() -> int:
         "restaurants: forced-dummy reply is the stand-in, not live data",
         reply3 == _dummy_reply("restaurants"),
         reply3.splitlines()[0][:60] if reply3 else "(empty)",
+    )
+
+    # -- Case 4: the failure path, tested WITHOUT depending on anything being
+    #    broken. Previously the "a failed slot must not become a stand-in"
+    #    assertions only ran over whichever slots EXPECTED_MODES happened to
+    #    mark FAILED. Every slot is now reachable, so that list is empty and
+    #    those checks would silently stop running -- the harness would keep
+    #    reporting all-clear while no longer testing the one guarantee it
+    #    exists for.
+    #
+    #    So force the failure instead of waiting for one: replace the real
+    #    client for a single slot with one that raises. That exercises
+    #    SeamClient.call's except branch (agent_seam.py:281-287) on demand and
+    #    stays meaningful no matter which agents are live. Costs no API calls.
+    rule("CASE 4 -- a forced failure must report NOT CONNECTED, never a stand-in")
+
+    import orchestrator_config
+
+    class _Exploding:
+        async def call(self, task: str) -> str:
+            raise RuntimeError("simulated transport failure")
+
+    real_get_client = orchestrator_config.get_client
+    orchestrator_config.get_client = (
+        lambda name: _Exploding() if name == "flights" else real_get_client(name)
+    )
+    try:
+        final4, observed4, modes4 = await run_case(
+            request, {"flights": REAL}, env=None
+        )
+    finally:
+        orchestrator_config.get_client = real_get_client
+
+    report(request, modes4, final4, observed4)
+    mode4 = next((m for s, m, _ in observed4 if s == "flights"), None)
+    reply4 = next((r for s, _, r in observed4 if s == "flights"), "")
+    check(
+        "flights: a raising client reports FAILED, not real and not dummy",
+        mode4 == FAILED,
+        f"got '{mode4}'",
+    )
+    check(
+        "flights: forced failure did NOT become the stand-in",
+        reply4 != _dummy_reply("flights"),
+        reply4.splitlines()[0][:60] if reply4 else "(empty)",
+    )
+    check(
+        "flights: forced-failure reply says not connected and carries the cause",
+        "Not connected" in reply4 and "simulated transport failure" in reply4,
+        reply4.splitlines()[0][:60] if reply4 else "(empty)",
     )
 
     # -- Case 4 used to check the envelope agent's refusal prose via
