@@ -1,4 +1,56 @@
+# Travel Agency — multi-agent RAG travel planner
+
+Six agents (Destination, Flights, Restaurants, Activities, Budget, Money &
+Customs) coordinated by an orchestrator and served through a Chainlit chat UI.
+
+## Run the UI
+
+```powershell
+chainlit run app.py -w
+```
+
+No keys and no vector stores needed for the default path — every slot starts on
+a deterministic stand-in. Turn real agents on one at a time.
+
+## Connecting and disconnecting real agents
+
+One environment variable, no code change:
+
+```powershell
+$env:TRAVEL_UI_AGENTS = "flights=real,restaurants=real"
+```
+
+Slots: `destination`, `flights`, `restaurants`, `activities`, `budget`,
+`money_customs`. Modes: `real` and `dummy`. Omit a slot and it stays on
+`dummy`. The "Agents currently connected" message on open tells you what was
+actually accepted.
+
+**A slot set to `real` that cannot be reached reports `NOT CONNECTED` with the
+cause — it never silently shows sample data.** Each step header also carries
+elapsed time, which is the real evidence: a stand-in returns in `0.0s`, a live
+agent cannot.
+
+## Where things live
+
+| Document | What it covers |
+|---|---|
+| [`RUNNING_THE_UI.md`](RUNNING_THE_UI.md) | **Start here.** Running it, switching your agent on, proving it ran, reading failures. §3b has a verified known-good configuration. |
+| [`UI_STATUS.md`](UI_STATUS.md) | What is live, what is blocked, and on what |
+| [`ENVIRONMENT.md`](ENVIRONMENT.md) | Every environment variable, with `file:line` |
+| [`ORCHESTRATOR_DESIGN.md`](ORCHESTRATOR_DESIGN.md) | The orchestrator's open design decisions |
+| `app.py`, `ui/` | The Chainlit UI and the real-vs-stand-in seam |
+| `orchestrator.py`, `orchestrator_config.py`, `subagent_client.py` | Sequencing, slot registry, transport |
+
+Each agent has its own README in its own directory.
+
+---
+
 # Money & Customs Agent
+
+> The rest of this file documents the Money & Customs agent specifically. It
+> became the repository README in `0798e35`, which replaced the previous
+> project-level README; the orientation above restores that without removing
+> anything. Worth moving this into its own file at some point.
 
 ## What it does
 Gives a traveller four things in one answer: the live exchange rate between
