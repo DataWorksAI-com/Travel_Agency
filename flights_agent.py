@@ -181,7 +181,7 @@ flights_subagent = {
         "user — your job is to hand back clean facts, not a finished answer."
     ),
     "tools": [get_airport_code, search_flights],
-    "model": "openrouter:openrouter/free",
+    "model": "openrouter:meta-llama/llama-3.3-70b-instruct",
 }
 
 
