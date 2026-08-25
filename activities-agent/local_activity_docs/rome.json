@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Colosseum and Roman Forum Tour",
+    "category": "cultural",
+    "price_tier": "premium",
+    "description": "A guided tour through the ancient amphitheater and adjacent ruins of the Roman Forum."
+  },
+  {
+    "name": "Vatican Museums and Sistine Chapel",
+    "category": "art",
+    "price_tier": "premium",
+    "description": "A skip-the-line tour through the Vatican's art collections, ending at Michelangelo's Sistine Chapel ceiling."
+  },
+  {
+    "name": "Trastevere Evening Walk",
+    "category": "cultural",
+    "price_tier": "free",
+    "description": "A self-guided evening stroll through a cobblestone neighborhood known for its narrow streets and lively piazzas."
+  },
+  {
+    "name": "Villa Borghese Gardens",
+    "category": "outdoor",
+    "price_tier": "free",
+    "description": "A large landscaped park with lake views, sculpture-lined paths, and a panoramic terrace over the city."
+  },
+  {
+    "name": "Trevi Fountain and Spanish Steps Walk",
+    "category": "sightseeing",
+    "price_tier": "free",
+    "description": "A self-guided walking route past two of Rome's most iconic landmarks, best visited early morning or evening."
+  }
+]

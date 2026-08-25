@@ -1,0 +1,38 @@
+[
+  {
+    "name": "MoMA Guided Highlights Tour",
+    "category": "art",
+    "price_tier": "premium",
+    "description": "A docent-led tour through the Museum of Modern Art's most famous works, from Van Gogh to contemporary installations."
+  },
+  {
+    "name": "Top of the Rock Observation Deck",
+    "category": "sightseeing",
+    "price_tier": "premium",
+    "description": "Panoramic views of the Manhattan skyline and Central Park from the Rockefeller Center observation deck."
+  },
+  {
+    "name": "Ellis Island Immigration Museum Tour",
+    "category": "cultural",
+    "price_tier": "moderate",
+    "description": "A guided tour through the historic immigration processing center, with exhibits on the millions who passed through."
+  },
+  {
+    "name": "Central Park Bike Rental",
+    "category": "outdoor",
+    "price_tier": "moderate",
+    "description": "Rent a bike and explore Central Park's loop trail, lakes, and gardens at your own pace."
+  },
+  {
+    "name": "High Line Elevated Park Walk",
+    "category": "outdoor",
+    "price_tier": "free",
+    "description": "A self-guided walk along a converted elevated rail line, lined with gardens, art installations, and skyline views."
+  },
+  {
+    "name": "Broadway Show Ticket Package",
+    "category": "entertainment",
+    "price_tier": "premium",
+    "description": "Discounted same-week tickets to a rotating selection of Broadway musicals and plays."
+  }
+]

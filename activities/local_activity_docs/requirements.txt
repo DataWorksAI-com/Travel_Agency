@@ -1,0 +1,5 @@
+deepagents
+python-dotenv
+langchain-openrouter
+pip install langchain-ollama langchain-chroma chromadb
+pip install mcp httpx langchain-mcp-adapters
