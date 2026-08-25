@@ -107,37 +107,122 @@ message to confirm your value was accepted.**
 
 ---
 
+## 3b. A known-good configuration
+
+Verified end to end on 2026-08-24. Three agents live, all returning correct
+Aruba data, whole run about 24 seconds. If you want to see the pipeline working
+before you debug your own slot, start here.
+
+```powershell
+cd C:\path\to\Travel_Agency          # must be the repo root, see below
+.\.venv\Scripts\Activate.ps1
+python -c "import sys; print(sys.prefix)"   # must print your venv path
+
+Remove-Item Env:TRAVEL_UI_AGENTS -ErrorAction SilentlyContinue
+$env:TRAVEL_UI_AGENTS       = "restaurants=real,flights=real,budget=real"
+$env:RESTAURANT_AGENT_MODEL = "ollama:qwen2.5:7b"
+$env:DEEP_AGENT_MODEL       = "openrouter:openai/gpt-4o-mini"
+$env:OPENROUTER_MODEL       = "openai/gpt-4o-mini"
+
+chainlit run app.py -w
+```
+
+cmd.exe instead of PowerShell: use `activate.bat`, `set VAR=` to clear and
+`set VAR=value` to set. **`Activate.ps1` does nothing in cmd and prints no
+error** — it is how two diverged environments got created on this project.
+Always confirm with the `sys.prefix` line above.
+
+**Launch from the repository root.** Chainlit loads `.env` with
+`load_dotenv(os.path.join(os.getcwd(), ".env"))` (`chainlit/__init__.py:8`), so
+from any other directory your keys are silently absent.
+
+### Why each of those three model variables exists
+
+They are not decoration. Without them the pipeline looks broken for reasons
+that have nothing to do with anyone's agent.
+
+| Variable | Without it | Why |
+|---|---|---|
+| `RESTAURANT_AGENT_MODEL` | falls back to retrieval-only, no LLM | the default is `ollama:lfm2.5` (`restaurant_agent_ollama.py:96`) and most of us have `qwen2.5:7b` pulled instead |
+| `DEEP_AGENT_MODEL` | Activities refused on `max_tokens`, or returned empty | its default `openrouter:z-ai/glm-5.2` requests 65536 tokens, which a low OpenRouter balance rejects |
+| `OPENROUTER_MODEL` | Budget bills a paid Sonnet | the default is `anthropic/claude-sonnet-4.5` (`budget_agent/config.py:40`) |
+
+### Do not use the free model tier for the pipeline
+
+`openrouter/free` shares **one daily allowance** across every free-model call,
+and `orchestrator.py:76-80` fires Flights, Restaurants and Activities
+concurrently — so they race each other to exhaust it. Observed: all three
+returned *"Rate limit exceeded: free-models-per-day"* in a single run.
+
+Paid models have no daily cap and the cost is not the issue: **one full
+six-agent run measured $0.0039.** A $5 balance is roughly 1,250 runs.
+
+Model choice also affects correctness, not just speed. Same prompt, three runs
+of the flights slot:
+
+```
+llama-3.3-70b : "AA: $2411" / "no available flights" / "no cached data"  (9-15s)
+gpt-4o-mini   : "AA: $256, 7h 33m, 2 stops, arrives AUA"  x3             (4-5s)
+```
+
+llama was also inventing 2024 dates for a 2026 system clock. `gpt-4o-mini` is
+the current recommendation for every OpenRouter slot.
+
+---
+
 ## 4. ⚠️ The most important section: did my agent actually run?
 
 **Seeing a plan does not mean your agent ran.**
 
-If your agent can't start, the seam catches the failure and substitutes sample
-data. The itinerary still renders and still looks plausible. This is deliberate —
-it keeps a demo presentable — but it means **output is not evidence.**
-
-Two places to look, and you need both:
+This section changed. The seam **used to** absorb a failure and quietly show
+sample data in its place, which meant a complete, believable itinerary could be
+assembled entirely from agents that never executed. It no longer does that. A
+slot set to `real` that cannot be reached now says so, in the browser, with the
+cause. Nothing silently becomes a stand-in; `dummy` is only ever a choice.
 
 ### The step label
 
+Three outcomes, and the difference between the last two is the whole point:
+
 | Label | Meaning |
 |---|---|
-| `Flights (live agent)` | your agent ran and its words are on screen |
-| `Flights (sample data)` | a fixed string from `sandbox/fakes.py` — **your agent did not run** |
+| `Flights (live agent, 7.8s)` | your agent ran and its words are on screen |
+| `Flights (sample data, 0.0s)` | a fixed string from `sandbox/fakes.py` — **you asked for this** by leaving the slot on `dummy` |
+| `Flights (NOT CONNECTED, 4.4s)` | you asked for `real` and it **could not be reached** — the step body carries the cause |
 
-If you set `flights=real` and the step still says **(sample data)**, your agent
-failed. Go read the terminal.
+### The elapsed time is the evidence, not the label
+
+The label says how the slot was *configured*. The number says what actually
+happened, and a stand-in cannot fake it: `sandbox/fakes.py` is a dict lookup
+returning in **0.0s**, while a real agent has to cross a network or a local
+model and takes seconds. If a step ever claims `live agent` at `0.0s`, distrust
+it and tell Rohan.
+
+Real numbers from a working run, for calibration:
+
+```
+Flights      (live agent,  7.8s)     Destination     (sample data, 0.0s)
+Restaurants  (live agent,  7.0s)     Activities      (sample data, 0.0s)
+Budget       (live agent, 16.3s)     Money & Customs (sample data, 0.0s)
+```
 
 ### The terminal
 
-Every fallback is announced in the terminal where you ran `chainlit`, with the
+Every failure is announced in the terminal where you ran `chainlit`, with the
 cause:
 
 ```
-[seam] flights: falling back to stand-in -- error-shaped reply: [flights unavailable] 'TRAVELPAYOUTS_TOKEN'
+[seam] flights: NOT CONNECTED -- Rate limit exceeded: free-models-per-day
 ```
 
-plus a full traceback when there is one. The browser gets the stand-in; **the
-terminal gets the truth.** Keep it visible while you test.
+plus a full traceback when there is one. The browser gets one readable
+sentence; **the terminal gets the whole story.** Keep it visible while you test.
+
+**A failed slot stays failed until you restart.** `orchestrator_config.py:168`
+caches the broken client for the life of the process, so fixing a key or waiting
+out a quota changes nothing until you stop and relaunch `chainlit`. Likewise
+`TRAVEL_UI_AGENTS` is read once at import (`app.py:127`), so changing it in a
+running session has no effect.
 
 ---
 
@@ -147,9 +232,9 @@ Three message shapes, and they mean different things:
 
 | Shape | Where it comes from | What it means |
 |---|---|---|
-| `[<slot> unavailable] …` | `orchestrator_config.py:130` | your agent could not be **built** — usually a missing import or a key read at import time |
-| `[subagent error] …` | `subagent_client.py:98` | it built fine, then **raised during the call** |
-| `[subagent unreachable over SLIM] …` | `subagent_client.py:182` | the SLIM/A2A transport stub — not wired to anything live yet |
+| `[<slot> unavailable] …` | `orchestrator_config.py:166` | your agent could not be **built** — usually a missing import or a key read at import time |
+| `[subagent error] …` | `subagent_client.py:113` | it built fine, then **raised during the call** |
+| `[subagent unreachable over SLIM] …` | `subagent_client.py:197` | the SLIM/A2A transport stub — not wired to anything live yet |
 
 Common causes and the fix:
 
@@ -158,8 +243,11 @@ Common causes and the fix:
 | `No module named 'deepagents'` | `pip install deepagents` |
 | `No module named 'langchain'` | `pip install langchain` |
 | `No module named 'langchain_cohere'` | `pip install langchain-cohere` |
+| `No module named 'langchain_mcp_adapters'` | `pip install langchain-mcp-adapters` (Activities) |
+| `No module named 'langchain_chroma'` / `langchain_huggingface` | `pip install -r budget_agent/requirements.txt` (Budget) |
+| `Rate limit exceeded: free-models-per-day` | not a bug — stop using `openrouter/free`, see §3b |
 | `KeyError: 'TRAVELPAYOUTS_TOKEN'` | set the key — see §6 |
-| `No module named 'activities_agent'` | **known bug**, not yours to fix — see §7 |
+| `No module named 'activities_agent'` | **fixed** in `f23dc6f` — pull latest `ui_chainlit_rohan` |
 | `RuntimeError: No API key found` | set `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` |
 | a Chroma / vectorstore error | run that agent's build step first — see §6 |
 
@@ -190,12 +278,21 @@ the step people miss:
 |---|---|---|
 | `flights` | `TRAVELPAYOUTS_TOKEN` | — (deps already satisfied; a token is the only blocker) |
 | `destination` | `ANTHROPIC_API_KEY`; `GEOAPIFY_API_KEY` for Geoapify tools | ~80 MB embedding download on first corpus query |
-| `restaurants` | none by default | Ollama running with `lfm2.5`; ~80 MB embedding download |
-| `budget` | `ANTHROPIC_API_KEY` **or** `OPENROUTER_API_KEY` | **`python scripts/build_vectorstore.py` first** — hard error otherwise |
-| `activities` | `OPENROUTER_API_KEY`; `OPENTRIPMAP_API_KEY` for tier 3 | vector build; `python` on `PATH` for the MCP subprocess |
+| `restaurants` | none by default | Ollama running; set `RESTAURANT_AGENT_MODEL` to a tag you have actually pulled (`ollama list`) — the default `lfm2.5` is not the one most of us have |
+| `budget` | `ANTHROPIC_API_KEY` **or** `OPENROUTER_API_KEY` | `pip install -r budget_agent/requirements.txt`, then **`python budget_agent/scripts/build_vectorstore.py`** — hard error otherwise |
+| `activities` | `OPENROUTER_API_KEY`; `OPENTRIPMAP_API_KEY` for tier 3 | `pip install langchain-mcp-adapters`; set `DEEP_AGENT_MODEL` (see §3b) |
 | `money_customs` | `COHERE_API_KEY` | ~80 MB embedding download; index self-builds |
 
 Full detail, with `file:line` for every variable: [`ENVIRONMENT.md`](ENVIRONMENT.md).
+
+> **A key can make an agent worse.** With `OPENTRIPMAP_API_KEY` set, Activities
+> stops refusing unknown cities and starts answering them — but its geocode has
+> no country filter, so `name=Aruba` resolves to a town in **Italy**
+> (`country:"IT"`, Europe/Rome) and it returns Piedmont castles described as
+> Aruba attractions, then caches them to `local_activity_docs/aruba.json` so
+> every later query repeats it without re-querying. `name=Oranjestad` resolves
+> correctly to `AW`. Reported to Limeng/Jainam; until it is fixed, leaving that
+> key unset produces a more honest answer than setting it.
 
 ### You do not need everyone else's keys
 
