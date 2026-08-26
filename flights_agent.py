@@ -192,13 +192,6 @@ flights_subagent = {
         "user — your job is to hand back clean facts, not a finished answer."
     ),
     "tools": [get_airport_code, search_flights],
-    "model": "openrouter:openai/gpt-4o-mini",
-    # The system prompt above asks for at most three short lines, so the
-    # default 16384 is never needed -- and on a free-tier key the affordable
-    # ceiling drops as credit is spent, which took this slot out mid-session
-    # ("requested up to 16384 tokens, but can only afford 16382"). 2048 leaves
-    # ample room for tool calls and keeps the slot clear of that cliff.
-    "max_tokens": 2048,
 }
 
 

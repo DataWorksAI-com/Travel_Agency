@@ -10,10 +10,11 @@ correspond to open decisions in ORCHESTRATOR_DESIGN.md -- resolve those,
 then update this file, not orchestrator.py.
 """
 
+import os
 import sys
 from pathlib import Path
 
-from subagent_client import LocalFunctionClient
+from subagent_client import DEFAULT_MAX_TOKENS, LocalFunctionClient
 
 REPO_ROOT = Path(__file__).resolve().parent
 
@@ -34,8 +35,18 @@ def _build_flights_client() -> LocalFunctionClient:
     # LocalFunctionClient.from_dict_spec(). See ORCHESTRATOR_DESIGN.md #2:
     # if the group aligns Flights to expose answer() like every other
     # subagent, switch to the normal pattern below.
+    # The model is set HERE, not in Flights' spec. llama-3.3-70b was
+    # non-deterministic on this slot's short structured output; gpt-4o-mini is
+    # not. But which model a slot runs on depends on this system's budget,
+    # latency and determinism needs, not on the agent -- so it is the
+    # orchestrator's decision to make and its file to hold it in. Likewise the
+    # output ceiling, which from_dict_spec caps for every slot
+    # (subagent_client.DEFAULT_MAX_TOKENS) rather than each agent capping
+    # itself.
     from flights_agent import flights_subagent
-    return LocalFunctionClient.from_dict_spec(flights_subagent)
+    return LocalFunctionClient.from_dict_spec(
+        flights_subagent, model="openrouter:openai/gpt-4o-mini"
+    )
 
     # once aligned:
     # from flights_agent import answer
@@ -75,6 +86,20 @@ def _build_activities_client() -> LocalFunctionClient:
     activities_dir = REPO_ROOT / "activities-agent"
     if str(activities_dir) not in sys.path:
         sys.path.insert(0, str(activities_dir))
+
+    # Cap the output ceiling from out here rather than in the agent's own
+    # default. glm-5.2's default is 65536, and on a free-tier OpenRouter key
+    # the affordable max_tokens scales with remaining credit, so that default
+    # eventually exceeds it and the slot dies with "requested up to 65536
+    # tokens, but can only afford N" -- which looks like a broken agent and is
+    # a config cliff. The agent reads DEEP_AGENT_MAX_TOKENS and leaves its
+    # behaviour unchanged when it is unset, so running it standalone is
+    # unaffected by this line. Set before the import, since MAX_TOKENS is read
+    # at module scope.
+    #
+    # An explicit value already in the environment wins -- this is a default,
+    # not an override.
+    os.environ.setdefault("DEEP_AGENT_MAX_TOKENS", str(DEFAULT_MAX_TOKENS))
 
     from activities_agent import answer
     return LocalFunctionClient(answer)

@@ -505,7 +505,9 @@ async def build_agent():
     )
 
     agent = create_deep_agent(
-        model=init_chat_model(MODEL, max_tokens=MAX_TOKENS),
+        # Bare string unless a ceiling was asked for, so the default path is
+        # byte-for-byte the original behaviour.
+        model=init_chat_model(MODEL, max_tokens=MAX_TOKENS) if MAX_TOKENS else MODEL,
         tools=local_tools + mcp_tools,
         system_prompt=(
             "You are the Activities domain-expert agent in a multi-agent travel planning "
@@ -550,17 +552,19 @@ async def build_agent():
 
 MODEL = os.environ.get("DEEP_AGENT_MODEL", "openrouter:z-ai/glm-5.2")
 
-# Capped explicitly, for the same reason the Flights slot is (see flights_agent.py).
-# Passing MODEL to create_deep_agent as a bare string left init_chat_model's own
-# default in place -- 65536 for glm-5.2. On a free-tier OpenRouter key the
-# affordable max_tokens scales with REMAINING CREDIT, so that default eventually
-# exceeds what the key can afford and the slot dies with "requested up to 65536
-# tokens, but can only afford N". That reads as a broken agent but is a config
-# cliff: it works until cumulative spend crosses a threshold, then stops.
-# The prompt below asks for a short list of activities with a name, a price and a
-# one-line description, so the default was never needed. 4096 leaves ample room
-# for the multi-tool retrieval loop while clearing the cliff entirely.
-MAX_TOKENS = int(os.environ.get("DEEP_AGENT_MAX_TOKENS", "4096"))
+# Optional output ceiling, OFF by default so standalone behaviour is exactly
+# what it was: unset means MODEL is passed to create_deep_agent as a bare
+# string, leaving init_chat_model's own default in place, unchanged.
+#
+# It exists because a caller may need to cap it. On a free-tier OpenRouter key
+# the affordable max_tokens scales with REMAINING CREDIT, so glm-5.2's 65536
+# default eventually exceeds what the key can afford and this slot dies with
+# "requested up to 65536 tokens, but can only afford N" -- a config cliff that
+# reads as a broken agent. The orchestrator sets DEEP_AGENT_MAX_TOKENS to avoid
+# it (see orchestrator_config._build_activities_client) because that is a
+# property of how IT deploys this agent, not of the agent. Running this file on
+# its own is untouched.
+MAX_TOKENS = int(os.environ.get("DEEP_AGENT_MAX_TOKENS", "0")) or None
 
 
 async def answer(task: str) -> str:

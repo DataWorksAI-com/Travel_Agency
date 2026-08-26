@@ -29,8 +29,15 @@ is a one-line change in orchestrator_config.py, not a rewrite.
 
 import asyncio
 import inspect
+import os
 from abc import ABC, abstractmethod
 from typing import Callable
+
+# Output ceiling applied to every subagent this seam constructs. See
+# LocalFunctionClient.from_dict_spec for why this is the orchestrator's problem
+# and not each agent's. Raise it with TRAVEL_UI_MAX_TOKENS if a slot ever
+# genuinely needs longer output.
+DEFAULT_MAX_TOKENS = int(os.getenv("TRAVEL_UI_MAX_TOKENS", "2048"))
 
 
 class SubagentClient(ABC):
@@ -67,10 +74,18 @@ class LocalFunctionClient(SubagentClient):
         self._answer_fn = answer_fn
 
     @classmethod
-    def from_dict_spec(cls, spec: dict):
+    def from_dict_spec(cls, spec: dict, model: str = ""):
         """Build a LocalFunctionClient from a plain subagent spec dict
         (Flights' current shape: {"name", "description", "system_prompt",
         "tools"}), by constructing a deep agent from it on the fly.
+
+        Args:
+            spec: the subagent's own dict.
+            model: optional override, applied over spec["model"]. Which model
+                a slot runs on is a deployment decision -- it depends on this
+                system's budget, latency and determinism needs, not on the
+                agent -- so the orchestrator can set it without editing the
+                agent's file. Passed from orchestrator_config.
 
         TODO: this is a stopgap specifically for Flights' current dict
         contract. If the group decides to align Flights to expose its own
@@ -79,18 +94,33 @@ class LocalFunctionClient(SubagentClient):
         """
         from deepagents import create_deep_agent
 
-        model = spec.get("model", "openrouter:anthropic/claude-sonnet-4.5")
+        model = model or spec.get("model", "openrouter:anthropic/claude-sonnet-4.5")
 
-        # An optional "max_tokens" in the spec is honoured, because passing the
-        # model as a bare string leaves init_chat_model's default of 16384 in
-        # place. On a free-tier OpenRouter key the affordable max_tokens scales
-        # with remaining credit, so that default eventually exceeds it and the
-        # slot fails with "requested up to 16384 tokens, but can only afford
-        # 16382" -- a config cliff that reads as a broken agent.
-        if spec.get("max_tokens"):
-            from langchain.chat_models import init_chat_model
+        # max_tokens is capped HERE, not in any subagent's spec.
+        #
+        # Passing the model as a bare string leaves init_chat_model's own
+        # default in place (16384 for most providers). On a free-tier
+        # OpenRouter key the affordable max_tokens scales with REMAINING
+        # CREDIT, so that default eventually exceeds what the key can afford
+        # and the slot dies with "requested up to 16384 tokens, but can only
+        # afford 16382". It is a cliff, not a bug: the slot works until
+        # cumulative spend crosses a threshold, then stops, and it reads as a
+        # broken agent.
+        #
+        # That is a property of how WE deploy these agents, not of anyone's
+        # agent, so it belongs in the orchestrator's seam. The first version of
+        # this fix put "max_tokens": 2048 in Flights' own spec, which meant the
+        # next slot with the same problem would need another owner's file
+        # edited. Every dict-spec slot now gets the cap for free, and a spec
+        # can still override it if one genuinely needs longer output.
+        #
+        # DEFAULT_MAX_TOKENS is generous for this system: every subagent here
+        # is asked for a short itinerary-ready message, not an essay.
+        from langchain.chat_models import init_chat_model
 
-            model = init_chat_model(model, max_tokens=spec["max_tokens"])
+        model = init_chat_model(
+            model, max_tokens=spec.get("max_tokens", DEFAULT_MAX_TOKENS)
+        )
 
         agent = create_deep_agent(
             model=model,
