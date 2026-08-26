@@ -88,12 +88,14 @@ Setup:
 """
 
 import os
+import sys
 import json
 import glob
 import asyncio
 import chromadb
 from dotenv import load_dotenv
 from deepagents import create_deep_agent
+from langchain.chat_models import init_chat_model
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from offline_embedding import OfflineFakeEmbeddingFunction
@@ -435,7 +437,13 @@ async def build_agent():
     try:
         mcp_client = MultiServerMCPClient({
             "opentripmap": {
-                "command": "python",
+                # sys.executable, not "python": the server is spawned as a
+                # subprocess, and a bare "python" resolves against PATH rather
+                # than the venv running us. Where those differ the child lacks
+                # `mcp`, the spawn fails, and we land in the except below --
+                # so the MCP tier disappears with only a warning, which is easy
+                # to read as "OpenTripMap is down" rather than a wrong interpreter.
+                "command": sys.executable,
                 "args": [MCP_SERVER_SCRIPT],
                 "transport": "stdio",
             }
@@ -447,7 +455,7 @@ async def build_agent():
     covered = ", ".join(_covered_cities())
 
     agent = create_deep_agent(
-        model=MODEL,
+        model=init_chat_model(MODEL, max_tokens=MAX_TOKENS),
         tools=local_tools + mcp_tools,
         system_prompt=(
             "You are the Activities domain-expert agent in a multi-agent travel planning "
@@ -489,6 +497,18 @@ async def build_agent():
 
 
 MODEL = os.environ.get("DEEP_AGENT_MODEL", "openrouter:z-ai/glm-5.2")
+
+# Capped explicitly, for the same reason the Flights slot is (see flights_agent.py).
+# Passing MODEL to create_deep_agent as a bare string left init_chat_model's own
+# default in place -- 65536 for glm-5.2. On a free-tier OpenRouter key the
+# affordable max_tokens scales with REMAINING CREDIT, so that default eventually
+# exceeds what the key can afford and the slot dies with "requested up to 65536
+# tokens, but can only afford N". That reads as a broken agent but is a config
+# cliff: it works until cumulative spend crosses a threshold, then stops.
+# The prompt below asks for a short list of activities with a name, a price and a
+# one-line description, so the default was never needed. 4096 leaves ample room
+# for the multi-tool retrieval loop while clearing the cliff entirely.
+MAX_TOKENS = int(os.environ.get("DEEP_AGENT_MAX_TOKENS", "4096"))
 
 
 async def answer(task: str) -> str:
