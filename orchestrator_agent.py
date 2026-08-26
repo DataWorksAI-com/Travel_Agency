@@ -42,6 +42,21 @@ from ui.agent_seam import LABELS, _looks_like_error
 
 MODEL = os.getenv("ORCHESTRATOR_MODEL", "openrouter:openai/gpt-4o-mini")
 
+# The orchestrator's OWN output ceiling. Was hardcoded at 4000, and that is how
+# it took itself out: a live run died with "You requested up to 4000 tokens, but
+# can only afford 3682" -- the orchestrator's model, not a subagent's -- after
+# five slots had answered but before Budget was called. The whole run was lost
+# to a number nobody could change without editing this file.
+#
+# There is a real tension in this value, so it is a knob rather than a constant:
+# too high and a free-tier key refuses the request outright; too low and the
+# final itinerary is truncated mid-assembly, which is worse because it looks
+# like a content bug. 3000 is a compromise. With TRAVEL_UI_MAX_CONCURRENCY=1
+# (the default) the affordable ceiling recovers, because the slots are no longer
+# holding credit reservations while this call is made, so 3000 has headroom it
+# did not have when 4000 failed.
+MAX_TOKENS = int(os.getenv("ORCHESTRATOR_MAX_TOKENS", "3000"))
+
 # Whole-run backoff, not per-call: a deep agent makes many model calls, so a 429
 # surfaces from the middle of the graph rather than from one request. Lifted from
 # budget_agent_rohan/proposed_envelope_agent/agent.py.
@@ -339,7 +354,7 @@ async def plan_trip_agentic(
     """Same signature and return type as orchestrator.plan_trip."""
     state, ledger, tools = _new_run()
     agent = create_deep_agent(
-        model=init_chat_model(MODEL.strip(), max_tokens=4000),
+        model=init_chat_model(MODEL.strip(), max_tokens=MAX_TOKENS),
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
         middleware=[_OnlyOurTools()],

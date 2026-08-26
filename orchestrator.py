@@ -122,6 +122,55 @@ def scrub_secrets(text: str) -> str:
     return text
 
 
+# ---------------------------------------------------------------------------
+# Concurrency gate
+#
+# On a free-tier OpenRouter key, an in-flight request RESERVES credit, and the
+# max_tokens a later request can afford is what is left after those
+# reservations. Fire three deep agents at once and whichever arrives last is
+# told it "can only afford" a number far below what it asked for, and dies with
+# HTTP 402.
+#
+# Measured on one run, 26 Aug 2026, with $4.81 of $5 unused on the key:
+#
+#   Activities    asked 2048, could afford 1015   (parallel three in flight)
+#   orchestrator  asked 4000, could afford 3682   (fewer in flight)
+#
+# The affordable figure went UP between those two calls, which rules out
+# cumulative spend -- the story I wrongly told twice while capping max_tokens
+# on two agents. Both error messages said "in-flight requests"; the cause is
+# concurrency, and the fix is to stop competing with ourselves.
+#
+# Gating here rather than at each call site covers BOTH orchestrators: the
+# deterministic path's asyncio.gather AND the deep agent, which emits several
+# ask_agent tool calls in one batch and would otherwise bypass any fix applied
+# to _run_parallel_subagents alone.
+#
+# Default 1 (fully serialised) because that is what a free-tier key sustains.
+# Raise it with TRAVEL_UI_MAX_CONCURRENCY once the key has headroom -- parallel
+# is genuinely faster, it is just not free. 0 or less disables the gate.
+# ---------------------------------------------------------------------------
+
+MAX_CONCURRENCY = int(os.getenv("TRAVEL_UI_MAX_CONCURRENCY", "1"))
+
+_gate_lock: "asyncio.Semaphore | None" = None
+
+
+def _gate() -> "asyncio.Semaphore | None":
+    """The shared slot gate, built on first use.
+
+    Built lazily, not at import: an asyncio.Semaphore binds to the running loop
+    the first time it is awaited, and orchestrator.py is imported long before
+    Chainlit has a loop.
+    """
+    global _gate_lock
+    if MAX_CONCURRENCY <= 0:
+        return None
+    if _gate_lock is None:
+        _gate_lock = asyncio.Semaphore(MAX_CONCURRENCY)
+    return _gate_lock
+
+
 async def ask_slot(slot: str, task: str) -> str:
     """Call one subagent by slot name.
 
@@ -131,13 +180,18 @@ async def ask_slot(slot: str, task: str) -> str:
     another module, or caching a client at construction time, silently disables
     real/dummy mode, failure detection, timing and every per-agent UI step.
 
-    The reply is scrubbed of credentials on the way out -- see above. This is
-    the one place every slot's reply passes through, on both the deterministic
-    and the agentic path.
+    Two things happen around the call, and this is the one place every slot's
+    reply passes through on both paths:
+      - concurrency is gated, so slots do not compete for credit reservations
+      - the reply is scrubbed of credentials on the way out
     """
     if slot not in SLOTS:
         raise ValueError(f"unknown slot {slot!r}; expected one of {SLOTS}")
-    return scrub_secrets(await get_client(slot).call(task))
+    gate = _gate()
+    if gate is None:
+        return scrub_secrets(await get_client(slot).call(task))
+    async with gate:
+        return scrub_secrets(await get_client(slot).call(task))
 
 
 async def _call_money_customs_context(origin_country: str, destination_country: str) -> str:
