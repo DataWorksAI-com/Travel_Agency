@@ -645,7 +645,7 @@ def search_money_customs(country: str, service: str = "") -> dict:
 
     result = {
         "country": _display_name(best_id),
-        "found": match_score >= CONFIDENCE_THRESHOLD,
+        "found": True,
         "match_score": match_score,
         "adjusted": adjusted,
         **facts,

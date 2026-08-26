@@ -75,6 +75,13 @@ NO_DATA_PHRASES = (
     "is not covered by local data",
     "could not find",
     "no results",
+    # Money & Customs' own wording for the same thing. Its rule 7 says to
+    # report that "the information isn't available for that country/service",
+    # which none of the phrases above match -- so without these two, a genuine
+    # no-data reply from that agent would be read as a priced answer and its
+    # absence would never be declared to Budget.
+    "isn't available for",
+    "is not available for",
 )
 
 # A currency amount, symbol-first or ISO-suffixed. A bare number is never
