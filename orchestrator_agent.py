@@ -22,6 +22,7 @@ Two things keep a planning layer from making matters worse:
 
 import asyncio
 import os
+import re
 
 from dotenv import load_dotenv
 
@@ -227,6 +228,96 @@ def _is_failure(reply: str) -> bool:
     return reply.startswith("Not connected") or _looks_like_error(reply)
 
 
+# Sentences the six agents actually emit when they ran correctly but hold
+# nothing for this request. Substrings rather than a regex on purpose: these
+# are real phrases from real replies, and a reader should be able to check them
+# against the agents by eye.
+#
+# This is deliberately NOT the same as a failure. "No flights found from BOS to
+# AUA in September" is a correct, useful answer. The problem is what happens
+# downstream of it.
+_NO_DATA_PHRASES = (
+    "no flight",
+    "no cached flight",
+    "hold no data",
+    "no data for",
+    "not covered",
+    "outside my coverage",
+    "not in this agent's curated corpus",
+    "no activity in the corpus",
+    "is not covered by local data",
+    "could not find",
+    "no results",
+)
+
+# A currency amount: "$850", "1,400 USD", "MXN 300". Deliberately narrow --
+# a bare number is not evidence of a price, and a false positive here would
+# attach a caveat to an itinerary that does not need one.
+_CURRENCY = re.compile(
+    r"[$£€]\s?\d|\b\d[\d,]*(?:\.\d{2})?\s?(?:USD|EUR|GBP|MXN|JPY|THB)\b",
+    re.IGNORECASE,
+)
+
+
+def _held_no_data(reply: str) -> bool:
+    lowered = reply.lower()
+    return any(p in lowered for p in _NO_DATA_PHRASES)
+
+
+def _unsourced_figures_note(final: str, ledger: dict[str, list[str]]) -> str:
+    """Name the slots that supplied no figures, when the itinerary quotes some.
+
+    THE BUG THIS EXISTS FOR, observed live: Flights reported it found no prices
+    and Activities did not run at all, and Budget then billed "$850
+    (estimated)" for flights and "$200 (estimated)" for activities, producing
+    "Total $2,310 -- comfortably feasible". It labelled both as estimates in
+    its own table, but the headline a reader takes away is the total, and the
+    total is built on numbers no agent produced. Lodging was $400 with no
+    lodging agent in the system at all.
+
+    The jig measures this: grounding drops from 1.0 on the deterministic path
+    to 0.75 under the agent.
+
+    Detection, not attribution. Working out WHICH figure came from which agent
+    would mean parsing the model's prose, and getting that wrong would either
+    miss the real case or slander a correctly-sourced number. Instead this
+    states a fact that is always true and always checkable: these slots
+    returned no figures, so any figure here attributed to them is unsourced.
+    Appended after the model has finished, for the same reason the rest of the
+    floor is -- so it cannot be paraphrased away.
+    """
+    if not _CURRENCY.search(final):
+        return ""
+
+    unsourced = []
+    for slot in SLOTS:
+        if slot == "budget":
+            # Budget is the slot doing the costing. Naming it here would say
+            # "budget supplied no figures" in the one case where it did.
+            continue
+        replies = ledger.get(slot)
+        if not replies:
+            unsourced.append((LABELS[slot], "was not called"))
+        elif _is_failure(replies[-1]):
+            unsourced.append((LABELS[slot], "did not run"))
+        elif _held_no_data(replies[-1]):
+            unsourced.append((LABELS[slot], "reported it holds no data for this request"))
+
+    if not unsourced:
+        return ""
+
+    lines = [f"- {label}: {why}." for label, why in unsourced]
+    return (
+        "\n\n=== Unsourced figures ===\n"
+        + "\n".join(lines)
+        + "\n\nAny cost above for the categories listed came from no agent in this "
+        "system. Treat those numbers as unverified, and do not read the total as "
+        "priced.\n"
+        "Note also that no agent in this system prices lodging, so any "
+        "accommodation figure is likewise unsourced."
+    )
+
+
 def _floor(final: str, ledger: dict[str, list[str]]) -> str:
     """Append what the model left out. Concatenated after the fact, so the model
     cannot paraphrase a failure away or quietly drop an agent."""
@@ -243,9 +334,14 @@ def _floor(final: str, ledger: dict[str, list[str]]) -> str:
             "not connected" in lowered and label.lower() in lowered
         ):
             notes.append(f"- {label}: did not run. {replies[-1].splitlines()[0]}")
-    if not notes:
-        return final
-    return final + "\n\n=== Agent status ===\n" + "\n".join(notes)
+
+    if notes:
+        final = final + "\n\n=== Agent status ===\n" + "\n".join(notes)
+
+    # Appended last, and separately: a slot can be perfectly healthy and still
+    # have supplied no figures ("No flights found for these dates"), which the
+    # Agent status block above deliberately says nothing about.
+    return final + _unsourced_figures_note(final, ledger)
 
 
 async def plan_trip_agentic(
