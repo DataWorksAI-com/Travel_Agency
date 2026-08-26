@@ -113,13 +113,32 @@ def _build_money_customs_client() -> LocalFunctionClient:
     # Real on THIS BRANCH, not yet on main. money_customs_agent.py:111
     # defines answer(task) over money_tools.py (which IS on main).
     #
-    # exchange_rate_emily has 9 commits that main does not, but none of
-    # them are missing here: that branch's HEAD (1c3be19) is a direct
-    # ancestor of this one, and our money_customs_agent.py and
-    # money_tools.py are byte-identical to hers. So this import is
-    # already pointing at her latest work, not a stale copy of it. What
-    # is still outstanding is purely that main has not taken those 9
-    # commits -- recheck the path only if it moves during that merge.
+    # The note that used to sit here said exchange_rate_emily's HEAD was a
+    # direct ancestor of this branch and that both money files were
+    # byte-identical to hers. That was true when written and is no longer:
+    # she has since added 93e6d52 ("Money tool fix -- returns the confidence
+    # level to Orchestrator"), which puts match_score on every return path.
+    #
+    # Measured 26 Aug 2026, main is the stale one, not us:
+    #
+    #   money_tools.py, match_score occurrences
+    #     origin/main                  11
+    #     origin/exchange_rate_emily   25
+    #     this branch                  26
+    #
+    # So this import points at a SUPERSET of her latest tool layer, and main
+    # does not have money_customs_agent.py at all -- only money_tools.py.
+    # Do not "resync from main" on the assumption that main is the reference
+    # for this slot; that would drop both her match_score contract and the
+    # agent itself.
+    #
+    # The single line where we differ from her is deliberate: found is
+    # match_score >= CONFIDENCE_THRESHOLD here, where hers is hardcoded True
+    # (see fd9f868). Note that the merge base already had True and she never
+    # touched that line, so git auto-merges it in whichever direction the
+    # LAST push happens to run -- there is no conflict marker to catch it.
+    # If this slot ever starts reporting found for a country it holds no
+    # data for, look here first.
     from money_customs_agent import answer
     return LocalFunctionClient(answer)
 
