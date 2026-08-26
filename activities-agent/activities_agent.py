@@ -155,6 +155,33 @@ def _covered_cities() -> list[str]:
     )
 
 
+# The six hand-curated seed cities (4 from Limeng, 2 from Jainam). Everything
+# else in DOCS_DIR arrived via expand_activities_corpus, i.e. straight from
+# OpenTripMap with no review.
+#
+# The distinction is not cosmetic. Live-fetched files carry every price_tier as
+# "unknown" and inherit whatever OpenTripMap holds: honolulu.json has both
+# "Iolani Palace" and "ʻIolani Palace", aruba.json has "Arikok National Park"
+# and "Арикок (холм)" (the same place, in Cyrillic), and tokyo.json's five
+# entries include a hotel and an office block but no temple or shrine.
+# Describing all of it as "curated" -- as the system prompt used to -- makes the
+# agent vouch for records nobody has looked at.
+#
+# Hardcoded rather than a field in the JSON on purpose: adding a provenance key
+# would change the doc schema that build_vector_db.py and both search tiers
+# read. This is the smaller, reversible version of the same fix.
+SEED_CITIES = frozenset({"Kyoto", "New York", "Paris", "Rome", "Boston", "Chicago"})
+
+
+def _coverage_split() -> tuple[list[str], list[str]]:
+    """(curated seed cities, live-fetched cities) -- both actually on disk."""
+    covered = _covered_cities()
+    return (
+        [c for c in covered if c in SEED_CITIES],
+        [c for c in covered if c not in SEED_CITIES],
+    )
+
+
 def _city_file(city: str) -> str:
     return os.path.join(DOCS_DIR, f"{city.strip().lower().replace(' ', '_')}.json")
 
@@ -328,8 +355,21 @@ def hard_filter_activities(activities_json: str, free_only: bool = False, catego
 
 
 def list_curated_cities() -> str:
-    """List cities that currently have local activity data (tier 1/2 coverage)."""
-    return json.dumps({"curated_cities": _covered_cities()})
+    """List cities that currently have local activity data (tier 1/2 coverage).
+
+    `curated_cities` is every city with local data, unchanged, so existing
+    callers keep working. The two extra keys say which of those were actually
+    reviewed: `seed_cities` were hand-curated, `live_fetched_cities` came
+    straight from OpenTripMap via expand_activities_corpus and have not been
+    checked by anyone -- their prices are all "unknown" and they can contain
+    duplicates under different language tags.
+    """
+    seed, live = _coverage_split()
+    return json.dumps({
+        "curated_cities": _covered_cities(),
+        "seed_cities": seed,
+        "live_fetched_cities": live,
+    })
 
 
 # ---------------------------------------------------------------------
@@ -452,7 +492,17 @@ async def build_agent():
     except Exception as e:
         print(f"[warning] MCP tier unavailable, continuing with local tools only: {e}")
 
-    covered = ", ".join(_covered_cities())
+    seed_cities, live_cities = _coverage_split()
+    covered = ", ".join(seed_cities)
+    live_note = (
+        f"Also held locally, but fetched live from OpenTripMap and NOT reviewed: "
+        f"{', '.join(live_cities)}. For these, prices are unavailable rather than "
+        f"free, entries can be duplicated under different language tags, and the "
+        f"list is not a considered selection of what is worth seeing. Answer from "
+        f"them, but do not call them curated and do not imply they are the "
+        f"city's highlights. "
+        if live_cities else ""
+    )
 
     agent = create_deep_agent(
         model=init_chat_model(MODEL, max_tokens=MAX_TOKENS),
@@ -466,8 +516,10 @@ async def build_agent():
             "experiences, art, and entertainment. Food and dining is out of scope — that's "
             "the Restaurants Agent's domain, so redirect food questions there instead of "
             "answering them yourself. "
-            f"Locally covered cities (fast, curated data): {covered}. This list grows over "
-            "time as expand_activities_corpus is used on new cities. "
+            f"Hand-curated locally covered cities (fast, reviewed data): {covered}. "
+            f"{live_note}"
+            "This list grows over time as expand_activities_corpus is used on new "
+            "cities, and anything it adds is live data, not curated. "
             "You have tools, in priority order: "
             "(1) search_activities_local_exact — try this first for a covered city with a "
             "clear category/price filter; "
