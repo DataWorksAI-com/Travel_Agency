@@ -28,6 +28,18 @@ GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY")
 # in the same folder as destination_data.py.
 PROFILE_FILE = Path(__file__).parent / "destination_profiles.json"
 
+# Matches a name made up entirely of Roman-numeral characters (with optional
+# surrounding punctuation/space). Used to reject Geoapify's milestone markers,
+# which it returns as named sights -- see the filter in
+# build_destination_profile for why the length test alone missed "VII".
+_ROMAN_NUMERAL_CHARS = set("IVXLCDM")
+
+
+def _is_bare_roman_numeral(name: str) -> bool:
+    """True if `name` is nothing but Roman numerals, e.g. "I", "VII", "XIV"."""
+    stripped = name.strip().strip(".,-–—()[] ")
+    return bool(stripped) and all(c in _ROMAN_NUMERAL_CHARS for c in stripped.upper())
+
 
 # ============================================================
 # GEOAPIFY: DESTINATION GEOCODING
@@ -442,10 +454,19 @@ def build_destination_profile(
         # milestone markers and similar as named sights, so Rome came back
         # listing "I" and "VII" as points of interest. Nothing a traveller can
         # look up or navigate to has a one-character name.
+        #
+        # The length test alone was not enough. It was written to remove those
+        # markers, but "VII" is three characters and survived it -- Rome still
+        # listed VII as a point of interest after the rebuild. So a bare Roman
+        # numeral is rejected on its own terms, whatever its length. Only names
+        # consisting of NOTHING but numerals are dropped, so real places that
+        # merely contain one ("Villa dei Quintili III", "Henry VIII's Wall")
+        # are unaffected.
         place_names = [
             place["name"]
             for place in places
             if len(place.get("name", "").strip()) > 2
+            and not _is_bare_roman_numeral(place.get("name", ""))
         ]
 
         # Remove duplicate place names while

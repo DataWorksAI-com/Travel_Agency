@@ -13,20 +13,23 @@
         "Honeymoon Beach",
         "South Beach",
         "North Beach",
-        "Vatukamali",
         "Natadola Beach",
         "Cuvu Beach",
         "Manta Beach",
-        "Sunset Beach"
+        "Sunset Beach",
+        "Wailoaloa Beach"
       ],
       "attractions": [
-        "Sunset viewpoint",
-        "Vanua Levu",
-        "Vuda village",
-        "Savala Island",
-        "Jaabi's point",
-        "Togoru Beach",
-        "Nakalavo"
+        "Masonic Lodge",
+        "South Sea Island",
+        "King's Gun \"Boom Boom\"",
+        "memorial Site",
+        "Sinu-I-Wasa-Tolu",
+        "Ivi Triangle",
+        "Fiji Survivor set",
+        "Bilo Battery, WWII gun emplacement position",
+        "150th Anniversary of the Roman Catholic Church in Fiji",
+        "Vuda Ancient Fortress"
       ],
       "nature": [
         "House Reef / Nature Reserve / No Fishing"
@@ -55,11 +58,16 @@
         "Martin's Bay Beach"
       ],
       "attractions": [
-        "Rihanna's Childhood Home",
-        "Malibu Beach Club (Cockspur)",
-        "Tyrol Cot Village",
-        "Hackletons Cliff",
-        "Gallery of Carribean Art;Courts"
+        "Clement Payne Monument",
+        "Vineyard Plantation House",
+        "Barge",
+        "Gun Hill Lion",
+        "Empire Theatre Ruins",
+        "Emancipation Monument (Codd’s House)",
+        "Fort Denmark (Site of Ruins)",
+        "Mighty Grynner Monument",
+        "Orange Fort (Site of Ruins)",
+        "3Ws Monument"
       ],
       "nature": [
         "Graeme Hall Nature Sanctuary"
@@ -87,21 +95,20 @@
         "Andicuri Beach",
         "California Beach",
         "Baby Beach",
-        "Santo Largo Beach (Savaneta Beach)",
         "Druif",
-        "Boca Keto"
+        "Boca Keto",
+        "Grapefield Beach"
       ],
       "attractions": [
-        "Masiduri",
-        "Sero Arikok",
-        "Playa Azul",
-        "Sero Largo",
-        "I love Aruba sign",
-        "Northern Loop",
-        "Natural Bridge (collapsed)",
-        "Boca Prins",
-        "The Propeller",
-        "Plantage Prins"
+        "Geschutsopstelling",
+        "SS Antilla",
+        "Anne Frank Monument",
+        "Plaza Betico Croes",
+        "Oorlogsmonument",
+        "Princes Wilhelmina Statue",
+        "Bushiribana Gold Smelter Ruins",
+        "Dynamite storage",
+        "Stichting Monumentenfonds Aruba"
       ],
       "nature": [
         "Sand Dunes",
@@ -121,36 +128,40 @@
     "features": [
       "beaches",
       "attractions",
-      "nature",
-      "diving"
+      "nature"
     ],
     "places": {
       "beaches": [
-        "ビーチコート",
-        "おだいばビーチ",
-        "勝島の海（砂浜）",
-        "白砂の浜辺",
-        "つばさ浜"
+        "東海岸",
+        "中海岸",
+        "ワイビーチ",
+        "タマナビーチ",
+        "ジニービーチ",
+        "王子ヶ浜"
       ],
       "attractions": [
-        "東京都庁展望室 南",
-        "東京都庁展望室 北"
+        "長津念仏塚古墳",
+        "大燈籠建立記念",
+        "三之分目大塚山古墳",
+        "震災記念",
+        "白井開拓三十年記念碑",
+        "瓢塚古墳群",
+        "開拓の碑",
+        "雨の三叉路(分水界)",
+        "アンデルセン像",
+        "松尾町記念碑"
       ],
       "nature": [
-        "西ヶ原自然観察園",
-        "バードサンクチュアリー",
-        "バードサンクチュアリ",
-        "小鳥の森",
-        "サンクチュアリ",
-        "狛江弁財天池特別緑地保全地区",
-        "タカの森",
-        "せせらぎ観察園",
-        "ホタルの里",
-        "自然観察園"
-      ],
-      "diving": [
-        "Divezone Tokyo",
-        "ザ ダイブファクトリー"
+        "椛のシデコブシ自生地",
+        "世界の桜の園　入口",
+        "雨生山　登り口",
+        "ユメノキ湿原",
+        "大島海浜植物群落",
+        "自然保護林",
+        "ヤマユリの里",
+        "鳳来峡",
+        "西阿倉川アイナシ自生地",
+        "本大久保1号緑地"
       ]
     }
   },
@@ -163,31 +174,39 @@
     ],
     "places": {
       "beaches": [
-        "Palawan Beach",
-        "Palavan Beach",
+        "Stulang Beach",
         "Siloso Beach",
-        "Tanjong Beach",
-        "Beach Area E",
-        "Beach Area D",
-        "Beach Area C",
-        "Beach Area B",
+        "Pasir Bunga",
         "Beach Area A",
-        "Tanjong Pinggir Cove"
+        "Beach Area C",
+        "P Pantai Stres",
+        "Palawan Beach",
+        "Nongsa Beach",
+        "Mamam Beach",
+        "Beach Area D"
       ],
       "attractions": [
-        "The Early Days mural",
-        "Big Bang",
-        "Singapore River One – Mural Trail",
-        "Fire Safety for Singapore - Yesterday, Today and Tomorrow"
+        "(Former)Nee soon mansion",
+        "Sarimbun Landing Site",
+        "Confucius statue",
+        "Tunnel",
+        "Sir Stamford Raffles Statue",
+        "Esplanade",
+        "Fort Canning Centre",
+        "Lim Bo Seng Memorial",
+        "Old Kallang Airport Gateway",
+        "Aw Boon Par"
       ],
       "nature": [
-        "Sisters' Island Marine Park",
-        "Rifle Range Nature Park",
-        "Hindhede Nature Park",
-        "Bukit Timah Nature Reserve",
         "Central Catchment Nature Reserve",
+        "Sisters' Island Marine Park",
+        "Kranji Marshes",
         "Bukit Batok Nature Park",
-        "Kranji Marshes"
+        "Hindhede Nature Park",
+        "Sungei Buloh Wetland Reserve",
+        "Taman Rekreasi Bakau Tanjung Langsat",
+        "Rifle Range Nature Park",
+        "Bukit Timah Nature Reserve"
       ]
     }
   },
@@ -200,76 +219,53 @@
     ],
     "places": {
       "beaches": [
-        "深水灣泳灘 Deep Water Bay Beach",
-        "淺水灣泳灘 Repulse Bay Beach",
-        "中灣泳灘 Middle Bay Beach",
-        "南灣海灘 South Bay Beach",
+        "近水灣泳灘 Approach Beach",
+        "長洲東灣泳灘 Cheung Chau Tung Wan Beach",
+        "三白灣泳灘 Sam Pak Wan Beach",
         "Round Island Beach",
-        "龜背灣泳灘 Turtle Cove Beach",
-        "舂坎角泳灘 Chung Hom Kok Beach",
-        "夏萍灣泳灘 Hairpin Beach",
-        "赤柱正灘 Stanley Main Beach",
-        "大鵬灘"
+        "大鵬灘",
+        "南氹灣",
+        "白腊仔 Pak Lap Tsai",
+        "相思灣第二灘 Sheung Sze Wan Second Beach",
+        "浪茄仔 Long Ke Chai",
+        "甩洲罅 Lat Chau La"
       ],
       "attractions": [
-        "Neon Deer",
-        "連椅 Runway",
-        "蟠龍獻瑞 Coiled Dragon Brings Luck",
-        "姻緣石 Lover's Rock",
-        "海濱站 Harbour Station",
-        "司徒拔道眺望處 Stubbs Road Lookout"
+        "博加拉炮台 Bokhara Battery",
+        "九龍關石碑 Kowloon Pass Custom's Stone Tablets",
+        "機槍堡PB311",
+        "機槍堡 Pillbox PB222",
+        "傻人塔 (頂層)",
+        "Pillbox 214",
+        "Taikoo Dock",
+        "無字石碑(南)",
+        "Jat Incline Marker",
+        "砵甸乍炮台"
       ],
       "nature": [
-        "南風道林地具特殊科學價值地點 Nam Fung Road Woodland SSSI",
-        "深水灣谷具特殊科學價值地點 Deep Water Bay Valley SSSI",
-        "大潭港（內灣） 具特殊科學價值地點 Tai Tam Harbour (Inner Bay) SSSI",
-        "青衣南具特殊科學價值地點 South Tsing Yi SSSI",
-        "蠔涌谷具特殊科學價值地點 Ho Chung Valley SSSI",
-        "深灣具特殊科學價值地點 Sham Wan SSSI",
-        "南丫島南部具特殊科學價值地點 Lamma Island South SSSI",
+        "企嶺下紅樹林具特殊科學價值地點 Kei Ling Ha Mangal SSSI",
+        "尖鼻咀具特殊科學價值地點 Tsim Bei Tsui SSSI",
+        "后海灣內灣具特殊科學價值地點 Inner Deep Bay SSSI",
+        "福田红树林自然保护区",
+        "鹽田仔及馬屎洲具特殊科學價值地點 Yim Tin Tsai & Ma Shi Chau SSSI",
+        "深圳河(第三期)擴闊工程補償保護區The Compensation Natural Reserve of Shamchun River Modification works(stage 3)",
+        "新洲具特殊科學價值地點 San Chau SSSI",
         "鶴咀具特殊科學價值地點 Cape D'Aguilar SSSI",
-        "東龍洲炮台特別地區 Tung Lung Fort Special Area",
-        "周公島具特殊科學價值地點 Sunshine Island SSSI"
+        "蠔涌谷具特殊科學價值地點 Ho Chung Valley SSSI",
+        "鴉洲具特殊科學價值地點 A Chau SSSI"
       ]
     }
   },
   "Phuket": {
     "destination": "Phuket",
     "features": [
-      "beaches",
-      "attractions",
-      "diving"
+      "attractions"
     ],
     "places": {
-      "beaches": [
-        "Siray Bay Beach",
-        "Koh Sirey beach",
-        "หาดแหลมงา",
-        "หาดเกาะมาลี",
-        "Kao Khad beach",
-        "Ao Yon Beach",
-        "Panwa Beach",
-        "Chalong Beach",
-        "Po Beach",
-        "Lo Ne Beach"
-      ],
       "attractions": [
-        "จุดชมวิวเขาโต๊ะแซะ",
-        "มังกรทอง",
-        "Hongsyok house",
-        "Ranida (textiles)",
-        "Paint Palette (textiles)"
-      ],
-      "diving": [
-        "The Phuket Best Friend - Phi Phi excursion and scuba diving",
-        "Credo diving",
-        "Season dive",
-        "Underwater Way",
-        "Aquaman",
-        "ISDA Simple and Safe Diving",
-        "Captain Flint DC",
-        "Sea Bees",
-        "Raya divers"
+        "อนุสรณ์เรือขุดแร่",
+        "อนุสาวรีย์พระยารัษฎาณุประดิษฐ์",
+        "ซากเรือ"
       ]
     }
   },
@@ -283,29 +279,22 @@
     "places": {
       "beaches": [
         "Ransfannu Beach",
-        "Raalhugandu",
-        "Male' Artificial Beach",
-        "Southwest Beach",
         "Hulumale Beach",
-        "Palm Beach",
-        "Bikini Beach",
-        "Public beach"
+        "Raalhugandu"
       ],
       "attractions": [
-        "Tomb of Mohammed Thakurufaanu",
-        "Bridge View",
-        "Jetty",
-        "Sunset viewpoint STP",
-        "Pond view STP",
-        "Whale"
+        "November 3rd Memorial",
+        "China-Maldives Friendship Monument",
+        "Sinamale",
+        "Tsunami Monument",
+        "Victory Wreck",
+        "Hulhumale' Monument",
+        "Velaanaa International Airport Monument"
       ],
       "diving": [
-        "Ocean Junkies Dive centre",
-        "Dive Center",
         "Dive Club Maldives",
-        "Diverland Embudu",
-        "diveOceanus",
-        "Marine Centre"
+        "Ocean Junkies Dive centre",
+        "Dive Center"
       ]
     }
   },
@@ -314,80 +303,55 @@
     "features": [
       "beaches",
       "attractions",
-      "nature",
       "diving"
     ],
     "places": {
       "beaches": [
         "Pantai Pengembak",
-        "public beach",
-        "Pantai Double Six",
-        "Pantai Petitenget",
-        "Pantai Seminyak",
-        "Legian Beach",
-        "Pantai Kuta",
-        "Nelayan Beach",
-        "Pantai Canggu",
-        "Pantai Batu Bolong"
+        "public beach"
       ],
       "attractions": [
-        "Patung I Gusti Ngurah Made Agung",
-        "marché aux oiseaux",
-        "Patung Catur Muka",
-        "Patung Sang Kala Tri Semaya"
-      ],
-      "nature": [
-        "Mandala Wisata Wenara Wana"
+        "Satrya Gatotkaca",
+        "Pura Susunan Wadon",
+        "Mads Lange",
+        "I Wayan Bulit Statue",
+        "Pusat Kota Denpasar (0 km)",
+        "Tugu Peringatan Bom Bali",
+        "Patung Kesetiaan",
+        "Jl gunung catur II Blok B",
+        "Monumen Jagarana",
+        "Monumen Bajra Sandhi"
       ],
       "diving": [
         "Nico Dives Cool Bali",
-        "Black Manta Scuba",
         "Crystal Divers",
         "Bali Legends Dive Center",
-        "Dune World",
-        "Intrinity Divers",
-        "BASUKA DIVE&WATER SPORT"
+        "Black Manta Scuba",
+        "Dune World"
       ]
     }
   },
   "Paris": {
     "destination": "Paris",
     "features": [
-      "beaches",
       "attractions",
-      "nature",
-      "diving"
+      "nature"
     ],
     "places": {
-      "beaches": [
-        "mange"
-      ],
       "attractions": [
-        "Point zéro des Routes de France",
-        "Galerie des Rois",
-        "Rosace Ouest",
-        "Tours de Notre-Dame",
-        "Charlemagne et ses leudes",
-        "Notre-Dame de Paris",
-        "Rosace Nord",
-        "Rosace Sud",
-        "Notre Dame"
+        "Borne du Serment de Koufra",
+        "Ruines de l'abbaye de Longchamp",
+        "Caporal Baudry",
+        "Vestiges du Petit-Château de Bercy",
+        "Trianon",
+        "Statue du Général de Gaulle",
+        "Georgette et Pierre Rostaing",
+        "Paul Chenderovitch",
+        "Raymond Lévy",
+        "Liliane Jacqueline Guttmann"
       ],
       "nature": [
-        "Le Petit Labyrinthe",
-        "Espace Naturel Sensible Les Porchères - Zone Naturelle Protégée",
-        "Île Pointe Nord",
-        "Île de la Roselière",
-        "Île de l'Abreuvoir",
-        "Réserve biologique intégrale de Verrières",
-        "Île de Champigny",
-        "Parc René-Martin",
-        "Réserve naturelle du Bassin de la Bièvre",
-        "île des Gords"
-      ],
-      "diving": [
-        "Isanthea",
-        "Espace plongée du centre aquatique Pajeaud"
+        "Le Petit Labyrinthe"
       ]
     }
   },
@@ -401,40 +365,36 @@
     ],
     "places": {
       "beaches": [
-        "Platja de Sant Miquel",
-        "Platja de la Barceloneta",
-        "Platja del Somorrostro",
-        "Platja de Sant Sebastià",
         "Platja de la Nova Icària",
         "Platja del Bogatell",
-        "Platja de la Mar Bella",
-        "Platja de la Nova Mar Bella",
         "Platja de Llevant",
-        "Platja del Fòrum"
+        "Platja de Sant Sebastià",
+        "Platja de la Barceloneta",
+        "Platja de la Nova Mar Bella",
+        "Platja de la Mar Bella",
+        "Platja de Sant Miquel",
+        "Platja del Somorrostro"
       ],
       "attractions": [
-        "02-139",
-        "Anton Palau",
-        "Font del Gall",
-        "Pere Tarrés i Claret",
-        "Restaurant La Orotava",
-        "Editorial Montaner i Simón",
-        "Faune"
+        "Jardins d'Ernest Lluch - Cementiri Vell",
+        "A J. Anselm Clavé",
+        "Mirador de Montbau",
+        "Placa Commemorativa Torre Balldovina",
+        "Santa Margarida",
+        "Creu d'Olorda",
+        "Restes de la Bateria Antiaèria de la Guerra Civil",
+        "Porta de Sarrià",
+        "Pau Farinetes (Pau Piera)",
+        "Albert Einstein"
       ],
       "nature": [
-        "Parc Natural de Collserola",
-        "Espais Naturals Delta del Llobregat",
-        "Aiguamolls de Molins de Rei",
-        "Parc Agrari del Baix Llobregat",
-        "Parc de la Serralada de Marina",
-        "Accés restringit",
-        "Espai Rural de Gallecs"
+        "Parc Natural de Collserola"
       ],
       "diving": [
-        "Underwater Barcelona",
-        "Barcelona Diving Club",
         "Vanas Dive",
-        "Saita Diving"
+        "Barcelona Diving Club",
+        "Saita Diving",
+        "Underwater Barcelona"
       ]
     }
   },
@@ -443,80 +403,77 @@
     "features": [
       "beaches",
       "attractions",
-      "nature"
+      "nature",
+      "diving"
     ],
     "places": {
       "beaches": [
-        "Le Palme"
+        "Le Palme",
+        "La Spiagetta",
+        "Spiaggia comunale libera di Castelporziano",
+        "Oasi Naturista di Capocotta",
+        "Spiaggia Libera Canale dei Pescatori",
+        "Il Curvone",
+        "Spiaggia libera di Capocotta",
+        "Aurea",
+        "Spiaggia di Capocotta"
       ],
       "attractions": [
-        "Basilica Sotterranea di Porta Maggiore",
-        "Guerrilla spam",
-        "Sepolcro di Largo Talamo",
-        "Il coniglio",
-        "Street Art di Mauro Sgarbi",
-        "La lumaca",
-        "Monumento a San Francesco",
-        "Fontana del Giardino di Piazza Vittorio",
-        "Palazzo Lateranense",
-        "Pozzo della Samaritana"
+        "Monumento ai Caduti del Mare",
+        "Tumulo Chigi di Monte Aguzzo",
+        "Area Archeologica di Campetti - Decumano",
+        "Tomba delle Anatre",
+        "tomba delle Centocelle",
+        "Cisterna Romana",
+        "Sito Archeologico di Belmonte",
+        "Fortino di Grotta Marozza"
       ],
       "nature": [
-        "Parco regionale urbano di Aguzzano",
-        "Riserva Naturale Valle dei Casali",
-        "Parco Naturale Regionale Appia Antica",
-        "Riserva Naturale del Laurentino - Acqua Acetosa",
-        "Riserva Naturale della Tenuta dei Massimi",
-        "Parco Agricolo di Casal del Marmo",
-        "Monumento Naturale Parco della Cellulosa",
         "Riserva Naturale della Marcigliana",
+        "Parco Naturale Regionale di Bracciano - Martignano",
+        "Parco regionale di Veio",
+        "Bosco di Grotta Cerqueta",
+        "Parco regionale urbano di Aguzzano",
+        "ZPS Comprensorio Bracciano-Martignano",
+        "Macchia di Gattaceca e Macchia del Barco",
         "Monumento naturale di Mazzalupetto – Quarto degli Ebrei",
-        "Oasi LIPU Castel di Guido - Alta fruibilità"
+        "Parco Regionale dei Castelli Romani",
+        "Riserva Naturale della Tenuta dei Massimi"
+      ],
+      "diving": [
+        "Mare nostrum diving center"
       ]
     }
   },
   "Lisbon": {
     "destination": "Lisbon",
     "features": [
-      "beaches",
       "attractions",
       "nature"
     ],
     "places": {
-      "beaches": [
-        "Praia da Mutela",
-        "Prainha do Porto Brandão",
-        "Praia de Algés",
-        "Praia do Portinho da Costa",
-        "Praia do Dafundo",
-        "Praia Fluvial da Ponta dos Corvos",
-        "Praia do Clube Naval",
-        "Praia da Trafaria",
-        "Praia do Mexilhoeiro"
-      ],
       "attractions": [
-        "Lisboa Reedificada",
-        "Marquês de Pombal",
-        "Minerva",
-        "Camilo Castelo Branco",
-        "Almeida Garrett",
-        "Alexandre Herculano",
-        "Oliveira Martins",
-        "António Feliciano de Castilho",
-        "Sem título",
-        "Mãe e Filho"
+        "António José de Almeida",
+        "Egas Moniz",
+        "Mãe e Filho",
+        "Mausoléu dos Benfeitores da Misericórdia de Lisboa",
+        "Monumento a Gabriela Mistral",
+        "Praça Duque de Saldanha",
+        "Duarte Pacheco",
+        "Viaduto da Avenida Fontes Pereira de Melo",
+        "Palácio dos Condes de Almada",
+        "Luís Vaz de Camões"
       ],
       "nature": [
-        "Geomonumento da Rua Sampaio Bruno",
-        "Geomonumento do Parque da Pedra",
-        "Geomonumento da Av. Infante Santo",
-        "Geomonumento do Forte de Santa Apolónia",
-        "Geomonumento do Parque da Bela Vista",
         "Espaço Biodiversidade",
-        "Reserva Botânica Dom António Xavier Pereira Coutinho",
         "Geomonumento da Rua Virgílio Correia",
-        "Parque Florestal de Monsanto",
-        "Geomonumento da Rua Capitão Leitão"
+        "Geomonumento do Parque da Bela Vista",
+        "Geomonumento da Quinta do Lambert",
+        "Geomonumento do Rio Seco",
+        "Geomonumento do Parque da Pedra",
+        "Quinta Alegre",
+        "Geomonumento da Rua da Aliança Operária",
+        "Geomonumento da Rua dos Eucaliptos"
       ]
     }
   },
@@ -530,36 +487,37 @@
     ],
     "places": {
       "beaches": [
+        "Jezerooo",
         "Nudistická pláž Braník",
-        "Písčitá plážička",
-        "Jezerooo"
+        "Písčitá plážička"
       ],
       "attractions": [
-        "Pražský poledník",
-        "Staroměstské náměstí",
-        "Radniční věž",
-        "Staroměstská radnice",
-        "Den a Noc",
-        "Železný muž",
-        "Franz Kafka",
-        "Idiom",
-        "Terezka"
+        "Kameny zmizelých: Elsnerovi",
+        "Památník obětem 1. sv. války",
+        "František Antonín Nickerl",
+        "Jan Hus",
+        "zámek Nebřenice",
+        "Jižní pól Prahy",
+        "památník obětem I. a II. světové války",
+        "Říčanský hrad",
+        "Hradiště Kazín",
+        "Antonín Švehla"
       ],
       "nature": [
-        "Letenský profil",
-        "přírodní památka Letenský profil",
-        "přírodní památka Petřín",
-        "přírodní památka Královská obora",
-        "přírodní památka Pecka",
-        "přírodní památka Jabloňka",
-        "přírodní památka Havránka",
-        "přírodní památka Střešovické skály",
-        "přírodní památka Trojská",
-        "přírodní památka Bílá skála"
+        "přírodní rezervace Kulivá hora",
+        "přírodní památka Břežanské údolí",
+        "národní přírodní památka Černé rokle",
+        "přírodní rezervace Radotínské údolí",
+        "přírodní rezervace Šance",
+        "přírodní památka Radotínské skály",
+        "přírodní rezervace Karlické údolí",
+        "přírodní památka Cholupická bažantnice",
+        "přírodní rezervace Klapice",
+        "přírodní památka Modřanská rokle"
       ],
       "diving": [
-        "HappyDivers",
-        "Kapr Divers, PADI 5Star DC"
+        "Kapr Divers, PADI 5Star DC",
+        "HappyDivers"
       ]
     }
   },
@@ -572,37 +530,37 @@
     ],
     "places": {
       "beaches": [
+        "Pirat Bucht",
         "Arena Beach",
         "Familienstrand an der Neuen Donau",
-        "Pirat Bucht",
         "Weststrand",
-        "Südstrand Donauinsel",
+        "FKK Bereich Wienerberg - Naturistenstrand",
         "Oststrand",
-        "FKK Bereich Wienerberg - Naturistenstrand"
+        "Südstrand Donauinsel"
       ],
       "attractions": [
-        "Haas-Haus",
-        "Stephansdom Krypta",
-        "Stock im Eisen",
-        "Fiaker",
-        "Türmerstube",
-        "Adlerturm",
-        "Pestsäule",
-        "Tuchmacherbrunnen",
-        "Monumental Break",
-        "Sisi's amazing Journey"
+        "Franz Schubert",
+        "Südmark-Sievering 1813-1913",
+        "Kirschenhain",
+        "Dr. Karl Lueger",
+        "Aichersäule",
+        "Gedenkstein",
+        "Dreimarkstein",
+        "Adolf Robl Denkmal",
+        "Burg am Leopoldsberg",
+        "Memorial Gugging"
       ],
       "nature": [
-        "Nordbahnhof Freie Mitte „Stadtwildnis”",
-        "Stadtwildnis",
-        "Wertheimsteinpark",
         "Biosphärenpark Wienerwald Kernzone Pfaffenberg",
-        "Biosphärenpark Wienerwald Kernzone Latisberg",
-        "Naturdenkmal Toter Grund",
-        "Biosphärenpark Wienerwald Kernzone Leopoldsberg",
-        "Naturistenpark Lobau",
+        "Stadtwildnis",
         "Biosphärenpark Wienerwald Kernzone Moosgraben",
-        "Biosphärenpark Wienerwald Kernzone Waldschafferin"
+        "Biosphärenpark Wienerwald Kernzone Kolbeterberg",
+        "Biosphärenpark Wienerwald Kernzone Dorotheerwald",
+        "Biotop Eichbachgasse",
+        "Biosphärenpark Wienerwald Kernzone Latisberg",
+        "Biosphärenpark Wienerwald Kernzone Dombachgraben",
+        "Naturdenkmal Toter Grund",
+        "Ziesel-Schutzgebiet"
       ]
     }
   },
@@ -617,23 +575,27 @@
     "places": {
       "beaches": [
         "Παραλία Φλοίσβου",
-        "Παλμύρα",
-        "Παραλία Μπάτη",
-        "Παραλία Έδεμ",
-        "Βοτσαλάκια",
-        "Α’ Πλαζ Αλίμου «Στολίδι»",
-        "Ακτή του Ήλιου",
         "Παραλία Φρεαττύδος",
-        "Άγιος Κοσμάς"
+        "παραλια αγιου αλεξανδρου",
+        "Παραλία Μπάτη",
+        "Άγιος Κοσμάς",
+        "Κράκαρης",
+        "Παραλία Γλυφάδας Ακτή Α",
+        "Παραλία Βάρκιζας",
+        "Balux - The house project",
+        "Μεγάλο Καβούρι"
       ],
       "attractions": [
-        "Πεντάκυκλο",
-        "Πρώην Στέκι του Μάριου (Ρεμπετοσυναντήσεις) Ίωνος 10",
-        "Περικλής",
-        "Θησέας",
-        "Gods Hands graffiti",
-        "Συνάντηση Γ' 2003",
-        "Νίκη"
+        "Αρχαία Ιερά Οδός",
+        "Ιερό Αφροδίτης",
+        "Ελευθέριος Βενιζέλος",
+        "Πόντια μάνα",
+        "Το τείχος του Δέματος",
+        "Κτίσμα Δέμα",
+        "Κωνσταντίνος Νικολόπουλος",
+        "Προτομή Σούλης Σουρή",
+        "Άγαλμα Πλαστήρα",
+        "Αδριάνειο Υδραγωγείο Αγίας Παρασκευής"
       ],
       "nature": [
         "Ποικίλο Όρος"
@@ -653,28 +615,23 @@
     ],
     "places": {
       "beaches": [
-        "Plaža Šulić",
-        "Banje",
-        "Boninovo",
-        "Plaža Bellevue",
-        "Plaža Sv. Jakov",
-        "Nudistička plaža",
+        "Pláž Brsečine",
+        "Mali žali",
+        "secret beach",
+        "Šunj",
+        "Veliki Žal",
+        "Plaža Ingalo",
+        "Plaža President",
         "Mandrač",
-        "Copacabana",
-        "Cava Beach",
-        "Plaža President"
+        "Gof",
+        "Plaža Bellevue"
       ],
       "attractions": [
-        "War photo limited",
-        "Orlandov stup",
-        "Ivan Gundulić 1589-1638",
-        "Sveti Franjo",
-        "Vrata od Buže",
-        "Marin Držić",
-        "Fort St. Johns",
-        "Game of Thrones walk of shame street",
+        "Villa Ghetaldi 1516",
+        "Viktor Dyk",
         "Knežev dvor",
-        "Sveti Vlaho"
+        "Križ na Srđu",
+        "Lazaret"
       ],
       "nature": [
         "Arboretum",
@@ -692,35 +649,40 @@
     ],
     "places": {
       "beaches": [
-        "Ylströndin í Nauthólsvík",
-        "Skarfaklettur",
-        "Kapalfjara",
-        "Hulduvör",
-        "Kapalsandur",
-        "Bæjarvör",
-        "Virkisfjara",
-        "Áttæringsvör",
         "Kríusandur",
-        "Sandsteinsfjara"
+        "Skarfaklettur",
+        "Bæjarvör",
+        "Kapalfjara",
+        "Virkisfjara",
+        "Eiðsgrandi",
+        "Áttæringsvör",
+        "Hulduvör",
+        "Sandsteinsfjara",
+        "Ylströndin í Nauthólsvík"
       ],
       "attractions": [
-        "Saltfiskstöflun",
-        "Vatnsberinn",
-        "Þorsteinn Erlingsson",
-        "Kona að strokka",
-        "Galdramaður"
+        "Kópavogsfundurinn",
+        "Howitzer Hill",
+        "Minningaöldur sjómannadagsins",
+        "Ingólfur Arnarson",
+        "Jónas Hallgrímsson",
+        "Bertel Thorvaldsen",
+        "Bautasteinn 2",
+        "Runólfur Jónsson",
+        "Óðinstorg",
+        "Þorsteinn Einarsson, íþróttafulltrúi"
       ],
       "nature": [
-        "Laugarás",
-        "Fossvogsbakkar",
-        "Háubakkar",
+        "Hleinar",
         "Borgir",
-        "Víghólar",
-        "Álfhóll",
+        "Varmárósar",
+        "Tröllabörn",
+        "Garðahraun - neðra",
         "Hádegishólar",
-        "Bessastaðanes",
-        "Akurey",
-        "Valhúsahæð"
+        "Fossvogsbakkar",
+        "Tungufoss",
+        "Gálgahraun",
+        "Rauðhólar"
       ],
       "diving": [
         "DIVE.IS - PADI 5 Star Dive Center Iceland"
@@ -732,45 +694,41 @@
     "features": [
       "beaches",
       "attractions",
-      "nature",
-      "diving"
+      "nature"
     ],
     "places": {
       "beaches": [
-        "Wardie Bay Beach",
-        "East Sands of Leith",
-        "Royston Beach",
-        "Portobello Beach",
         "Drum Sands",
         "Joppa Shore",
+        "Portobello Beach",
+        "Wardie Bay Beach",
+        "Royston Beach",
         "Cramond Foreshore",
-        "Fisherrow Sands"
+        "East Sands of Leith"
       ],
       "attractions": [
-        "Floral Clock",
-        "E Paolozzi 1989",
-        "Adam Black Memorial",
-        "The Genius of Architecture crowning the Theory and Practice of Art",
-        "Lulla-Bye",
-        "Edinburgh Bus Tours",
-        "Ours Paddington",
-        "Photo trail",
-        "Gladstone's Land"
+        "Kiln",
+        "Greenpark House",
+        "Man, boy and horse at Loanhead",
+        "79th or Cameron Highlanders Memorial",
+        "James Buchanan's Grave",
+        "War Memorial",
+        "CWGC Cross of Sacrifice",
+        "John Knox Memorial",
+        "Susanna MacIver Inscription",
+        "Skene & Aitkenhead Memorial"
       ],
       "nature": [
-        "Johnston Terrace Garden",
-        "Bawsinch and Duddingston Nature Reserve",
+        "Red Moss of Balerno Wildlife Reserve",
+        "Corstorphine Hill Local Nature Reserve",
         "Hermitage of Braid and Blackford Hill Local Nature Reserve",
         "Ravelston Woods Local Nature Reserve",
+        "Bawsinch and Duddingston Nature Reserve",
         "Agassiz Rock SSSI",
-        "Easter Craiglockhart Hill Local Nature Reserve",
-        "Meadows Yard Local Nature Reserve",
-        "Corstorphine Hill Local Nature Reserve",
+        "Johnston Terrace Garden",
+        "Cammo Estate Local Nature Reserve",
         "Burdiehouse Burn Valley Park Local Nature Reserve",
-        "Straiton Pond Local Nature Reserve"
-      ],
-      "diving": [
-        "The Dive Bunker"
+        "Erraid Wood"
       ]
     }
   },
@@ -783,30 +741,36 @@
     ],
     "places": {
       "beaches": [
-        "Havnevigen",
         "Christiania Beach",
-        "Svanemølle Strand",
+        "Dragør Sydstrand",
         "Amager Strandpark",
+        "Dragør Strand",
+        "Skodsborg Strand - Struckmannparken",
         "Kastrup Søbad",
-        "Hellerup Strand",
+        "Frydenlund Strand",
         "Hvidovre strand",
-        "Bellevue Strand",
-        "Vallensbæk Strand - Brøndby Strand",
-        "Dragør Strand"
+        "Havnevigen",
+        "Vallensbæk Strand - Brøndby Strand"
       ],
       "attractions": [
-        "De syv aksler",
-        "Vejrpigerne",
-        "Landsoldaten med den lille hornblæser"
+        "Genforeningssten",
+        "Rasmus Rask",
+        "Danshøj",
+        "Axeltorv",
+        "Nulpunkt Nørreport",
+        "Niels Bohr",
+        "Mindehøjen i Søndermarken",
+        "Danas Plads",
+        "Modstandsgruppen Holger Danske",
+        "Georg Brandes"
       ],
       "nature": [
         "Sydhavnstippen",
-        "Kalvebod Fælled",
-        "Gammelmose",
         "Lergravene",
+        "Kalvebod Fælled",
         "Amager Vildtreservat",
-        "Saltholm Vildtreservat",
-        "Vaserne"
+        "Vaserne",
+        "Gammelmose"
       ]
     }
   },
@@ -819,26 +783,26 @@
     ],
     "places": {
       "beaches": [
-        "Lido di Venezia",
-        "Spiaggia libera",
-        "Spiaggia libera di San Nicoletto",
         "Ottagono Abbandonato",
-        "Marina di Venezia"
+        "Spiaggia libera di San Nicoletto",
+        "Spiaggia libera",
+        "Marina di Venezia",
+        "Lido di Venezia"
       ],
       "attractions": [
-        "Porta della botte",
-        "Barbacn de Paragon",
-        "Palazzo Bembo",
-        "Terrasse von Commissario Brunetti",
-        "Scuola Grande di San Teodoro",
-        "Il Gobbo di Rialto",
-        "Palazzo Contarini del Bovolo"
+        "Cippo di conterminazione lagunare n. 35",
+        "Cippo di conterminazione lagunare n. 42",
+        "Cippo di conterminazione lagunare n. 33",
+        "Caduti delle due guerre",
+        "Cippo di conterminazione lagunare n. 68BIS",
+        "Batteria S. Antonio",
+        "Cippo di conterminazione lagunare n. 73",
+        "Campo Santi Giovanni e Paolo",
+        "Paolo Sarpi",
+        "Francesco Maria Piave"
       ],
       "nature": [
-        "Oasi Cave di Gaggio",
-        "Parco Laghetti di Martellago",
-        "Oasi Valle Averto WWF",
-        "Oasi Lycaena"
+        "Oasi Cave di Gaggio"
       ]
     }
   },
@@ -852,55 +816,67 @@
     ],
     "places": {
       "beaches": [
-        "Galion Plage",
-        "Centenaire Plage",
-        "Ruhl Plage",
-        "Beau Rivage",
-        "Lido Plage",
-        "Opera Plage",
+        "Hôtel Amour",
         "Sporting Plage",
-        "Blue Beach",
-        "Plage Castel",
-        "Bella Nissa"
+        "Plage de la Gavinette",
+        "Bambou Plage",
+        "Ruhl Plage",
+        "Cocoon Beach",
+        "Li Rateta",
+        "Bains Militaires",
+        "Centenaire Plage"
       ],
       "attractions": [
-        "Avenue Jean Médecin",
-        "SAbaidee",
-        "Fier d’estre Nissart",
-        "Pessi Aman"
+        "Monument aux morts",
+        "Villa Masséna",
+        "Gustave V",
+        "Plaque commémorative du 8 mai 1945",
+        "Cours Saleya",
+        "Square Odette et Moussa Abadi",
+        "Crypte Archéologique de Nice",
+        "Monument aux morts de l'incendie de l'opéra (1881)",
+        "Main à l’urne",
+        "Plaque commémorative de l'hôtel Excelsior"
       ],
       "nature": [
-        "Parc d'Estienne d'Orves",
         "Parc du Vinaigrier",
         "Vallon Gattamua",
-        "Parc de la Grande Corniche",
-        "Parc de Vaugrenier",
-        "Parc du lac du Broc",
-        "Parc du Cros de Casté",
-        "Parc Naturel Départemental du Sinodon",
-        "Parc de la Brague"
+        "Parc d'Estienne d'Orves"
       ],
       "diving": [
-        "Nice International Diving Center (CIP)",
-        "Chango diving",
         "Rand'eau Evasion",
-        "BeFreeToDive"
+        "Chango diving",
+        "Nice International Diving Center (CIP)"
       ]
     }
   },
   "Bangkok": {
     "destination": "Bangkok",
     "features": [
+      "beaches",
       "attractions",
       "diving"
     ],
     "places": {
+      "beaches": [
+        "หาดเทียม",
+        "หาดบางแสน"
+      ],
       "attractions": [
-        "เสาชิงช้า",
-        "โอมมานีปะมีอง"
+        "อนุสาวรีย์จอมพล ป. พิบูลสงคราม",
+        "พระที่นั่งวิมานเมฆ",
+        "ตำหนักพระองค์เจ้าเหมวดี",
+        "อนุสาวรีย์สมเด็จพระนางเจ้าสุนันทากุมารีรัตน์",
+        "อนุสาวรีย์ ดร.ไสว สุทธิพิทักษ์ และ อ.สนั่น เกตุทัต",
+        "ตำหนักพระองค์เจ้าอรุณวดี",
+        "วัดนาค",
+        "พระที่นั่งอนันตสมาคม",
+        "อนุสาวรีย์ รัชกาลที่ ๕",
+        "อนุสรณ์สถานพฤษภาประชาธรรม"
       ],
       "diving": [
-        "THAI OCEAN ACADEMY"
+        "THAI OCEAN ACADEMY",
+        "CHRISEIDON Dive Center"
       ]
     }
   },
@@ -912,16 +888,16 @@
     ],
     "places": {
       "attractions": [
-        "อนุสาวรีย์สามกษัตริย์",
-        "Wat Chedi Luang Monk Chat",
-        "Lying Buddha",
-        "เจดีย์หลวง",
-        "Dheva patchunna",
-        "Meeting Room Art Gallery",
-        "Tattoo kuay thai",
-        "Black Diamond Tattoo",
-        "Chang Phuak Gate Night Market Food Stalls",
-        "Friday Night Market"
+        "อนุสาวรีย์ครูบาศรีวิชัย",
+        "รูปปั้นสิงห์ขาว",
+        "วัดหมื่นสาร",
+        "ศาลาลายและสวนหย่อม",
+        "แจ่งหัวลิน",
+        "อนุสาวรีย์พระเจ้ากาวิละ",
+        "หมู่บ้าน นิมมานเหมินทร์ อนุสรณ์",
+        "แจ่งศรีภูมิ",
+        "Boeing 747-400",
+        "Old Buddhist Tower"
       ],
       "nature": [
         "Choeng Doi Suthep Wildlife and Nature Education Center"
@@ -931,22 +907,21 @@
   "Kyoto": {
     "destination": "Kyoto",
     "features": [
-      "beaches",
       "attractions",
       "nature"
     ],
     "places": {
-      "beaches": [
-        "真野浜"
-      ],
       "attractions": [
-        "五条大橋橋脚",
-        "なで猪",
-        "いのししコレクション",
-        "和気清麻呂公銅像",
-        "Cours de calligraphie japonaise",
-        "和気清麻呂公像",
-        "和気清麻呂絵巻"
+        "山147",
+        "山131",
+        "今宮社跡",
+        "山一五二",
+        "山陰神社",
+        "中沼葵園先生墓",
+        "山一四六",
+        "奈古屋里人先生菩提所",
+        "山一三四",
+        "山五?"
       ],
       "nature": [
         "琵琶湖国定公園 第2種特別地域"
@@ -957,22 +932,27 @@
     "destination": "Hanoi",
     "features": [
       "beaches",
-      "attractions"
+      "attractions",
+      "nature"
     ],
     "places": {
       "beaches": [
         "Red River Beach"
       ],
       "attractions": [
-        "Hanoi Police Museum",
-        "Phố đường tàu Hà Nội",
-        "Nghi môn",
-        "Khuê Văn Các",
-        "Văn Miếu - Quốc Tử Giám",
-        "Mai Gallery",
-        "V.I. Lê-nin",
-        "Thánh Paul",
-        "Art Vietnam"
+        "Ngày hôm nay...",
+        "Ông giáo Hảo",
+        "Hùng dự (nhà)",
+        "Thành Liễu",
+        "Nhà Thờ Đạo Đức",
+        "Nam Tuấn",
+        "Phế tích cốt Pháp",
+        "Đền tưởng niệm các Anh Hùng - Liệt Sĩ",
+        "Đài tưởng niệm liệt sĩ",
+        "Tượng đài Sinh viên lên đường bảo vệ Tổ quốc"
+      ],
+      "nature": [
+        "Vườn quốc gia Ba Vì"
       ]
     }
   },
@@ -988,12 +968,16 @@
         "한강백사장"
       ],
       "attractions": [
-        "환구단",
-        "석고",
-        "Winner's Face - Community",
-        "정동전망대",
-        "소공지하상가",
-        "스프링"
+        "김재규 가옥",
+        "13도창의군탑",
+        "돌덧널 무덤",
+        "진리로 기념비",
+        "전차 차고 터",
+        "김상옥 열사의 상",
+        "호국 기념비",
+        "연주봉옹성 (Yeonjubongongseong)",
+        "성제묘 聖帝廟",
+        "남파김삼준 문화복지기념관"
       ],
       "nature": [
         "용봉정근린공원"
@@ -1004,27 +988,24 @@
     "destination": "Colombo",
     "features": [
       "beaches",
-      "attractions",
-      "nature"
+      "attractions"
     ],
     "places": {
       "beaches": [
-        "Golden Beach",
         "Wellawatte Beach",
-        "Preethipura Beach",
-        "Dehiwala Beach"
+        "Golden Beach"
       ],
       "attractions": [
-        "Pettah Market",
-        "White Triangle Building",
-        "Historic Cargills building",
-        "Lloyds Building",
-        "Old Dutch Hospital"
-      ],
-      "nature": [
-        "Flamingos",
-        "Natural Forest Patch",
-        "Attidiya Bird Sanctuary"
+        "Nalanda War Memorial",
+        "War Memorial",
+        "Dr. N. M. Perera",
+        "T.B. Ilangararne",
+        "Horse made out of vehicle parts",
+        "Highway Entrance Monument",
+        "Sir Oliver Ernest Goonatilake",
+        "Henry Steel Olcott",
+        "Frederick Richard Senanayaka",
+        "Sri Lanka Telecom Monument"
       ]
     }
   },
@@ -1032,27 +1013,23 @@
     "destination": "Kathmandu",
     "features": [
       "beaches",
-      "attractions",
-      "nature"
+      "attractions"
     ],
     "places": {
       "beaches": [
-        "Reliance Trekking Pvt Ltd",
-        "PROPOSED SITE"
+        "Reliance Trekking Pvt Ltd"
       ],
       "attractions": [
-        "Quickprint",
-        "Prithivi Narayan Shah",
-        "Putali Sadak Chock पुतली सडक चोक ६६७",
-        "Solution Wizard Services",
-        "धण्टा-धर",
-        "Rani Pokhari",
-        "Anchita ko shit room",
-        "Kviti art material shop",
-        "חנות בגדעם יפה עם גקט אדידס"
-      ],
-      "nature": [
-        "National Botanical Gardens"
+        "Shakya Stone Dpo Center",
+        "Rawat Trading Concern",
+        "Depressed stone icon",
+        "Late Laxmi Prasad Devkota",
+        "Birendra Batika",
+        "Arun Thapa Chok",
+        "Shree Karma Raja Maha Vihar",
+        "Sundhara stone spout",
+        "nktpa",
+        "Big Bell"
       ]
     }
   },
@@ -1066,36 +1043,36 @@
     ],
     "places": {
       "beaches": [
-        "الشاطئ المفتوح",
-        "كايت بيتش",
+        "Pearl Jumeirah Public Beach",
+        "La Mer",
         "DOSC private beach",
         "شاطئ الجميرة",
-        "شاطئ الصفوح",
-        "شاطئ جميرا المفتوح",
-        "Mandarin Oriental",
-        "La Mer",
-        "شاطئ مرسى دبي",
-        "La Mer Beach"
+        "Pet's Beach",
+        "Al-Mamzar Park - Sadaf Beach (5)",
+        "شاطئ",
+        "Al-Mamzar Park - Flamingo Beach",
+        "Nikki Beach",
+        "Deira Islands Beach"
       ],
       "attractions": [
-        "Statue Of Liberty",
-        "Native American Indian Statue",
-        "Telephone Booth",
-        "New Legend In Town",
-        "Falcon",
-        "Delta",
-        "Global Village fireworks spot"
+        "Boat Model",
+        "Golden Horses",
+        "Al Ahmadiya School",
+        "تحية الثلاثة أصابع الإماراتية",
+        "موقع جميرا الأثري",
+        "BGBC Nad Al Sheba Gardens Villas",
+        "jabz castle",
+        "Heritage House",
+        "موقع الصفوح الأثري",
+        "موقع جميرا 2 الأثري"
       ],
       "nature": [
-        "مركز وادي الصفا للحياة الفطرية",
-        "محمية ند الشبا الطبيعية",
         "محمية رأس الخور للحياة البرية",
-        "محمية الحفظ الخاصة"
+        "محمية ند الشبا الطبيعية"
       ],
       "diving": [
-        "Deep Dive Dubai",
         "DiveCampus diving club",
-        "Al Boom Diving"
+        "Deep Dive Dubai"
       ]
     }
   },
@@ -1107,11 +1084,16 @@
     ],
     "places": {
       "attractions": [
-        "Juneja Art Gallery",
-        "Sawai Jai Singh II",
-        "M",
-        "Sunset Point",
-        "Chhoti roundabout view"
+        "Royal Gaitor",
+        "Diwan-i-Khas",
+        "India gate",
+        "Paanch Batti",
+        "Police Shahid Smarak",
+        "Stepwell Panna Meena",
+        "Suraj Pol Gate",
+        "Shaheed Smarak",
+        "Amer Fort",
+        "Sheesh Mahal"
       ],
       "nature": [
         "Nahargarh WLS"
@@ -1128,44 +1110,47 @@
     ],
     "places": {
       "beaches": [
-        "Quarantine Boat Depot Beach",
-        "Secret Cove",
-        "Hayes Street Beach",
-        "Double Bay Beach",
-        "Greenwich Baths",
-        "Seven Shillings Beach",
-        "Whiting Beach",
-        "Corner Beach",
-        "Lady Martins Beach",
-        "Bellamy Beach"
+        "Penrith Beach",
+        "Wentworth Falls Lake Beach",
+        "Grand Flaneur Beach",
+        "Eora Beach",
+        "Little Bay Beach",
+        "Little Congwong Beach",
+        "Cruwee Cove",
+        "Maroubra Beach",
+        "Kutti Beach",
+        "Quarantine Beach"
       ],
       "attractions": [
-        "GPO Colonnade",
-        "Youngsters",
-        "Forgotten Songs",
-        "Athena",
-        "A Human Scale",
-        "Peace Waratah",
-        "Reflection",
-        "Magnetism",
-        "Continuum"
+        "Tizzana Winery",
+        "Woy Woy engraving site",
+        "Eurama",
+        "convict stockade",
+        "Archdeacon Boyce",
+        "Allen's Mill",
+        "Square Tank",
+        "George Robert Miller",
+        "Pilgrim Inn",
+        "Werrington House"
       ],
       "nature": [
-        "Jack Floyd Reserve",
-        "Bird Sanctuary",
-        "Bradley Bushland Reserve",
-        "Flat Rock Gully",
-        "Fred Hollows Reserve",
-        "Blue Gum Reserve",
-        "Ernest Collins Reserve",
-        "Bronte-Coogee Aquatic Reserve",
-        "Parramatta River Regional Park"
+        "Monastir Road Bush Reserve",
+        "Waterview Park",
+        "Manooka Road Bush Reserve",
+        "Wendy Drive Bush Reserve",
+        "Popran National Park",
+        "Pitt Town Nature Reserve",
+        "Cattai National Park",
+        "Scheyville National Park",
+        "Sassafras Park",
+        "Pelican Island Nature Reserve"
       ],
       "diving": [
-        "Plunge",
+        "Abyss Scuba Diving",
         "Dive Centre Manly",
-        "Deep 6",
-        "Abyss Scuba Diving"
+        "Aquatic Explorers",
+        "Plunge",
+        "Deep 6"
       ]
     }
   },
@@ -1178,64 +1163,59 @@
     ],
     "places": {
       "beaches": [
-        "Westhaven Beach",
-        "Hamilton Beach Reserve",
-        "Secret Cove",
-        "Sentinel Beach",
-        "Home Bay Beach",
-        "Cremorne Reserve",
-        "Sulphur Beach",
-        "Herne Bay Beach",
-        "Sloanes Beach",
-        "Devonport Beach"
+        "Campbells Bay Beach",
+        "Browns Bay Beach",
+        "Winstones Cove Beach",
+        "Mairangi Bay Beach",
+        "Cornwallis Beach",
+        "Rothesay Bay Beach",
+        "Wattle Bay",
+        "Christmas Beach",
+        "Titirangi Beach",
+        "Waiake Beach"
       ],
       "attractions": [
-        "Auckland Green Gecko",
-        "Mataaoho",
-        "Lanechange",
-        "Nobody Here But Us",
-        "Anchor Stones (Matahorua and Tainui)",
-        "Font",
-        "Step Touch Stone",
-        "Don't Panic",
-        "Women's Suffrage Centenary Project Mural"
+        "1918 Influenza Epidemic Memorial",
+        "Waikōwhai Bay Changing Rooms",
+        "Ōwairaka",
+        "Stone of Remembrance",
+        "Waikumete Cemetery Erebus Memorial",
+        "Daniel Lucas",
+        "Ōmangaia Pā",
+        "Propeller of HMNZS Otago (F111)",
+        "Auckland Provincial Memorial",
+        "New Lynn War Memorial"
       ],
       "nature": [
-        "Gardens of Government House Auckland",
-        "Maungarei Stonefields",
-        "Withford Reserve",
-        "Fernhill Escarpment",
-        "South Titirangi Plant Reserve",
-        "Ngongetepara Esplanade Reserve",
-        "Kate Sheppard Reserve",
         "Hosking Reserve",
-        "Seibel Park",
-        "O'Brien Reserve"
+        "O'Brien Reserve North",
+        "Fernhill Escarpment",
+        "Kate Sheppard Reserve",
+        "Withford Reserve",
+        "O'Brien Reserve",
+        "South Titirangi Plant Reserve",
+        "Gardens of Government House Auckland",
+        "Maungarei Stonefields"
       ]
     }
   },
   "Queenstown": {
     "destination": "Queenstown",
     "features": [
-      "beaches",
       "attractions",
       "nature"
     ],
     "places": {
-      "beaches": [
-        "Big Beach",
-        "Tucker Beach",
-        "Sutherlands Beach",
-        "Rocky beach",
-        "McCarrons Beach"
-      ],
       "attractions": [
-        "Escape Quest Queenstown",
-        "IFly Indoor Skydiving",
-        "Fear Factory",
-        "ICON",
-        "Kurī the dog",
-        "Auxilium"
+        "Robert Scott Memorial",
+        "Patricia Anne (Paddy) Burton",
+        "William Gilbert Rees",
+        "Simon W Jeffares",
+        "Richard Cogar Bryant",
+        "Bruce Grant",
+        "Andy Harris",
+        "Service Above Self",
+        "Roma Mary McAndrew’s tree"
       ],
       "nature": [
         "Queenstown Hill Recreation Reserve"
@@ -1251,63 +1231,54 @@
     ],
     "places": {
       "beaches": [
-        "Three Anchor Bay beach",
-        "Rocklands Beach",
-        "Broken Baths Beach",
-        "Milton Beach",
-        "Sunset Beach",
-        "Queens Beach",
+        "Sunset Rocks",
+        "Hout Bay Beach",
+        "Llandudno Beach",
         "Saunders Rocks Beach",
-        "First Beach",
-        "Second Beach",
-        "Third Beach"
+        "Bakoven Beach",
+        "Milton Beach",
+        "Lagoon Beach",
+        "Queens Beach",
+        "Sunset Beach",
+        "Glen Beach"
       ],
       "attractions": [
-        "Statue of Edward Vll",
-        "Queen Victoria",
-        "J.C. Smuts",
-        "An Arch for Arch",
-        "Table Mountain Yellow Frame (District Six)",
-        "Creative Nestling",
-        "Berlin Wall segment",
-        "Louis Botha",
-        "The Knot"
+        "Rhodes memorial",
+        "Rhodes Memorial",
+        "Wim Richter Memorial Peace Garden",
+        "Henry Harold Welch Pearson",
+        "Long street",
+        "Bartolomeu Dias",
+        "St. Peter's Garden of Remembrance",
+        "The Mill House",
+        "Kingsbury House",
+        "Het Huis te Kraaienstjin"
       ],
       "nature": [
-        "Intaka Island",
-        "Ken Heights Private Nature Reserve",
-        "Milnerton Racecourse Nature Reserve",
-        "Table Bay Nature Reserve",
-        "Rietvlei Wetland Reserve",
         "Edith Stephens Nature Reserve",
+        "Ken Heights Private Nature Reserve",
+        "False Bay Nature Reserve",
+        "Zandvlei Estuary Nature Reserve",
+        "Rietvlei Wetland Reserve",
+        "Table Bay Nature Reserve",
         "Rondevlei Bird Sanctuary",
-        "Tygerberg Nature Reserve",
-        "Cape Flats Nature Reserve",
-        "Zandvlei Estuary Nature Reserve"
+        "Milnerton Racecourse Nature Reserve",
+        "Intaka Island"
       ]
     }
   },
   "Marrakesh": {
     "destination": "Marrakesh",
     "features": [
-      "attractions",
-      "nature"
+      "attractions"
     ],
     "places": {
       "attractions": [
-        "derb essamour",
-        "Sphere of bicycle parts",
-        "L'Art du Henné Bio",
-        "Medina",
-        "Pascal",
-        "foundour el amir",
-        "Tower",
-        "Marrakech International Protestant Church",
-        "Bibi Art",
-        "Tomb of Abdelaziz al-Tebaa"
-      ],
-      "nature": [
-        "Réserve de Rmila ⵜⴰⵃⴰⵔⴰⵣⵜ ⵏ ⵕⵎⵉⵍⴰ محمية الرميلة"
+        "Pont sur oued Tensift",
+        "Mémorial Yves Saint Laurent نصب تذكاري إيف سانت لورينت",
+        "Place Djemaa el-Fna ساحة جامع الفناء",
+        "Mosque de Sidi Ghadem",
+        "Casa Isidora"
       ]
     }
   },
@@ -1319,19 +1290,19 @@
     ],
     "places": {
       "attractions": [
-        "رمسيس",
-        "العتبة",
-        "باب المزهرية",
-        "شارع شقة الزاهرة",
-        "محل اواعي",
-        "Puerta Bab Al Futuh",
-        "local bazaar",
-        "قصر السكاكيني",
-        "House of Kharazati",
-        "بيت السحيمي"
+        "ليونتوبوليس",
+        "اهداء من شركة امون",
+        "أون",
+        "إبراهيم باشا",
+        "مسجد الجيوشى",
+        "موقع ميلاد ثورة 30 يونيو",
+        "Pavillion",
+        "قبة أم الصالح",
+        "مقام شيخ الاسلام زكريا الأنصاري",
+        "قبة أحمد باشا حسنين"
       ],
       "nature": [
-        "محمية قـبـة الحسنة",
+        "محمية الغابة المتحجرة",
         "محمية وادي دجلة"
       ]
     }
@@ -1344,20 +1315,23 @@
     ],
     "places": {
       "attractions": [
-        "Birth in park Statue",
-        "Kenyatta Statue",
-        "Good person",
-        "Dedan Kimathi Statue",
-        "Lazarus",
-        "KICC Observation Plattform",
-        "Tom Mboya Statue",
-        "Herbarium"
+        "Askari Monument",
+        "Murumbi Peace Memorial",
+        "Fort Smith",
+        "Stone of Remembrance",
+        "City Cotton slum eviction",
+        "Cross of Sacrifice",
+        "Conservation Heroes Monument",
+        "Amani Garden",
+        "hope house",
+        "Kenyatta university environmental club"
       ],
       "nature": [
         "Nairobi National Park",
-        "Silole Conservancy",
+        "Oloolua Nature Trail",
         "Karura Nursery",
-        "Oloolua Nature Trail"
+        "Rimpa Estate Wildlife Conservancy",
+        "Silole Conservancy"
       ]
     }
   },
@@ -1373,16 +1347,12 @@
         "Nakupenda Beach"
       ],
       "attractions": [
-        "Slavery Memorial",
-        "Bharmal Building",
-        "Spinning Coaster",
-        "Hamamni Persian Baths",
-        "Kiponda Stone town Records 776",
-        "Old Dispensary",
-        "The Old Dispensary",
-        "Old Customs House",
-        "Sunset Jump Spot",
-        "Old Cannons"
+        "Freddy Mercury House",
+        "Karume Monument",
+        "Maruhubi Palace",
+        "Bwawani Hotel",
+        "Portuguese Arch",
+        "Mtoni Palace Ruins"
       ],
       "diving": [
         "One Ocean Dive Centre"
@@ -1398,73 +1368,70 @@
     ],
     "places": {
       "beaches": [
-        "Praia da Esplanada Verde",
-        "Prainha da Glória",
-        "Praia do Flamengo",
-        "praia",
-        "Praia de Botafogo",
+        "Praia do Lameirão",
+        "Praia de Sepetiba",
+        "Praia da Guarda",
+        "Praia de São Roque",
+        "Praia Grande",
+        "Praia do Curvo",
+        "Praia da Várzea",
+        "Praias de Moema e Iracema",
         "Praia do Gragoatá",
-        "Praia de Dentro",
-        "Praia da Urca",
-        "Caixa de areia",
-        "parquinho"
+        "Praia das Gaivotas"
       ],
       "attractions": [
-        "João Caetano",
-        "Fidelidade",
-        "Retângulo Vazado",
-        "Estátua equestre de D. Pedro I",
-        "Justiça",
-        "Grande Quadrado Vermelho",
-        "José Bonifácio"
+        "Iemanjá",
+        "Sant'Ana",
+        "Pilar Praça Junqueiro",
+        "Marco 11 da Estrada Real de Santa Cruz",
+        "Art Clube Futebol da 15",
+        "#CidadeOlímpica",
+        "Avião TF-33",
+        "Ruínas do Humaitá",
+        "Moedeiro",
+        "Obelisco"
       ],
       "nature": [
-        "Morro Cara de Cão",
-        "PARQUE FLORESTAL GANGA MACAIA REI GENTIL DA GUINÉ",
-        "Área de Proteção Ambiental dos Morros da Babilônia e São João",
-        "Reserva Parque da Ilha do Catalão",
-        "Área de Proteção Ambiental e Recuperação Urbana do Jequiá",
         "Terreno Baldio",
+        "Área de Proteção Ambiental e Recuperação Urbana do Jequiá",
+        "Reserva Parque da Ilha do Catalão",
         "Área de Proteção Ambiental",
+        "Pedra da Panela",
+        "Área de Proteção Ambiental da Fazenda da Taquara",
+        "Área de Proteção Ambiental dos Morros da Babilônia e São João",
         "Parque de Material Aeronáutico do Galeão",
-        "Pedra da Panela"
+        "Área de preservação Ambiental do Piraquê",
+        "Floresta do Camboatá"
       ]
     }
   },
   "Buenos Aires": {
     "destination": "Buenos Aires",
     "features": [
-      "beaches",
       "attractions",
       "nature",
       "diving"
     ],
     "places": {
-      "beaches": [
-        "Playa de rellenos urbanos"
-      ],
       "attractions": [
-        "Hunger Games",
-        "Edificio Otto Wulff",
-        "Polaris Ice Cream",
-        "Luis Jorge Fontana",
-        "Cristales en la memoria",
-        "Tritón",
-        "Homenaje a la Botica del Ángel",
-        "The Cycling Horse",
-        "El Quijote"
+        "Madonna de Corsignano",
+        "Diputado Nacional Carlos Bello",
+        "Homenaje a la Junta de Galicia",
+        "Mojón 22",
+        "Monumento",
+        "Henri Dunant",
+        "Benito Quinquela Martín",
+        "Monumento de la Madre Teresa de Calcuta",
+        "Monumento al Almirante Guillermo Brown",
+        "Federic Ozanam"
       ],
       "nature": [
-        "Reserva Ecológica Costanera Sur",
         "Reserva Natural Saladita Sur",
         "Reserva Ecológica Ciudad Universitaria - Costanera Norte",
-        "Reserva Ecológica Vicente López",
-        "Reserva Ecológica de Vicente López",
-        "Bosques de Ciudad Evita"
+        "Reserva Ecológica Costanera Sur"
       ],
       "diving": [
-        "ABucear - Centro de Buceo",
-        "CEB Escuela de Buceo"
+        "ABucear - Centro de Buceo"
       ]
     }
   },
@@ -1476,13 +1443,16 @@
     ],
     "places": {
       "attractions": [
-        "Monumento al Inca Pachacutec",
-        "Martin Chambi",
-        "Mural Historico",
-        "Palacio Inka del Kusikancha",
-        "Cusco Shibari Studio",
-        "Puma and Snake stones",
-        "Arte Mendevil"
+        "Rayanhuayjo",
+        "Cuper Bajo",
+        "Machu Qollqa",
+        "Arco de tica tica",
+        "Machucollpa",
+        "Tejahuasi",
+        "Pillipata",
+        "Yanaqaqa",
+        "Zona Arqueológica de Wimpillay",
+        "Ladislao Espinar"
       ],
       "nature": [
         "Sacsayhuamán",
@@ -1495,39 +1465,52 @@
     "features": [
       "beaches",
       "attractions",
-      "nature"
+      "nature",
+      "diving"
     ],
     "places": {
       "beaches": [
-        "Playas de Marbella",
-        "Playas de Crespo",
-        "Playa de Marbella",
-        "Playas de Las Tenazas",
-        "Playa Castillo Grande",
         "Bocagrande",
-        "Playa Las Américas",
-        "Desembarcadero Tierra Bomba",
-        "Playa de Oro"
+        "Playas de Crespo",
+        "Playa del Claval",
+        "Playas de Marbella",
+        "Terreno seleccionado",
+        "Gente de Mar",
+        "Playas de Las Tenazas",
+        "La punta del Ingles",
+        "Playa Cristal",
+        "Playa La Ceiba"
       ],
       "attractions": [
-        "Cruise Pier Cartagena",
-        "La Popa Mirador",
-        "Castillo San Felipe de Barajas",
-        "Fuerte de San Sebastián del Pastelillo",
-        "Baluarte San José",
-        "castillo san Felipe viewpoint",
-        "Baluarte El Reducto",
-        "Street art"
+        "Estatua de Antonio de la Torre y Miranda",
+        "Virgen",
+        "Monumento a las Palenqueras",
+        "Monumento a Miguel de Cervantes Saavedra",
+        "India Catalina",
+        "Doña Soledad  Román",
+        "Virgen de la Candelaria",
+        "Monumento a los Alcatraz",
+        "Homenaje a La Constitución 1886"
       ],
       "nature": [
         "Islote de mangle",
-        "Isla Maparapita",
-        "Isla Cocosola",
-        "Isla de San Esteban",
-        "Resguardo indígena Senú",
         "Mangle",
-        "Reserva de Manglar",
-        "Isla Brujas"
+        "Manglar",
+        "Resguardo indígena Senú",
+        "Isla de San Esteban",
+        "Isla Maparapita",
+        "Isla Pelo de Zorra",
+        "Isla Cocosola",
+        "Isla Abanico"
+      ],
+      "diving": [
+        "Centro de Buceo Rincón del Mar - Divecenter",
+        "Rincón Dive Center",
+        "El Pez León",
+        "Aventura",
+        "Titanes Diving",
+        "Rincon Dive Center",
+        "Bloop Dive Center"
       ]
     }
   },
@@ -1540,32 +1523,34 @@
     ],
     "places": {
       "beaches": [
-        "Playa de Aves",
         "Playa de garcetas",
         "Playa de los patos",
-        "Playa del restaurante del lago"
+        "Playa del restaurante del lago",
+        "Playa de Aves"
       ],
       "attractions": [
-        "El Aguilita",
-        "Alonso García Bravo",
-        "El encuent4o de Hernán Cortes y Moctezuma",
-        "Recinto de Homenaje a Don Benito Juárez",
-        "Balcón Presidencial",
-        "Street Art",
-        "Templo de Huitzilopochtli",
-        "Maqueta"
+        "Centro Ceremonial Cerro Tepetzingo",
+        "Alcomixtli Netzahualcóyotl",
+        "Virgen de Guadalupe",
+        "Torre I",
+        "Virgen de Tepito",
+        "Monumento San Juan Diego",
+        "Casa de las águilas",
+        "Ventana arqueológica del Gran Basamento Mexica",
+        "José Martin",
+        "Busto de Friedrich Engels"
       ],
       "nature": [
-        "Vivero de flores hermosas bahia",
-        "Humedal de Carrizos",
+        "Reserva Estatal \"Barranca México 68\"",
+        "REPSA Zona de Amortiguamiento A13 Zona Administrativa Exterior",
+        "REPSA Zona de Amortiguamiento A1 Circuito Exterior Norte",
+        "REPSA Zona de Amortiguamiento A6 Centro Cultural",
+        "Parque Ecológico de Xochimilco",
         "Playa de Aves",
-        "Falda del Cerro de la Estrella",
-        "Zona ecológica",
-        "Parque Nacional Cerro de la Estrella",
-        "Glorieta Bosques",
-        "Reserva Ecológica Acueducto de Guadalupe",
+        "Vivero de flores hermosas bahia",
         "Parque Estatal Sierra de Guadalupe",
-        "Parque Duraznos"
+        "Parque Alerces",
+        "Área de Conservación Municipal \"Chico Méndez\""
       ]
     }
   },
@@ -1579,44 +1564,40 @@
     ],
     "places": {
       "beaches": [
+        "Playa San Miguelito",
         "Playa El Niño",
+        "Playa Coral",
+        "Playa Chac Mool",
+        "Playa Ballenas",
         "Playa Las Perlas",
         "Playa Conchitas",
-        "Playa Langosta",
-        "Playa Tortugas",
         "Playa Ancha",
-        "Playa Caracol",
-        "Playa Chac Mool",
-        "Playa Gaviota Azul",
-        "Playa Marlín"
+        "Plage Taco Arte"
       ],
       "attractions": [
-        "clips",
-        "Caracoles y Estrellas de Mar (El Ceviche)",
-        "Gran Puerto",
-        "Marina Cha-Chi",
-        "Condominio Bellamar",
-        "Torre Escénica de Cancún",
-        "Señal CANCÚN",
-        "Solo Buceo Cancun Diving Center",
-        "Adventure Bay"
+        "Monumento a los Niños Héroes",
+        "Zona Arqueológica San Miguelito",
+        "El Meco",
+        "Torre a Telmex",
+        "José Martí",
+        "Monumento a la Madre",
+        "Arco de Labná",
+        "Antigua torre de control",
+        "Alberto Bojórguez Pérez"
       ],
       "nature": [
-        "Reserva Ecológica Municipal Ombligo Verde",
+        "Área de Protección de Flora y Fauna Playa Delfines",
         "Reserva Ecológica Puerto Cancún",
         "Parque Ecológico Kabah",
-        "Comité Ambiental Laguna Manatí",
-        "Área de Protección de Flora y Fauna Jacinto Pat",
-        "Zona Sujeta a Conservación Ecológica Refugio Estatal de Flora y Fauna Laguna Manatí",
+        "Reserva Ecológica Municipal Ombligo Verde",
         "Área de Protección de Flora y Fauna San Buenaventura",
-        "Zona Sujeta a Conservación Ecológica Refugio Estatal de Flora y Fauna Sistema Lagunar Chacmochuch",
-        "Tern Sanctuary",
-        "Área de Protección de Flora y Fauna Playa Delfines"
+        "Zona Sujeta a Conservación Ecológica Refugio Estatal de Flora y Fauna Laguna Manatí",
+        "Comité Ambiental Laguna Manatí",
+        "Área de Protección de Flora y Fauna Jacinto Pat"
       ],
       "diving": [
         "Aquaworld",
-        "Scuba Total",
-        "Casa del Buceo"
+        "Scuba Total"
       ]
     }
   },
@@ -1629,33 +1610,34 @@
     ],
     "places": {
       "beaches": [
-        "Playa del Chivo",
-        "CSO Otto Parellada",
-        "CSO Jose Luis Tasende",
-        "Playita de 110",
-        "La Concha",
-        "CSO Julio Antonio Mella",
+        "La Puntilla",
         "Playa del Náutico",
+        "Playita de 110",
+        "CSO Otto Parellada",
+        "Playa de Jaimanitas",
+        "CSO Julio Antonio Mella",
         "Playa de Cojímar",
-        "Playa de Jaimanitas"
+        "La Concha",
+        "Playa del Chivo"
       ],
       "attractions": [
-        "General José Miguel Gómez",
-        "Alma Mater",
-        "Eduardo Rawdriguez",
-        "Don Quijote",
-        "Grafiti de Che y Johnny Depp",
-        "La Velocidad",
-        "Casa Vedado",
-        "Victor Hugo"
+        "Eduardo Sabourit",
+        "Quintín Banderas",
+        "Monumento a Julio Antonio Mella",
+        "Omar Torrijos",
+        "José Martí",
+        "Tarja a Panchita Rivero Arocha",
+        "Rafael María de Mendive",
+        "La Giraldilla",
+        "USS Maine",
+        "Esteban Borrero Echeverría"
       ],
       "diving": [
+        "Centro de Buceo Cuba Ocean Diving",
+        "Centro de buceo Caballeros de Mar",
         "Club de Buceo MarAbierto",
         "Blue centro de buceo",
-        "Centro de buceo Caballeros de Mar",
-        "Club de Buceo GoBlue",
-        "Centro de Buceo Cuba Ocean Diving",
-        "Centro de Buceo Cuba Ocean Diving - La Habana"
+        "Club de Buceo GoBlue"
       ]
     }
   },
@@ -1669,36 +1651,35 @@
     ],
     "places": {
       "beaches": [
-        "Sunset Beach",
-        "Kitsilano Beach",
-        "Hadden Beach",
-        "Trout Lake Beach",
-        "Secret Beach",
-        "English Bay Beach",
+        "Spanish Banks Beach",
         "Second Beach",
+        "Trout Lake Beach",
+        "English Bay Beach",
+        "Sunset Beach",
+        "Locarno Beach",
+        "Secret Beach",
+        "Hadden Beach",
         "Jericho Beach",
-        "Third Beach",
-        "Locarno Beach"
+        "Third Beach"
       ],
       "attractions": [
-        "Love in the Rain",
-        "Photo Session"
+        "Cambie Bridge Ring Gear Monument",
+        "Heritage Hall Tower Clock",
+        "Lord Stanley Statue",
+        "Chinatown Memorial Monument",
+        "Seven Sisters Replantation",
+        "Kohima Epitaph",
+        "Windstorm Damage",
+        "Mehrdad Ashooian",
+        "Chinatown Millennium Gate",
+        "George Alexander Burrows"
       ],
       "nature": [
-        "Ecological Reserve #74",
-        "Discovery Place Conservation Area",
-        "Swishwash Island Nature Sanctuary",
-        "Capilano River Regional Park",
-        "Capilano Suspension Bridge Park",
-        "Maplewood Conservation Area",
-        "Capitol Hill Conservation Area",
-        "Douglas Woodward Park",
-        "Altamont Beach Park",
-        "Cypress Provincial Park"
+        "Ecological Reserve #74"
       ],
       "diving": [
-        "Diving Sports Canada",
-        "Rowand's Reef Scuba Shop"
+        "Rowand's Reef Scuba Shop",
+        "Diving Sports Canada"
       ]
     }
   },
@@ -1711,65 +1692,70 @@
     ],
     "places": {
       "beaches": [
-        "Crane Cove Beach",
-        "East Beach",
-        "Baker Beach (Clothing-Optional Area)",
-        "Baker Beach",
-        "Marshall's Beach",
-        "China Beach",
+        "Sand Springs Beach",
         "Mile Rock Beach",
-        "Ocean Beach",
-        "Kirby Beach",
-        "Sand Springs Beach"
+        "South Rodeo Beach",
+        "Tennessee Beach",
+        "Baker Beach",
+        "Perles Beach",
+        "Phillip Burton Memorial Beach",
+        "Baker Beach (Clothing-Optional Area)",
+        "Bramble Beach",
+        "Ocean Beach"
       ],
       "attractions": [
-        "Baby Cop",
-        "Sea + Sky",
-        "The Moon's Gravity Causes the Ocean's Tides",
-        "No Human Being Is Illegal",
-        "W.F.T. (San Francisco)",
-        "Large Four Piece Reclining Figure",
-        "Balanced, Unbalanced T"
+        "Nike Missile SF-59 Site",
+        "Leipsic Junction",
+        "The First Dynamite Factory In America",
+        "Sweeny Observatory Ruins",
+        "The River Lines",
+        "Poet's Corner",
+        "Marine Hospital",
+        "Mountain Lake Park Playground",
+        "Battery Construction 129",
+        "Ft. Point 1861: historic civil engineering landmark"
       ],
       "nature": [
+        "Bolinas Lagoon Preserve",
+        "Blithedale Summit Open Space Preserve",
+        "Three Groves",
+        "Camino Alto Open Space Preserve",
+        "Muir Woods National Monument",
+        "Tiburon Ridge Open Space Preserve",
         "Mount Sutro Open Space Reserve",
-        "Fort Funston",
-        "Angel Island State Park",
-        "San Bruno Mountain State and County Park",
-        "Thornton State Beach",
-        "Cypress Ridge Open Space",
-        "Easton Point Open Space Preserve",
+        "Horse Hill Open Space Preserve",
         "Old Hilary's Botanical Preserve",
-        "Old Saint Hilary's Open Space Preserve",
-        "Crab Cove Marine Reserve"
+        "Southeast Farallon Island State Marine Reserve"
       ]
     }
   },
   "New Orleans": {
     "destination": "New Orleans",
     "features": [
+      "beaches",
       "attractions",
-      "nature",
-      "diving"
+      "nature"
     ],
     "places": {
+      "beaches": [
+        "Olimpic Beach"
+      ],
       "attractions": [
-        "George Washington",
-        "Stone Head",
-        "John McDonogh",
-        "Molly Marine",
-        "Striding Man",
-        "Simón Bolívar",
-        "Eagle Saloon",
-        "Allen Toussaint"
+        "USCGC WHITE ALDER Memorial",
+        "Morrison Memorial",
+        "Martin Luther King Jr. Memorial",
+        "McDonogh Monument",
+        "Execution of Jean Baptist Baudrau II",
+        "Moonwalk",
+        "Franklin Monument",
+        "Wedell Monument",
+        "Edward B. Boettner 1937-2000",
+        "Women Armed Forces"
       ],
       "nature": [
-        "Woodlands Conservancy",
         "Audubon Louisiana Nature Center",
-        "Jean Lafitte National Historic Park and Preserve - Barataria Preserve Unit"
-      ],
-      "diving": [
-        "Harry's Dive Shop"
+        "Woodlands Conservancy",
+        "Bayou Sauvage National Wildlife Refuge"
       ]
     }
   },
@@ -1783,40 +1769,44 @@
     ],
     "places": {
       "beaches": [
-        "Ala Moana Beach",
-        "Magic Island lagoon",
-        "Duke Paoa Kahanamoku Beach Park",
-        "Waikīkī Beach",
-        "Queen Kapi'olani Beach",
-        "Kaimana beach",
-        "Mākālei Beach",
         "Lē'ahi Beach",
-        "Cromwell's Beach",
-        "Hunakai Beach"
+        "Queen Kapi'olani Beach",
+        "Sandy Beach",
+        "Mākālei Beach",
+        "Spitting caves",
+        "Ala Moana Beach",
+        "Lanikai Beach",
+        "Hunakai Beach",
+        "Makapuu Beach Park",
+        "Makapu‘U Beach"
       ],
       "attractions": [
-        "Queen Lili'uokalani Statue",
-        "Father Damien Statue",
-        "Patsy Mink",
-        "King Kamehameha the Great Statue",
-        "Sky Gate",
-        "Kakaako Street Art"
+        "Pahua Heiau",
+        "War Bunker",
+        "9/11 Memorial",
+        "Kaniakapūpū Ruins",
+        "Kalakaua Statue",
+        "makapu'u Heiau",
+        "USS Arizona Bell",
+        "Moiliili International Friendship Arch",
+        "Ernest Taylor Pyle",
+        "Buddah"
       ],
       "nature": [
-        "Waikīkī MLCD",
-        "Round Top Forest Reserve",
-        "Waikīkī-Diamond Head Shoreline Fisheries Management Area",
         "Diamond Head State Monument",
-        "Honolulu Forest Reserve",
+        "Paikō Lagoon Wildlife Sanctuary",
         "Kaau Crater",
         "Kāneʻohe Forest Reserve",
-        "Kaneohe Forest Reserve",
+        "Honolulu Forest Reserve",
+        "Waikīkī MLCD",
         "Kuliouou Forest Reserve",
-        "Paikō Lagoon Wildlife Sanctuary"
+        "Round Top Forest Reserve",
+        "Waikīkī-Diamond Head Shoreline Fisheries Management Area",
+        "Hanauma Bay State Park"
       ],
       "diving": [
-        "Hanauma Bay Dive Tours",
-        "Reef Pirates Diving"
+        "Reef Pirates Diving",
+        "Hanauma Bay Dive Tours"
       ]
     }
   },
@@ -1839,13 +1829,16 @@
         "Nieuwe Meer, Noordoever"
       ],
       "attractions": [
-        "De Worstelaars",
-        "Moeder en Kind",
-        "River Treasure",
-        "Meisje met Kat",
-        "Tamboer",
-        "Menselijke Eenheid",
-        "Sint Joris en de draak"
+        "1940 45",
+        "Weduwe met Kind",
+        "Banpaal",
+        "Bolwerk Karthuizen",
+        "Amerigo Vespucci",
+        "1936-1939 No Pasaran",
+        "Allendemonument",
+        "Vesting Weesp",
+        "Fanny Blankers-Koen",
+        "Zigeunermonument - Hel en Vuur"
       ],
       "nature": [
         "Eendenkooi Ruigoord",
@@ -1882,12 +1875,16 @@
         "Anse Matelot"
       ],
       "attractions": [
-        "Black Pearl Farm",
-        "Pointe Etienne",
-        "vanilla plantations",
-        "Ferdinand Nature Reserve",
-        "Romeo&Juliet Rock",
-        "Trois Freres viewpoint"
+        "anchor",
+        "Dauban Mausoleum",
+        "Monument de l'Unité",
+        "Lazare Monument",
+        "Seychelles Youth Village",
+        "Court monument",
+        "Legal boundary of Praslin Secondary school",
+        "Liberty Statue",
+        "Venn's Town",
+        "Plato"
       ],
       "nature": [
         "Parc national marin de Curieuse",
