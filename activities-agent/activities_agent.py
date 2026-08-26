@@ -104,6 +104,13 @@ load_dotenv()
 
 DB_PATH = "./chroma_db"
 COLLECTION_NAME = "activities"
+
+# Cutoff for search_activities_semantic. Measured against this corpus:
+#   "ancient Roman ruins"      -> Colosseum            0.69   (keep)
+#   "museums in Paris"         -> Louvre               1.04   (keep)
+#   "beach day in Cancun"      -> Cinepolis            1.28   (drop)
+#   unrelated text             -> anything             1.74+  (drop)
+MAX_MATCH_DISTANCE = 1.1
 DOCS_DIR = os.path.join(os.path.dirname(__file__), "local_activity_docs")
 MCP_SERVER_SCRIPT = os.path.join(os.path.dirname(__file__), "mcp_opentripmap_server.py")
 
@@ -239,17 +246,45 @@ def search_activities_semantic(query: str, city: str = "", category: str = "", p
     elif len(where_clauses) > 1:
         where = {"$and": where_clauses}
 
-    results = collection.query(query_texts=[query], n_results=5, where=where)
+    results = collection.query(
+        query_texts=[query], n_results=5, where=where,
+        include=["documents", "metadatas", "distances"],
+    )
 
     docs = results.get("documents", [[]])[0]
     metas = results.get("metadatas", [[]])[0]
+    dists = results.get("distances", [[]])[0]
 
     if not docs:
         return {"error": "No semantic match found for that query/filter combination."}
 
+    # Nearest-neighbour search always returns SOMETHING. Without a cutoff, a
+    # "beach day in Cancun" query returned four cinemas and churches, and a
+    # "museums in Paris" query returned Boston's Museum of Fine Arts ahead of
+    # the Louvre. Measured on this corpus: a genuine match sits near 0.7-1.0,
+    # boilerplate-description filler at ~1.28, unrelated text at 1.7+.
+    # Offline test mode embeds with hashed vectors (OfflineFakeEmbeddingFunction,
+    # "NOT a real embedding"), so distances there are arbitrary and a cutoff would
+    # reject everything. Filter only when the embeddings are real.
+    cutoff = float("inf") if _offline_mode() else MAX_MATCH_DISTANCE
+    keep = [(d, m) for d, m, dist in zip(docs, metas, dists) if dist <= cutoff]
+    if not keep:
+        return {
+            "error": (
+                f"No activity in the corpus is a close enough match for {query!r} "
+                f"(nearest {min(dists):.2f}, cutoff {MAX_MATCH_DISTANCE}). This is a "
+                f"coverage limit, not a transient failure -- do not retry with different wording."
+            ),
+            "covered_cities": _covered_cities(),
+        }
+
     activities = [
-        {"name": m["name"], "category": m["category"], "price_tier": m["price_tier"], "description": d}
-        for d, m in zip(docs, metas)
+        # city is per-activity on purpose: without a city filter this searches
+        # every city at once, and the caller cannot otherwise tell that a Paris
+        # query was answered with a Boston museum.
+        {"name": m["name"], "city": m.get("city"), "category": m["category"],
+         "price_tier": m["price_tier"], "description": d}
+        for d, m in keep
     ]
     return {"city": city or "multiple", "source": "vector_db", "activities": activities}
 
@@ -299,7 +334,7 @@ def list_curated_cities() -> str:
 # Tier 3: self-expanding live lookup — grows local coverage over time
 # ---------------------------------------------------------------------
 
-def expand_activities_corpus(city: str, category: str = "") -> dict:
+def expand_activities_corpus(city: str, category: str = "", country: str = "") -> dict:
     """Fetch live activities for an uncovered city AND save them
     locally, so this city becomes part of the fast local coverage for
     future questions instead of requiring a live lookup every time.
@@ -312,17 +347,54 @@ def expand_activities_corpus(city: str, category: str = "") -> dict:
         city: the city to fetch and add to local coverage.
         category: optional OpenTripMap "kinds" filter, e.g.
                   "cultural", "natural", "amusements", "sport".
+        country: ISO 3166-1 alpha-2 code, e.g. "MX" for Cancun, "AW" for
+                  Aruba. ALWAYS pass this when you know it. Without it the
+                  lookup matches on city name alone and can resolve to a
+                  same-named town in another country, which then gets cached
+                  locally and served as though it were correct.
 
     Returns the shared schema dict (source: "mcp_opentripmap_autosaved"),
     or {"error": "..."} on failure. Never raises.
     """
+    if os.path.exists(_city_file(city)):
+        # save_activities_for_city opens the file in "w". Calling this for a
+        # city that already has coverage REPLACES it -- which is how five
+        # hand-written Rome entries (Colosseum, Vatican, Trevi) became five
+        # OpenTripMap cemeteries. Expansion exists to add cities the corpus
+        # lacks, never to rewrite ones it has.
+        return {
+            "error": (
+                f"'{city}' already has local coverage, and expanding would overwrite it. "
+                f"Use search_activities_local_exact or search_activities_semantic instead."
+            ),
+            "covered_cities": _covered_cities(),
+        }
+
     try:
-        activities = fetch_live_activities(city, category=category)
+        activities = fetch_live_activities(city, category=category, country=country)
     except Exception as e:
         return {"error": f"Could not fetch live activities for '{city}': {e}"}
 
     if not activities:
         return {"error": f"No activities found for '{city}' via OpenTripMap."}
+
+    if not country:
+        # Only cache what was verified. Without a country code the geocode
+        # matches on name alone -- "Aruba" resolves to a town in Piedmont and
+        # returns Italian churches -- and anything written here is permanent,
+        # served by tiers 1 and 2 from then on. Returning the results without
+        # saving keeps a one-off lookup useful while making a wrong one
+        # temporary rather than a lasting corruption of the corpus.
+        return {
+            "city": city,
+            "source": "opentripmap_live_unverified",
+            "activities": activities,
+            "warning": (
+                f"No country code was given for {city!r}, so this lookup could not be "
+                f"verified and has NOT been added to local coverage. Call again with "
+                f"country=<ISO 3166-1 alpha-2> to cache it."
+            ),
+        }
 
     saved_path = save_activities_for_city(city, activities)
 
