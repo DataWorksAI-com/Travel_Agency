@@ -41,9 +41,23 @@ def run_tool_tests():
 
     cases = []
 
+    # A SUPERSET, not set equality. The original assertion was
+    #   set(_covered_cities()) == {the six seed cities}
+    # which this agent's own tool breaks: expand_activities_corpus writes a new
+    # city file into local_activity_docs/ on a cache miss, and _covered_cities()
+    # reads that directory. So any live query for an uncovered city turns this
+    # red -- a Cartagena request during a UI run did exactly that. The test was
+    # asserting that a feature had never been used.
+    #
+    # What matters is that the six seed cities are all still there, which is
+    # what a regression would remove. Extra cities are the corpus growing as
+    # designed.
+    SEED_CITIES = {"Kyoto", "New York", "Paris", "Rome", "Boston", "Chicago"}
+    covered = set(_covered_cities())
     cases.append((
-        "6 cities covered (4 from Limeng + 2 from Jainam)",
-        set(_covered_cities()) == {"Kyoto", "New York", "Paris", "Rome", "Boston", "Chicago"},
+        f"6 seed cities still covered (4 from Limeng + 2 from Jainam); "
+        f"{len(covered)} total",
+        SEED_CITIES <= covered,
     ))
 
     # Deterministic domain-boundary guard
@@ -83,7 +97,13 @@ def run_tool_tests():
     cases.append(("hard_filter_activities: free_only keeps only free activities", all(a["price_tier"] == "free" for a in filtered_parsed.get("activities", []))))
 
     cities_report = __import__("json").loads(list_curated_cities())
-    cases.append(("list_curated_cities: reports all 6 covered cities", len(cities_report.get("curated_cities", [])) == 6))
+    # Same reason as the seed-city check above: a hardcoded count of 6 fails as
+    # soon as expand_activities_corpus adds anything. What this should verify is
+    # that the reported list agrees with what is actually on disk.
+    cases.append((
+        "list_curated_cities: reports every covered city",
+        set(cities_report.get("curated_cities", [])) == covered,
+    ))
 
     # Self-expanding corpus: never raises even without OPENTRIPMAP_API_KEY set
     r = expand_activities_corpus("SomeUncoveredCityForTesting")

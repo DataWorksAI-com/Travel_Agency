@@ -1,0 +1,32 @@
+[
+  {
+    "name": "T\u014dkaid\u014d",
+    "category": "other",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Tokyo; pricing not provided."
+  },
+  {
+    "name": "Tokyo City Hall Tower II",
+    "category": "skyscrapers",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Tokyo; pricing not provided."
+  },
+  {
+    "name": "Shinjuku Central Park",
+    "category": "urban_environment",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Tokyo; pricing not provided."
+  },
+  {
+    "name": "Shinjuku Niagara Falls",
+    "category": "fountains",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Tokyo; pricing not provided."
+  },
+  {
+    "name": "keio plaza hotel tokyo",
+    "category": "skyscrapers",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Tokyo; pricing not provided."
+  }
+]

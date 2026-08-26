@@ -20,6 +20,8 @@ truststore.inject_into_ssl()
 
 import requests
 
+import unicodedata
+
 API_URL = "https://geocoding-api.open-meteo.com/v1/search"
 TIMEOUT_SECONDS = 30
 RESULT_COUNT = 10
@@ -102,14 +104,26 @@ def resolve_place(city_name):
     }
 
 
+def _fold(text: str) -> str:
+    """Casefold and strip accents.
+
+    Open-Meteo's record is "Cancún". A user typing "Cancun" found no exact
+    match here, fell through to the API's top hit, and resolved to a village in
+    Guangxi, China -- which the destination agent then wrote into the committed
+    shared RAG corpus. Comparing folded forms is what stops that.
+    """
+    decomposed = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
+
+
 def _pick_best(results, query):
     """Prefer an exact name match; otherwise take the API's own top ranking."""
     usable = [r for r in results if isinstance(r, dict)]
     if not usable:
         return None
 
-    lowered = query.casefold()
-    exact = [r for r in usable if isinstance(r.get("name"), str) and r["name"].casefold() == lowered]
+    lowered = _fold(query)
+    exact = [r for r in usable if isinstance(r.get("name"), str) and _fold(r["name"]) == lowered]
     if exact:
         # Among exact name matches, the most populous is the one a traveller means.
         return max(exact, key=lambda r: r.get("population") or 0)

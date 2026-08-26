@@ -1,0 +1,21 @@
+{
+  "_comment": "Mock outputs from the other domain agents, so this agent is runnable standalone without waiting on anyone. Replace with real agent output once the shared schema lands.",
+  "request": {
+    "destination": "BARBADOS",
+    "nights": 4,
+    "travelers": 2,
+    "total_budget": 5000
+  },
+  "plan": {
+    "lodging": 840,
+    "meals": 1200,
+    "activities": 600,
+    "local_transport": 220
+  },
+  "over_budget_plan": {
+    "lodging": 3200,
+    "meals": 1200,
+    "activities": 900,
+    "local_transport": 400
+  }
+}

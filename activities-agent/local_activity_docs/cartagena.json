@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Estadio de Beisbol Once de Noviembre",
+    "category": "sport",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Cartagena; pricing not provided."
+  },
+  {
+    "name": "Casa de Hu\u00e9spedes Ilustres",
+    "category": "historic_architecture",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Cartagena; pricing not provided."
+  },
+  {
+    "name": "La Popa",
+    "category": "mountain_peaks",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Cartagena; pricing not provided."
+  },
+  {
+    "name": "Raid on Cartagena",
+    "category": "battlefields",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Cartagena; pricing not provided."
+  },
+  {
+    "name": "Capture of the San Joaquin",
+    "category": "battlefields",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Cartagena; pricing not provided."
+  }
+]

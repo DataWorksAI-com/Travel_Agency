@@ -284,3 +284,60 @@ Capstone/
 - `destination_data/recommend.py`: Shared RAG retrieval logic. Uses `rag_text` when available and falls back to `description`.
 ```
 ```
+## Rebuilding the cached profiles
+
+`destination_profiles.json` is a cache, and `get_or_build_destination_profile`
+is cache-first by design: a city already in the file is returned without a
+lookup. So a change to the *query* in `geoapify_data.py` does not reach any
+city already cached. The two have to be reconciled explicitly:
+
+```bash
+python -m destination_agent.rebuild_profiles --dry-run          # report only
+python -m destination_agent.rebuild_profiles                    # all 52
+python -m destination_agent.rebuild_profiles --only Rome Cancún  # just these
+python -m destination_agent.enrich_rag_corpus                   # -> destinations.json
+```
+
+A city is replaced only if its rebuild returns places, so a network failure
+keeps the existing profile rather than blanking it.
+
+## OPEN: a heritage category tier would beat `tourism.sights`
+
+`26d5e2c` states that Geoapify has no notability ranking — `wiki_and_media` is
+rejected as a condition — so results stay ordered by distance and a plaque
+outranks a landmark. **That is measurably not the whole picture**, and the
+docstring's "neither ranked nor curated" caveat is stronger than it needs to be.
+
+The landmarks are under a different category tree. Querying
+`heritage,heritage.unesco,building.historic,tourism.sights.castle,tourism.sights.fort`
+first, then topping up from `tourism.sights`, was measured on eight cities:
+
+| City      | `tourism.sights` (current)         | heritage-first                            |
+|-----------|------------------------------------|-------------------------------------------|
+| Rome      | Monumento ai Caduti del Mare       | **Colosseo, Basilica di San Pietro**      |
+| Cartagena | Estatua de Antonio de la Torre     | **Castillo San Felipe de Barajas**        |
+| Dubrovnik | Villa Ghetaldi, Viktor Dyk         | **Lovrijenac, Minčeta, Bokar**            |
+| Zanzibar  | Freddy Mercury House               | **House of Wonders, Sultan's Palace**     |
+| Marrakesh | Pont sur oued Tensift              | **Palais Bahia, Place Djemaa el-Fna**     |
+| Honolulu  | War Bunker, Buddah                 | **ʻIolani Palace, Diamond Head Lighthouse** |
+| Cancún    | Monumento a los Niños Héroes       | **las ruinas de El Rey**, El Meco         |
+| Paris     | Trianon, Ruines de l'abbaye        | **Sainte-Chapelle**, Saint-Eustache       |
+
+Residual noise is roughly 1–2 in 10 (`Domino`, `Pier Side Fitness Center`)
+against 6–8 in 10 today.
+
+Two approaches that were measured and **rejected**, so they are not retried:
+
+- **Union of `tourism.sights` + `tourism.attraction`.** Geoapify applies
+  `limit` *before* any local filtering, so asking for both returns the N
+  nearest across both — the forts get displaced, not added, and Dubrovnik
+  returned `Knežev dvor` twice, once per category.
+- **Union with the noise subcategories excluded** (`tourism.sights.memorial`,
+  `tourism.attraction.artwork`). This put Cancún's `Gran Puerto`,
+  `Condominio Bellamar` and `clips` straight back: they are plain
+  `tourism.attraction` records with no artwork subcategory to filter on. It
+  reintroduces the original bug to gain a few forts.
+
+Doing this properly means a new query tier, a revised docstring, and a third
+full rebuild at ~2x the Geoapify calls per city. It is Alice's file, so it is
+her call rather than a drive-by change.

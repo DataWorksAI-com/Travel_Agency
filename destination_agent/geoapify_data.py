@@ -28,6 +28,18 @@ GEOAPIFY_API_KEY = os.getenv("GEOAPIFY_API_KEY")
 # in the same folder as destination_data.py.
 PROFILE_FILE = Path(__file__).parent / "destination_profiles.json"
 
+# Matches a name made up entirely of Roman-numeral characters (with optional
+# surrounding punctuation/space). Used to reject Geoapify's milestone markers,
+# which it returns as named sights -- see the filter in
+# build_destination_profile for why the length test alone missed "VII".
+_ROMAN_NUMERAL_CHARS = set("IVXLCDM")
+
+
+def _is_bare_roman_numeral(name: str) -> bool:
+    """True if `name` is nothing but Roman numerals, e.g. "I", "VII", "XIV"."""
+    stripped = name.strip().strip(".,-–—()[] ")
+    return bool(stripped) and all(c in _ROMAN_NUMERAL_CHARS for c in stripped.upper())
+
 
 # ============================================================
 # GEOAPIFY: DESTINATION GEOCODING
@@ -180,6 +192,9 @@ def search_places(
 
     params = {
         "categories": category,
+        # Unnamed records are useless in an itinerary -- there is nothing for a
+        # traveller to look up or walk to.
+        "conditions": "named",
         "limit": limit,
         "apiKey": GEOAPIFY_API_KEY
     }
@@ -328,9 +343,16 @@ def build_destination_profile(
 
     The current Destination Agent focuses on:
     - beaches
-    - tourist attractions
+    - points of interest near the centre
     - nature reserves
     - diving
+
+    These are the nearest matching places to the city centre, NOT a ranked or
+    curated list of highlights: Geoapify offers no notability filter, so a
+    memorial plaque a few hundred metres away outranks a landmark across town.
+    Present them as "points of interest near the centre", never as "the top
+    attractions", and do not imply the list is exhaustive or ordered by
+    importance.
 
     Climate and public-holiday data are handled separately
     by the shared destination data layer.
@@ -367,9 +389,23 @@ def build_destination_profile(
 
     # Map user-friendly feature names to
     # Geoapify category names.
+    # "tourism.sights" rather than "tourism.attraction": the latter includes
+    # artwork and street art, which is how Rome came back as "Guerrilla spam,
+    # Il coniglio, Street Art di Mauro Sgarbi" and Cancun as "clips, Condominio
+    # Bellamar". Measured on the same coordinates, sights returns Piazza del
+    # Campidoglio / Tabularium / Tempio di Vespasiano for Rome and El Meco for
+    # Cancun.
+    #
+    # This is an improvement, not a fix. Geoapify has no notability ranking --
+    # "wiki_and_media" is rejected as an unsupported condition -- so results
+    # remain ordered by distance from the city centre and a nearby memorial
+    # plaque still outranks the Colosseum. Paris is slightly worse under this
+    # category than the old one. The output wording below is deliberately
+    # "points of interest near the centre" rather than "attractions", so the
+    # reply stops implying a curated list it cannot produce.
     category_map = {
         "beaches": "beach",
-        "attractions": "tourism.attraction",
+        "attractions": "tourism.sights",
         "nature": "leisure.park.nature_reserve",
         "diving": "sport.dive_centre"
     }
@@ -413,9 +449,24 @@ def build_destination_profile(
         )
 
         # Extract the place names.
+        #
+        # Names of one or two characters are dropped: Geoapify tags Roman
+        # milestone markers and similar as named sights, so Rome came back
+        # listing "I" and "VII" as points of interest. Nothing a traveller can
+        # look up or navigate to has a one-character name.
+        #
+        # The length test alone was not enough. It was written to remove those
+        # markers, but "VII" is three characters and survived it -- Rome still
+        # listed VII as a point of interest after the rebuild. So a bare Roman
+        # numeral is rejected on its own terms, whatever its length. Only names
+        # consisting of NOTHING but numerals are dropped, so real places that
+        # merely contain one ("Villa dei Quintili III", "Henry VIII's Wall")
+        # are unaffected.
         place_names = [
             place["name"]
             for place in places
+            if len(place.get("name", "").strip()) > 2
+            and not _is_bare_roman_numeral(place.get("name", ""))
         ]
 
         # Remove duplicate place names while

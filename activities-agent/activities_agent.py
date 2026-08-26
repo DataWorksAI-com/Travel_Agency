@@ -88,12 +88,14 @@ Setup:
 """
 
 import os
+import sys
 import json
 import glob
 import asyncio
 import chromadb
 from dotenv import load_dotenv
 from deepagents import create_deep_agent
+from langchain.chat_models import init_chat_model
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from offline_embedding import OfflineFakeEmbeddingFunction
@@ -104,6 +106,13 @@ load_dotenv()
 
 DB_PATH = "./chroma_db"
 COLLECTION_NAME = "activities"
+
+# Cutoff for search_activities_semantic. Measured against this corpus:
+#   "ancient Roman ruins"      -> Colosseum            0.69   (keep)
+#   "museums in Paris"         -> Louvre               1.04   (keep)
+#   "beach day in Cancun"      -> Cinepolis            1.28   (drop)
+#   unrelated text             -> anything             1.74+  (drop)
+MAX_MATCH_DISTANCE = 1.1
 DOCS_DIR = os.path.join(os.path.dirname(__file__), "local_activity_docs")
 MCP_SERVER_SCRIPT = os.path.join(os.path.dirname(__file__), "mcp_opentripmap_server.py")
 
@@ -143,6 +152,33 @@ def _covered_cities() -> list[str]:
     return sorted(
         os.path.splitext(os.path.basename(p))[0].replace("_", " ").title()
         for p in glob.glob(os.path.join(DOCS_DIR, "*.json"))
+    )
+
+
+# The six hand-curated seed cities (4 from Limeng, 2 from Jainam). Everything
+# else in DOCS_DIR arrived via expand_activities_corpus, i.e. straight from
+# OpenTripMap with no review.
+#
+# The distinction is not cosmetic. Live-fetched files carry every price_tier as
+# "unknown" and inherit whatever OpenTripMap holds: honolulu.json has both
+# "Iolani Palace" and "ʻIolani Palace", aruba.json has "Arikok National Park"
+# and "Арикок (холм)" (the same place, in Cyrillic), and tokyo.json's five
+# entries include a hotel and an office block but no temple or shrine.
+# Describing all of it as "curated" -- as the system prompt used to -- makes the
+# agent vouch for records nobody has looked at.
+#
+# Hardcoded rather than a field in the JSON on purpose: adding a provenance key
+# would change the doc schema that build_vector_db.py and both search tiers
+# read. This is the smaller, reversible version of the same fix.
+SEED_CITIES = frozenset({"Kyoto", "New York", "Paris", "Rome", "Boston", "Chicago"})
+
+
+def _coverage_split() -> tuple[list[str], list[str]]:
+    """(curated seed cities, live-fetched cities) -- both actually on disk."""
+    covered = _covered_cities()
+    return (
+        [c for c in covered if c in SEED_CITIES],
+        [c for c in covered if c not in SEED_CITIES],
     )
 
 
@@ -239,17 +275,45 @@ def search_activities_semantic(query: str, city: str = "", category: str = "", p
     elif len(where_clauses) > 1:
         where = {"$and": where_clauses}
 
-    results = collection.query(query_texts=[query], n_results=5, where=where)
+    results = collection.query(
+        query_texts=[query], n_results=5, where=where,
+        include=["documents", "metadatas", "distances"],
+    )
 
     docs = results.get("documents", [[]])[0]
     metas = results.get("metadatas", [[]])[0]
+    dists = results.get("distances", [[]])[0]
 
     if not docs:
         return {"error": "No semantic match found for that query/filter combination."}
 
+    # Nearest-neighbour search always returns SOMETHING. Without a cutoff, a
+    # "beach day in Cancun" query returned four cinemas and churches, and a
+    # "museums in Paris" query returned Boston's Museum of Fine Arts ahead of
+    # the Louvre. Measured on this corpus: a genuine match sits near 0.7-1.0,
+    # boilerplate-description filler at ~1.28, unrelated text at 1.7+.
+    # Offline test mode embeds with hashed vectors (OfflineFakeEmbeddingFunction,
+    # "NOT a real embedding"), so distances there are arbitrary and a cutoff would
+    # reject everything. Filter only when the embeddings are real.
+    cutoff = float("inf") if _offline_mode() else MAX_MATCH_DISTANCE
+    keep = [(d, m) for d, m, dist in zip(docs, metas, dists) if dist <= cutoff]
+    if not keep:
+        return {
+            "error": (
+                f"No activity in the corpus is a close enough match for {query!r} "
+                f"(nearest {min(dists):.2f}, cutoff {MAX_MATCH_DISTANCE}). This is a "
+                f"coverage limit, not a transient failure -- do not retry with different wording."
+            ),
+            "covered_cities": _covered_cities(),
+        }
+
     activities = [
-        {"name": m["name"], "category": m["category"], "price_tier": m["price_tier"], "description": d}
-        for d, m in zip(docs, metas)
+        # city is per-activity on purpose: without a city filter this searches
+        # every city at once, and the caller cannot otherwise tell that a Paris
+        # query was answered with a Boston museum.
+        {"name": m["name"], "city": m.get("city"), "category": m["category"],
+         "price_tier": m["price_tier"], "description": d}
+        for d, m in keep
     ]
     return {"city": city or "multiple", "source": "vector_db", "activities": activities}
 
@@ -291,15 +355,28 @@ def hard_filter_activities(activities_json: str, free_only: bool = False, catego
 
 
 def list_curated_cities() -> str:
-    """List cities that currently have local activity data (tier 1/2 coverage)."""
-    return json.dumps({"curated_cities": _covered_cities()})
+    """List cities that currently have local activity data (tier 1/2 coverage).
+
+    `curated_cities` is every city with local data, unchanged, so existing
+    callers keep working. The two extra keys say which of those were actually
+    reviewed: `seed_cities` were hand-curated, `live_fetched_cities` came
+    straight from OpenTripMap via expand_activities_corpus and have not been
+    checked by anyone -- their prices are all "unknown" and they can contain
+    duplicates under different language tags.
+    """
+    seed, live = _coverage_split()
+    return json.dumps({
+        "curated_cities": _covered_cities(),
+        "seed_cities": seed,
+        "live_fetched_cities": live,
+    })
 
 
 # ---------------------------------------------------------------------
 # Tier 3: self-expanding live lookup — grows local coverage over time
 # ---------------------------------------------------------------------
 
-def expand_activities_corpus(city: str, category: str = "") -> dict:
+def expand_activities_corpus(city: str, category: str = "", country: str = "") -> dict:
     """Fetch live activities for an uncovered city AND save them
     locally, so this city becomes part of the fast local coverage for
     future questions instead of requiring a live lookup every time.
@@ -312,17 +389,54 @@ def expand_activities_corpus(city: str, category: str = "") -> dict:
         city: the city to fetch and add to local coverage.
         category: optional OpenTripMap "kinds" filter, e.g.
                   "cultural", "natural", "amusements", "sport".
+        country: ISO 3166-1 alpha-2 code, e.g. "MX" for Cancun, "AW" for
+                  Aruba. ALWAYS pass this when you know it. Without it the
+                  lookup matches on city name alone and can resolve to a
+                  same-named town in another country, which then gets cached
+                  locally and served as though it were correct.
 
     Returns the shared schema dict (source: "mcp_opentripmap_autosaved"),
     or {"error": "..."} on failure. Never raises.
     """
+    if os.path.exists(_city_file(city)):
+        # save_activities_for_city opens the file in "w". Calling this for a
+        # city that already has coverage REPLACES it -- which is how five
+        # hand-written Rome entries (Colosseum, Vatican, Trevi) became five
+        # OpenTripMap cemeteries. Expansion exists to add cities the corpus
+        # lacks, never to rewrite ones it has.
+        return {
+            "error": (
+                f"'{city}' already has local coverage, and expanding would overwrite it. "
+                f"Use search_activities_local_exact or search_activities_semantic instead."
+            ),
+            "covered_cities": _covered_cities(),
+        }
+
     try:
-        activities = fetch_live_activities(city, category=category)
+        activities = fetch_live_activities(city, category=category, country=country)
     except Exception as e:
         return {"error": f"Could not fetch live activities for '{city}': {e}"}
 
     if not activities:
         return {"error": f"No activities found for '{city}' via OpenTripMap."}
+
+    if not country:
+        # Only cache what was verified. Without a country code the geocode
+        # matches on name alone -- "Aruba" resolves to a town in Piedmont and
+        # returns Italian churches -- and anything written here is permanent,
+        # served by tiers 1 and 2 from then on. Returning the results without
+        # saving keeps a one-off lookup useful while making a wrong one
+        # temporary rather than a lasting corruption of the corpus.
+        return {
+            "city": city,
+            "source": "opentripmap_live_unverified",
+            "activities": activities,
+            "warning": (
+                f"No country code was given for {city!r}, so this lookup could not be "
+                f"verified and has NOT been added to local coverage. Call again with "
+                f"country=<ISO 3166-1 alpha-2> to cache it."
+            ),
+        }
 
     saved_path = save_activities_for_city(city, activities)
 
@@ -363,7 +477,13 @@ async def build_agent():
     try:
         mcp_client = MultiServerMCPClient({
             "opentripmap": {
-                "command": "python",
+                # sys.executable, not "python": the server is spawned as a
+                # subprocess, and a bare "python" resolves against PATH rather
+                # than the venv running us. Where those differ the child lacks
+                # `mcp`, the spawn fails, and we land in the except below --
+                # so the MCP tier disappears with only a warning, which is easy
+                # to read as "OpenTripMap is down" rather than a wrong interpreter.
+                "command": sys.executable,
                 "args": [MCP_SERVER_SCRIPT],
                 "transport": "stdio",
             }
@@ -372,10 +492,22 @@ async def build_agent():
     except Exception as e:
         print(f"[warning] MCP tier unavailable, continuing with local tools only: {e}")
 
-    covered = ", ".join(_covered_cities())
+    seed_cities, live_cities = _coverage_split()
+    covered = ", ".join(seed_cities)
+    live_note = (
+        f"Also held locally, but fetched live from OpenTripMap and NOT reviewed: "
+        f"{', '.join(live_cities)}. For these, prices are unavailable rather than "
+        f"free, entries can be duplicated under different language tags, and the "
+        f"list is not a considered selection of what is worth seeing. Answer from "
+        f"them, but do not call them curated and do not imply they are the "
+        f"city's highlights. "
+        if live_cities else ""
+    )
 
     agent = create_deep_agent(
-        model=MODEL,
+        # Bare string unless a ceiling was asked for, so the default path is
+        # byte-for-byte the original behaviour.
+        model=init_chat_model(MODEL, max_tokens=MAX_TOKENS) if MAX_TOKENS else MODEL,
         tools=local_tools + mcp_tools,
         system_prompt=(
             "You are the Activities domain-expert agent in a multi-agent travel planning "
@@ -386,8 +518,10 @@ async def build_agent():
             "experiences, art, and entertainment. Food and dining is out of scope — that's "
             "the Restaurants Agent's domain, so redirect food questions there instead of "
             "answering them yourself. "
-            f"Locally covered cities (fast, curated data): {covered}. This list grows over "
-            "time as expand_activities_corpus is used on new cities. "
+            f"Hand-curated locally covered cities (fast, reviewed data): {covered}. "
+            f"{live_note}"
+            "This list grows over time as expand_activities_corpus is used on new "
+            "cities, and anything it adds is live data, not curated. "
             "You have tools, in priority order: "
             "(1) search_activities_local_exact — try this first for a covered city with a "
             "clear category/price filter; "
@@ -417,6 +551,20 @@ async def build_agent():
 
 
 MODEL = os.environ.get("DEEP_AGENT_MODEL", "openrouter:z-ai/glm-5.2")
+
+# Optional output ceiling, OFF by default so standalone behaviour is exactly
+# what it was: unset means MODEL is passed to create_deep_agent as a bare
+# string, leaving init_chat_model's own default in place, unchanged.
+#
+# It exists because a caller may need to cap it. On a free-tier OpenRouter key
+# the affordable max_tokens scales with REMAINING CREDIT, so glm-5.2's 65536
+# default eventually exceeds what the key can afford and this slot dies with
+# "requested up to 65536 tokens, but can only afford N" -- a config cliff that
+# reads as a broken agent. The orchestrator sets DEEP_AGENT_MAX_TOKENS to avoid
+# it (see orchestrator_config._build_activities_client) because that is a
+# property of how IT deploys this agent, not of the agent. Running this file on
+# its own is untouched.
+MAX_TOKENS = int(os.environ.get("DEEP_AGENT_MAX_TOKENS", "0")) or None
 
 
 async def answer(task: str) -> str:

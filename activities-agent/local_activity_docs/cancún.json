@@ -1,0 +1,32 @@
+[
+  {
+    "name": "El Meco",
+    "category": "historic",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Canc\u00fan; pricing not provided."
+  },
+  {
+    "name": "Costa Occidental de Isla Mujeres, Punta Canc\u00fan y Punta Nizuc National Park",
+    "category": "gardens_and_parks",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Canc\u00fan; pricing not provided."
+  },
+  {
+    "name": "Cancun Underwater Museum",
+    "category": "cultural",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Canc\u00fan; pricing not provided."
+  },
+  {
+    "name": "MUSA Cancun Underwater Museum of Art",
+    "category": "dive_spots",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Canc\u00fan; pricing not provided."
+  },
+  {
+    "name": "Joyxee Island",
+    "category": "historic",
+    "price_tier": "unknown",
+    "description": "Live OpenTripMap place near Canc\u00fan; pricing not provided."
+  }
+]
