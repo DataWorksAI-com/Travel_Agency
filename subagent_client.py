@@ -79,8 +79,21 @@ class LocalFunctionClient(SubagentClient):
         """
         from deepagents import create_deep_agent
 
+        model = spec.get("model", "openrouter:anthropic/claude-sonnet-4.5")
+
+        # An optional "max_tokens" in the spec is honoured, because passing the
+        # model as a bare string leaves init_chat_model's default of 16384 in
+        # place. On a free-tier OpenRouter key the affordable max_tokens scales
+        # with remaining credit, so that default eventually exceeds it and the
+        # slot fails with "requested up to 16384 tokens, but can only afford
+        # 16382" -- a config cliff that reads as a broken agent.
+        if spec.get("max_tokens"):
+            from langchain.chat_models import init_chat_model
+
+            model = init_chat_model(model, max_tokens=spec["max_tokens"])
+
         agent = create_deep_agent(
-            model=spec.get("model", "openrouter:anthropic/claude-sonnet-4.5"),
+            model=model,
             tools=spec["tools"],
             system_prompt=spec["system_prompt"],
         )
