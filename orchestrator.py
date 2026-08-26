@@ -39,6 +39,74 @@ from orchestrator_config import get_client
 SLOTS = ("destination", "flights", "restaurants", "activities", "budget", "money_customs")
 
 
+# ---------------------------------------------------------------------------
+# Secret scrubbing at the seam
+#
+# Flights returned the Travelpayouts token to its caller: the token is a query
+# parameter, and requests' exceptions stringify as the full request URL, so a
+# failed search put the credential in the reply string. That was fixed at
+# source (flights_agent._redact), which is the right place -- it also protects
+# that agent when it runs standalone.
+#
+# This is the belt-and-braces version, and it belongs to the orchestrator
+# rather than to any agent: EVERY slot's reply passes through ask_slot below,
+# so one filter here covers all six, plus the seam's own failure strings.
+# ui/agent_seam.py:297 interpolates `{type(exc).__name__}: {exc}` into a
+# reply, which is precisely the shape that leaked -- and agent_seam runs
+# UPSTREAM of this function, so its output is scrubbed too.
+#
+# It does not replace a source fix. An agent that leaks a credential still
+# leaks it into its own logs, and into anything a teammate pastes into an
+# issue on what is a public repo. This only guarantees that nothing reaches
+# the browser transcript or, under the agentic orchestrator, the model's
+# context -- where a leaked key would then be replayed to a provider.
+# ---------------------------------------------------------------------------
+
+# Any env var whose NAME contains one of these is treated as a credential. Name
+# based rather than a hardcoded list, so a key added later is covered without
+# anyone remembering to update this file.
+_SECRET_NAME_HINTS = ("_KEY", "_TOKEN", "_SECRET", "_PASSWORD")
+
+# Below this length a value is more likely to be a flag ("true", "1") whose
+# accidental replacement would mangle ordinary prose than a real credential.
+_MIN_SECRET_LEN = 12
+
+# .env.example ships placeholders, and budget_agent/config.py treats a value
+# with one of these as ABSENT. Scrubbing them would turn a helpful "your key is
+# still the placeholder" message into an unreadable one.
+_PLACEHOLDER_MARKERS = ("your-", "your_", "-here", "changeme", "xxxx")
+
+
+def _secret_values() -> dict[str, str]:
+    """Credential-looking env values worth redacting, keyed by variable name."""
+    found = {}
+    for name, value in os.environ.items():
+        if not any(hint in name.upper() for hint in _SECRET_NAME_HINTS):
+            continue
+        candidate = (value or "").strip()
+        if len(candidate) < _MIN_SECRET_LEN:
+            continue
+        if any(marker in candidate.lower() for marker in _PLACEHOLDER_MARKERS):
+            continue
+        found[name] = candidate
+    return found
+
+
+def scrub_secrets(text: str) -> str:
+    """Replace any credential value in `text` with '<NAME redacted>'.
+
+    Named for the variable, not blanked, so a reader can still tell which key
+    the failure was about -- that is the diagnostic value of the original
+    error, and losing it would trade one debugging problem for another.
+    """
+    if not text:
+        return text
+    for name, value in _secret_values().items():
+        if value in text:
+            text = text.replace(value, f"<{name} redacted>")
+    return text
+
+
 async def ask_slot(slot: str, task: str) -> str:
     """Call one subagent by slot name.
 
@@ -47,10 +115,14 @@ async def ask_slot(slot: str, task: str) -> str:
     works if the name resolves here at call time. Importing get_client into
     another module, or caching a client at construction time, silently disables
     real/dummy mode, failure detection, timing and every per-agent UI step.
+
+    The reply is scrubbed of credentials on the way out -- see above. This is
+    the one place every slot's reply passes through, on both the deterministic
+    and the agentic path.
     """
     if slot not in SLOTS:
         raise ValueError(f"unknown slot {slot!r}; expected one of {SLOTS}")
-    return await get_client(slot).call(task)
+    return scrub_secrets(await get_client(slot).call(task))
 
 
 async def _call_money_customs_context(origin_country: str, destination_country: str) -> str:
