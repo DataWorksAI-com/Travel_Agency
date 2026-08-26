@@ -180,6 +180,9 @@ def search_places(
 
     params = {
         "categories": category,
+        # Unnamed records are useless in an itinerary -- there is nothing for a
+        # traveller to look up or walk to.
+        "conditions": "named",
         "limit": limit,
         "apiKey": GEOAPIFY_API_KEY
     }
@@ -328,9 +331,16 @@ def build_destination_profile(
 
     The current Destination Agent focuses on:
     - beaches
-    - tourist attractions
+    - points of interest near the centre
     - nature reserves
     - diving
+
+    These are the nearest matching places to the city centre, NOT a ranked or
+    curated list of highlights: Geoapify offers no notability filter, so a
+    memorial plaque a few hundred metres away outranks a landmark across town.
+    Present them as "points of interest near the centre", never as "the top
+    attractions", and do not imply the list is exhaustive or ordered by
+    importance.
 
     Climate and public-holiday data are handled separately
     by the shared destination data layer.
@@ -367,9 +377,23 @@ def build_destination_profile(
 
     # Map user-friendly feature names to
     # Geoapify category names.
+    # "tourism.sights" rather than "tourism.attraction": the latter includes
+    # artwork and street art, which is how Rome came back as "Guerrilla spam,
+    # Il coniglio, Street Art di Mauro Sgarbi" and Cancun as "clips, Condominio
+    # Bellamar". Measured on the same coordinates, sights returns Piazza del
+    # Campidoglio / Tabularium / Tempio di Vespasiano for Rome and El Meco for
+    # Cancun.
+    #
+    # This is an improvement, not a fix. Geoapify has no notability ranking --
+    # "wiki_and_media" is rejected as an unsupported condition -- so results
+    # remain ordered by distance from the city centre and a nearby memorial
+    # plaque still outranks the Colosseum. Paris is slightly worse under this
+    # category than the old one. The output wording below is deliberately
+    # "points of interest near the centre" rather than "attractions", so the
+    # reply stops implying a curated list it cannot produce.
     category_map = {
         "beaches": "beach",
-        "attractions": "tourism.attraction",
+        "attractions": "tourism.sights",
         "nature": "leisure.park.nature_reserve",
         "diving": "sport.dive_centre"
     }
@@ -413,9 +437,15 @@ def build_destination_profile(
         )
 
         # Extract the place names.
+        #
+        # Names of one or two characters are dropped: Geoapify tags Roman
+        # milestone markers and similar as named sights, so Rome came back
+        # listing "I" and "VII" as points of interest. Nothing a traveller can
+        # look up or navigate to has a one-character name.
         place_names = [
             place["name"]
             for place in places
+            if len(place.get("name", "").strip()) > 2
         ]
 
         # Remove duplicate place names while
