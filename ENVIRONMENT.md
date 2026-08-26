@@ -28,17 +28,18 @@ the Money & Customs agent. Two open PRs bring them: **[run]**
 
 | PR | branch | brings |
 |---|---|---|
-| **#21** | `ui_chainlit_rohan` | `orchestrator.py`, `orchestrator_agent.py`, `orchestrator_config.py`, `subagent_client.py`, `ui/`, `sandbox/`, `evaluation/`, root `.env.example` — **and** Emily's `money_customs_agent.py` + `money_tools.py`, since this branch carries her work as an ancestor |
+| **#21** | `ui_chainlit_rohan` | `orchestrator.py`, `orchestrator_agent.py`, `orchestrator_config.py`, `subagent_client.py`, `ui/`, `sandbox/`, `evaluation/`, root `.env.example` — **and** `money_customs_agent.py` + `money_tools.py`, which this branch carries as an ancestor of the Money & Customs branch |
 | **#22** | `exchange_rate_emily` | `money_customs_agent.py`, `money_tools.py`, `agent.py` |
 
 An earlier version of this section said the orchestrator "arrives with
-`exchange_rate_emily`". That was true of the original shell, which Emily
-designed and handed over, and it is no longer true of the code: the
+`exchange_rate_emily`". That was true of the original shell, which was
+designed and handed over by the Money & Customs owner, and it is no longer
+true of the code: the
 orchestrator, the seam and the UI are owned and developed here, on
 `ui_chainlit_rohan`, and nothing in `orchestrator*.py`, `subagent_client.py` or
-`ui/` imports anything that exists only on her branch. The dependency is
+`ui/` imports anything that exists only on that branch. The dependency is
 historical attribution, not a code path. **[run]**
-(`grep -rniE "emily|exchange_rate" --include=*.py .` returns no import from a
+(a grep for branch-specific module names across `*.py` returns no import from a
 branch-specific module)
 
 Remote branches still ahead of `origin/main`: **[run]**

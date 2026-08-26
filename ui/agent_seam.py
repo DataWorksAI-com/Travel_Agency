@@ -8,7 +8,7 @@ through `get_client` (bound at orchestrator.py:30 by
 that decides which of the two `get_client` hands back.
 
 Mechanism: the same one-line intervention sandbox/run_pipeline.py:56 uses --
-rebind the module attribute `orchestrator.get_client`. Emily's
+rebind the module attribute `orchestrator.get_client`. The orchestrator's
 orchestrator_config.py is NOT edited; its builders are still what produce a
 real client, reached here through its own public get_client().
 
@@ -245,7 +245,7 @@ class SeamClient:
 
     def _real_client(self):
         if self._real is None:
-            # Emily's public entry point, unmodified. It swallows build
+            # The orchestrator's public entry point, unmodified. It swallows build
             # failures into a client whose call() returns
             # "[{name} unavailable] ...", which _looks_like_error catches
             # below -- so a missing branch or dep needs no special case here.

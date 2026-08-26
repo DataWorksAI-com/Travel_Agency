@@ -29,7 +29,7 @@ the commented-out alternative already sitting in that function).
 
 ## 3. Where Money & Customs plugs in
 **Status:** RESOLVED 26 Aug 2026 — its reply is no longer forwarded to any
-other subagent. Emily confirmed the guess below, negatively: one agent's
+other subagent. The guess below was confirmed in review, negatively: one agent's
 response must not be passed into another agent's prompt. Every subagent now
 talks to the orchestrator and to nobody else. Money & Customs instead gets its
 own section in `_assemble_itinerary`, which it never had — previously its reply

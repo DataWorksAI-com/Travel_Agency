@@ -67,9 +67,9 @@ If a slot is dummy, add:
 > if this agent is wrong, it's wrong in three places downstream and nothing checks
 > it."**
 
-### 0:40 — Money & Customs step → **Emily**
+### 0:40 — Money & Customs step
 
-> **"Emily's agent. Seventeen countries, hardcoded, and the file is honest about
+> **"The Money & Customs agent. Seventeen countries, hardcoded, and the file is honest about
 > provenance — most entries say 'general knowledge, not independently verified.'
 > Mexico is one of the seventeen, so what you're seeing is real.**
 >
@@ -78,7 +78,7 @@ If a slot is dummy, add:
 > anyway, with `found: True` and a prose warning the model is free to drop. You'll
 > see that bite on run two.**
 >
-> **Emily — the ask is one line: let `found: False` exist."**
+> **The ask for this agent is one line: let `found: False` exist."**
 
 If time: the team already hit this class — a Vietnam query matched the Philippines
 with false confidence. The fix scrubbed neighbour names out of the text but left
@@ -234,7 +234,7 @@ agent working as designed.
 
 **Money & Customs** — Italy is not one of the seventeen:
 
-> **"And Italy isn't in Emily's seventeen either — so what you're reading is
+> **"And Italy isn't in those seventeen either — so what you're reading is
 > tipping and haggling advice for whichever country embedded closest. Probably
 > France or Germany. Presented as the answer."**
 

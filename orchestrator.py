@@ -179,7 +179,7 @@ async def _run_parallel_subagents(task: str, money_context: str) -> dict:
     #
     # It used to be prepended to both of these task strings
     # (ORCHESTRATOR_DESIGN.md #3, which marked it "implemented as a provisional
-    # guess, worth confirming"). Emily confirmed it, negatively: one agent's
+    # guess, worth confirming"). Review confirmed it, negatively: one agent's
     # response should not be passed to another agent. Every subagent talks to
     # the orchestrator and to nobody else -- that is the agreed architecture,
     # and prepending her reply here made this function a relay.

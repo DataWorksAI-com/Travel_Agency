@@ -5,7 +5,7 @@ WHY THIS EXISTS
 ORCHESTRATOR_DESIGN.md #5 calls this "the biggest unresolved gap in the whole
 skeleton", and until now it was not closed: `_build_budget_task` concatenated
 every subagent's free-text reply into one string and handed it to Budget
-as-is. Emily's objection is the correct reading of that -- passing one agent's
+as-is. The objection raised in review is the correct reading of that -- passing one agent's
 response into another agent's prompt is relaying, not orchestrating, and it
 makes the orchestrator a message bus between subagents rather than the thing
 that decides. It is also not the agreed architecture.

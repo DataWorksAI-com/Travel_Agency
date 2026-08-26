@@ -159,7 +159,7 @@ extra and it was not added to any requirements file.
 
 ## 5. Tooling — the alternatives, and what I'd pick
 
-Emily asked that the orchestrator also **trace the agent workflows**. Splitting
+A request was raised that the orchestrator also **trace the agent workflows**. Splitting
 that into what exists and what's missing:
 
 **Exists today.** The workflow is already traced at the *agent* level: every call
@@ -352,7 +352,7 @@ resolve the stale model strings listed in `UI_BUILD_REPORT.md` §7.
 
 Slack status has been posted through the questions/blockers list. Still unsent at
 time of writing: the reply to Vrushti on A2A (§5d is the content) and the reply to
-Emily on tracing (§5a) — **including the LangSmith correction above, which the
+the tracing request (§5a) — **including the LangSmith correction above, which the
 draft she'd otherwise receive did not have.**
 
 ---
@@ -377,7 +377,7 @@ broke apart. Worth a follow-up:
 > I made to get a working tree, not a team-agreed merge — the UI can't run without
 > it, but whether it becomes *the* integration branch is a team call.
 
-### B. Reply to Emily — orchestrator progress + tracing
+### B. Reply on the tracing request — orchestrator progress + tracing
 
 Content is §5a. Key points: pipeline runs end to end; every agent is a stand-in;
 agent-level tracing already exists (per-agent steps with input/output, `[seam]`

@@ -329,7 +329,7 @@ def run_task(task: str, agent=None) -> str:
 
 
 # Team-standard entry point. Every other subagent exposes `answer(task)` —
-# Vrushti's, Emily's and Limeng's all do — and orchestrator_config.py wires
+# three of the other subagents already do — and orchestrator_config.py wires
 # subagents by importing that name. Same function, the name the orchestrator
 # expects.
 answer = run_task

@@ -1,5 +1,5 @@
 """
-run_pipeline.py -- run Emily's plan_trip() end to end over all six subagent
+run_pipeline.py -- run plan_trip() end to end over all six subagent
 slots, capture every OUTBOUND task string, and show what actually flows
 agent-to-agent.
 

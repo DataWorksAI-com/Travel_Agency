@@ -135,42 +135,29 @@ def _build_budget_client() -> LocalFunctionClient:
 
 
 def _build_money_customs_client() -> LocalFunctionClient:
-    # Real on THIS BRANCH, not yet on main. money_customs_agent.py:111
-    # defines answer(task) over money_tools.py (which IS on main).
+    # money_customs_agent.py:111 defines answer(task) over money_tools.py.
     #
-    # The note that used to sit here said exchange_rate_emily's HEAD was a
-    # direct ancestor of this branch and that both money files were
-    # byte-identical to hers. That was true when written and is no longer:
-    # she has since added 93e6d52 ("Money tool fix -- returns the confidence
-    # level to Orchestrator"), which puts match_score on every return path.
+    # These two files are maintained on the `exchange_rate_emily` branch, not
+    # here. As of 26 Aug 2026 the copies on this branch are byte-identical to
+    # that branch's HEAD -- verified with `git diff --stat
+    # origin/exchange_rate_emily -- money_tools.py money_customs_agent.py`,
+    # which returns empty. This orchestrator does not modify them; changes to
+    # this slot's behaviour belong to whoever owns that branch.
     #
-    # Measured 26 Aug 2026, main is the stale one, not us:
+    # Do NOT resync these two files from an older main. Before PR #21 merged,
+    # main's money_tools.py was two commits behind that branch (11 match_score
+    # occurrences against 25) and money_customs_agent.py was not on main at
+    # all. Taking main as the reference for this slot would drop the tool
+    # layer's confidence work and, previously, the agent itself.
     #
-    #   money_tools.py, match_score occurrences
-    #     origin/main                  11
-    #     origin/exchange_rate_emily   25
-    #     this branch                  26
-    #
-    # So this import points at a SUPERSET of her latest tool layer, and main
-    # does not have money_customs_agent.py at all -- only money_tools.py.
-    # Do not "resync from main" on the assumption that main is the reference
-    # for this slot; that would drop both her match_score contract and the
-    # agent itself.
-    #
-    # The single line where we differ from her is deliberate: found is
-    # match_score >= CONFIDENCE_THRESHOLD here, where hers is hardcoded True
-    # (see fd9f868).
-    #
-    # An earlier version of this comment said git would resolve that "in
-    # whichever direction the last push runs". That overstated it. The merge
-    # base already had True and she never modified that line, so a normal merge
-    # keeps the side that DID change it -- ours -- whichever of PR #21 and
-    # PR #22 lands first. It only reverts on a force-push, a hand-resolved
-    # conflict, or a later deliberate change of hers.
-    #
-    # Still worth knowing, because there is no conflict marker either way: if
-    # this slot ever starts reporting found for a country it holds no data for,
-    # look at this line first.
+    # Note for anyone debugging coverage: search_money_customs returns
+    # found=True unconditionally, so a fuzzy near-miss is reported as a hit and
+    # the nearest held country can be presented as though it were the one
+    # asked for. match_score is returned on every path but nothing here reads
+    # it, because this seam is str -> str: answer() returns prose, so the score
+    # never leaves the agent. Having the orchestrator decide coverage from
+    # match_score needs a structured return from the seam -- that is
+    # orchestrator work, and it is not built yet.
     from money_customs_agent import answer
     return LocalFunctionClient(answer)
 

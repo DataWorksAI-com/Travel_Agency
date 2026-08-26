@@ -124,7 +124,7 @@ or stand-in anywhere in `app.py` — grep it.
 `from orchestrator_config import get_client`, binding the name into the
 `orchestrator` module namespace. **[CODE]**
 
-**Emily's `orchestrator_config.py` is not edited.** When a slot is `real`, the
+**`orchestrator_config.py` is not edited.** When a slot is `real`, the
 seam calls her own public `get_client(name)` and uses whatever it builds.
 
 ### Why the UI can't use `orchestrator_config.get_client` unchanged
@@ -322,7 +322,7 @@ Conditions for a safe push, in order:
 1. `orchestrator.py` + `orchestrator_config.py` + `subagent_client.py` reach `main`
    (i.e. `exchange_rate_emily` merges).
 2. Enough agents reach `main` that `real` is meaningful for at least one slot.
-3. Emily's approval recorded on the PR — she owns `orchestrator_config.py`, and
+3. Owner approval recorded on the PR for `orchestrator_config.py`, and
    this UI depends on its `get_client` contract even though it doesn't edit it.
 4. `chainlit` + `truststore` added to `requirements.txt` (§2).
 
