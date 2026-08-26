@@ -1,0 +1,28 @@
+{
+  "summary": {
+    "agent": {
+      "coverage": 1.0,
+      "propagation": 1.0,
+      "honesty": 0.8,
+      "grounding": 1.0,
+      "passed": 0.8,
+      "median_seconds": 106.2,
+      "runs": 5
+    },
+    "deterministic": {
+      "coverage": 1.0,
+      "propagation": 1.0,
+      "honesty": 0.8,
+      "grounding": 1.0,
+      "passed": 0.8,
+      "median_seconds": 120.9,
+      "runs": 5
+    }
+  },
+  "agents": "destination=real,flights=real,restaurants=real,activities=real,budget=real,money_customs=real",
+  "orchestrator_model": "openrouter:openai/gpt-4o-mini",
+  "cases": [
+    "rome"
+  ],
+  "runs": 5
+}

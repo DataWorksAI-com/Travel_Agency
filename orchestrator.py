@@ -26,8 +26,31 @@ them, rather than every subagent importing it independently.
 """
 
 import asyncio
+import sys
+import os
 
 from orchestrator_config import get_client
+
+# The only slot names that may reach get_client. Worth a guard now that a model
+# picks them: orchestrator_config.get_client swallows its own KeyError, so an
+# unknown name returns "[typo unavailable] 'typo'", and agent_seam falls back to
+# modes.get(name, DUMMY) -- sample data. A hallucinated slot would come back as
+# plausible prose instead of an error.
+SLOTS = ("destination", "flights", "restaurants", "activities", "budget", "money_customs")
+
+
+async def ask_slot(slot: str, task: str) -> str:
+    """Call one subagent by slot name.
+
+    `get_client` is looked up as a module global on purpose: ui/agent_seam.py
+    rebinds `orchestrator.get_client` as its single intervention, and that only
+    works if the name resolves here at call time. Importing get_client into
+    another module, or caching a client at construction time, silently disables
+    real/dummy mode, failure detection, timing and every per-agent UI step.
+    """
+    if slot not in SLOTS:
+        raise ValueError(f"unknown slot {slot!r}; expected one of {SLOTS}")
+    return await get_client(slot).call(task)
 
 
 async def _call_money_customs_context(origin_country: str, destination_country: str) -> str:
@@ -162,9 +185,40 @@ async def plan_trip(
 ) -> str:
     """Top-level entry point: one user request in, one assembled itinerary out.
 
-    This is intentionally the ONLY function meant to be called from outside
-    this file. Everything above is internal sequencing.
+    Dispatches to one of two orchestrators, selected by TRAVEL_UI_ORCHESTRATOR:
+
+      deterministic (default) -- the fixed pipeline below. No model, so it stays
+                                 reproducible, offline-testable and free.
+      agent                   -- orchestrator_agent.plan_trip_agentic, a deep
+                                 agent that decides who to call and with what.
+
+    Both are kept: the deterministic path is the control condition the agent is
+    measured against, not merely a fallback.
     """
+    if os.getenv("TRAVEL_UI_ORCHESTRATOR", "deterministic").strip().lower() == "agent":
+        # Deferred so the deterministic path never imports deepagents or a model
+        # client -- that is what keeps it offline, keyless and free to test.
+        # The path insert is required because Chainlit pops sys.path[0] after
+        # loading app.py, so the repo root is not importable by the time this
+        # runs (ui/agent_seam.py re-runs _ensure_paths every call for the same
+        # reason).
+        root = os.path.dirname(os.path.abspath(__file__))
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from orchestrator_agent import plan_trip_agentic
+
+        return await plan_trip_agentic(task, origin_country, destination_country, stated_budget)
+    return await _plan_trip_fixed(task, origin_country, destination_country, stated_budget)
+
+
+async def _plan_trip_fixed(
+    task: str,
+    origin_country: str = "",
+    destination_country: str = "",
+    stated_budget: str = "",
+) -> str:
+    """The original fixed pipeline: Money & Customs, Destination, the parallel
+    three, then Budget. Unchanged behaviour."""
     money_context = ""
     if origin_country and destination_country:
         money_context = await _call_money_customs_context(origin_country, destination_country)

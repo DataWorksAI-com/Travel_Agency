@@ -375,6 +375,183 @@ the orchestrator↔agent link A2A.
 
 ---
 
+## 7b. Findings from the 25 Aug agentic-orchestrator runs
+
+Everything below was observed in live runs while building `orchestrator_agent.py`,
+not read off the code. Where it is fixed, the fix is named.
+
+### One bug class, found in three different agents
+
+**An unfiltered nearest-neighbour lookup always returns something, and every
+agent here treated that something as an answer.**
+
+| Agent | What it returned | Cause | Status |
+|---|---|---|---|
+| Activities | 2 cinemas + 2 Pentecostal churches as the Cancún activity plan | OpenTripMap radius search with no `kinds` and no importance filter | **fixed** — `rate=2`, a `kinds` whitelist, 25 km radius. Now returns El Meco, Cancun Underwater Museum, MUSA, EL REY ruins |
+| Activities | Piedmont castles for Aruba | `/geoname` matched on city name alone; `Aruba` resolves to a town in **Italy** | **fixed** — country code passed *and verified*; a mismatch refuses rather than caches |
+| Destination | `Beaches: Le Palme`, `Attractions: Guerrilla spam, Il coniglio, Street Art di Mauro Sgarbi` for **Rome** — no Colosseum, no Vatican, no Trevi | Geoapify POI radius search, same shape, no importance filter | **open** — Joel's agent needs the equivalent of `rate=2` |
+| Destination | `Cancun` cached as a village in Guangxi, China, and written into the committed RAG corpus | `resolve_place._pick_best` fell through to `usable[0]`; the exact-match test was not accent-folded, so `Cancun` never matched Open-Meteo's `Cancún` | **fixed** — accent-folded comparison |
+| Budget | Bali/Cancún cost documents returned for Rome | `similarity_search(k=3)` with no score threshold | **open** — but see below, it now discloses the gap when given evidence |
+| Money & Customs | German tipping rules served as Italian | nearest-match returned with `found: True` below the confidence threshold | **fixed** — `"found": match_score >= CONFIDENCE_THRESHOLD` |
+
+### Fixing the tool is necessary but not sufficient
+
+The sharpest result of the day. After Money & Customs correctly returned
+`found: False` for Italy, one run said *"I couldn't find any information on
+tipping norms for Italy"* — and the **next identical run invented Italian tipping
+norms from the model's own knowledge**, while quoting the USA record verbatim
+alongside them.
+
+The tool told the truth; the agent above it filled the gap anyway, and did so
+non-deterministically. A truthful `found: False` only helps if the prompt also
+forbids answering from priors. Rule 7 in `money_customs_agent.py` was widened to
+say so explicitly, and to state that returning only the exchange rate is a
+complete answer.
+
+The next Rome run returned exactly:
+
+> *"I hold no data for tipping norms and haggling information in Italy.
+> Exchange rate: 1 USD = 0.85749 EUR (as of 2026-08-25)."*
+
+**That was a lucky sample, and calling it "confirmed" was wrong.** The jig
+(below) later failed one of two Rome runs with *"said 'germany'; said 'german'"*.
+The prompt reduces the behaviour; it does not eliminate it. Treat any
+single-run confirmation of a probabilistic fix as unproven.
+
+**Generalisation for the other agents:** a coverage signal is only as good as the
+instruction that consumes it. Adding a threshold without also forbidding the
+fallback moves the fabrication one layer up, where it is harder to see.
+
+### Evidence in the prompt changes what an agent will admit
+
+Budget, same model, same corpus, same prompt — the only variable was whether the
+orchestrator forwarded the other agents' replies in its task:
+
+| | Without the upstream replies | With them |
+|---|---|---|
+| Flights had reported "no data found" | *"Round-Trip Flight: $425"*, stated as fact | *"The flights agent returned no live data. The $425 estimate comes from the knowledge base (range $350–$500). Verify before booking."* |
+
+On Rome it went further unprompted: *"Rome is not in the cost knowledge base...
+figures are informed estimates, not knowledge-base-verified numbers."* Budget was
+never modified. It disclosed the gap because it could see the gap.
+
+### Self-expanding corpora overwrite curated data
+
+A single Rome run **destroyed five hand-written activity entries** (Colosseum,
+Vatican Museums, Trastevere, Villa Borghese, Trevi) by expanding a city that
+already had coverage — `save_activities_for_city` opens the file in `"w"`.
+`activities-agent/README.md:113-116` documented this behaviour and nothing
+guarded it. `expand_activities_corpus` now refuses to expand a covered city.
+
+Related, unresolved and **for Limeng and Jainam to decide**: the self-expanding
+corpus and `run_tests_offline.py` contradict each other. Every live run adds a
+city; the tests assert exactly six. Either expanded cities belong in a separate
+untracked layer, or the assertion should be "at least the curated six."
+
+### The parse step was reading the wrong word
+
+`Request parsed` reported `Destination country: September` for *"a week in Cancún
+from Boston in September"*. `_PLACE` allowed only `[A-Za-z]`, so the first `in`
+matched as far as `Canc`, failed on the accent, and the engine went on to match
+the second `in` — where the comma satisfied the lookahead. Fixed by widening the
+class to `À-ÿ` and accent-folding the city lookup.
+
+### What the agentic orchestrator changed, concretely
+
+- **The resolved city now reaches the other agents.** `orchestrator.py` computes
+  `destination_result` and never passes it on; the agent records it and it is
+  prepended to every subsequent task string by code, not by instruction.
+- **So does the origin city.** `plan_trip` has no origin-city parameter at all,
+  so "from Boston" was previously unreachable. Flights now receives it.
+- **A deterministic floor catches what the model omits.** On its first live run it
+  caught a silently skipped Money & Customs; later it caught a skipped Destination
+  that the model had nonetheless written a confident section for.
+- **Budget must be called after the others.** The model emitted all six tool calls
+  in one parallel batch, so Budget's task was assembled from an empty ledger.
+  `ask_agent` now refuses Budget until Flights, Restaurants and Activities have
+  returned.
+
+### Measured: agentic vs deterministic orchestrator
+
+`evaluation/run_orchestrator_jig.py`, 6 cases x 2 orchestrators x 2 runs, all six
+agents live, `ORCHESTRATOR_MODEL=openrouter:openai/gpt-4o-mini`. Raw rows in
+`evaluation/results/live_20260825_223114.csv`.
+
+| | coverage | propagation | honesty | grounding | passed | median |
+|---|---|---|---|---|---|---|
+| agent | 0.986 | **0.938** | **0.917** | 0.75 | **7/12** | 109.8s |
+| deterministic | 1.0 | 0.542 | 0.833 | **1.0** | 4/12 | **74.4s** |
+
+**Propagation is the honest headline, and it is narrower than the average
+suggests.** For a named city both score 1.0, because the city is already in the
+raw request text the fixed pipeline forwards. The columns only diverge where the
+resolved city differs from what the user typed:
+
+- `vague` ("somewhere warm"): agent **1.0, 1.0** vs deterministic **0.0, 0.0**
+  — *"city 'Honolulu' never reached: activities, flights, restaurants"*
+- `accent`: deterministic 0.25 twice; agent 1.0 then 0.25
+
+Caveat against our own number: deterministic `cancun` scored 0.0 with *"no city
+resolved from destination's reply"*, which is the jig's regex failing on that
+reply format, not a real propagation failure. 0.542 flatters the agent slightly.
+
+**Grounding is where the agent is worse, and the reason is structural.** The
+fixed pipeline concatenates text, so it *cannot* invent a figure. The agent
+synthesises, so it can:
+
+- `agent cancun run 2` — never called Budget, then stated **13,730**
+- `agent vague` — invented a `$10` figure on both runs
+
+Stated plainly: **the planning layer buys propagation and costs grounding.**
+
+**Both orchestrators are non-deterministic.** Four `INCONSISTENT` flags, two of
+them on the *deterministic* path (`rome` said "germany" on run 2; `tokyo` said
+"bali" on run 2). "Deterministic" describes the sequencing only — the pipeline is
+not reproducible, because the six agents are not. Do not treat the fixed path as
+a stable control; treat it as a fixed-order condition.
+
+**The Activities guards held under load.** Across 24 runs the corpus expanded to
+five new cities with no junk and no curated data lost: `aruba.json` = Sero
+Jamanota, Hooiberg (not Piedmont castles); `rome.json` still Colosseum, Vatican,
+Trastevere.
+
+### How often the honesty failures actually happen
+
+`--cases rome --runs 5` on both orchestrators, plus the two Rome runs in the
+matrix above — 14 Rome runs in total
+(`evaluation/results/rome_variance_20260825_230559.csv`).
+
+| | agent | deterministic |
+|---|---|---|
+| coverage / propagation / grounding | 1.0 | 1.0 |
+| honesty | **0.8** | **0.8** |
+| the one failure | *said 'germany'* (Money & Customs) | *said 'bali'* (Budget) |
+
+Pooled across all 14 Rome runs:
+
+| Failure | Agent responsible | Rate |
+|---|---|---|
+| German tipping rules presented as Italian | Money & Customs | 2/14 ≈ **14%** |
+| Bali cost figures in a Rome itinerary | Budget | 1/14 ≈ **7%** |
+| any honesty failure | | 3/14 ≈ **21%** |
+
+**Two conclusions worth carrying into the writeup.**
+
+1. **The orchestrator design does not move this number.** Both paths score 0.8,
+   for different reasons. Coordination can guarantee that an agent was *called*
+   and that its output *reached* the next agent — the floor and the propagation
+   mechanism both do this reliably. Neither can stop an agent that runs
+   successfully and states something no tool returned. Fabrication has to be
+   fixed where it originates.
+
+2. **A ~1-in-6 failure rate is the dangerous kind.** It passes a demo, passes
+   manual testing, and passes a single-run "confirmation" — which is exactly the
+   mistake made above when the Money & Customs prompt fix was called confirmed
+   off one clean Rome run. Any fix to probabilistic behaviour needs `--runs 5`
+   before it is believed.
+
+---
+
 ## 8. Checking things without a browser
 
 ```powershell

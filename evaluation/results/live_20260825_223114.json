@@ -1,0 +1,33 @@
+{
+  "summary": {
+    "agent": {
+      "coverage": 0.986,
+      "propagation": 0.938,
+      "honesty": 0.917,
+      "grounding": 0.75,
+      "case": 0.583,
+      "median_seconds": 109.8,
+      "runs": 12
+    },
+    "deterministic": {
+      "coverage": 1.0,
+      "propagation": 0.542,
+      "honesty": 0.833,
+      "grounding": 1.0,
+      "case": 0.333,
+      "median_seconds": 74.4,
+      "runs": 12
+    }
+  },
+  "agents": "destination=real,flights=real,restaurants=real,activities=real,budget=real,money_customs=real",
+  "orchestrator_model": "openrouter:openai/gpt-4o-mini",
+  "cases": [
+    "cancun",
+    "rome",
+    "tokyo",
+    "aruba",
+    "vague",
+    "accent"
+  ],
+  "runs": 2
+}
