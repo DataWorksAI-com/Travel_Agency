@@ -44,6 +44,89 @@ macOS/Linux: `source .venv/bin/activate`.
 
 ---
 
+## 1b. Prerequisites — the fresh-clone checklist
+
+§1 above is genuinely all you need for the **stand-in path**. This section is
+for going from a fresh clone to **real agents**, in order. §6 has the per-slot
+detail and a `file:line` for every variable; this is the checklist, so nothing
+gets missed.
+
+Two of these are gitignored build artefacts, which is the step people miss —
+the repo cannot ship them, so a fresh clone does not have them.
+
+**1. Dependencies.** There is no single install; each agent has its own file.
+
+**`requirements.txt` is not sufficient on its own.** It holds four lines
+(`requests`, `deepagents`, `langchain-cohere`, `chromadb`) and does *not*
+include `chainlit`, `truststore`, `python-dotenv` or `langchain` — all of which
+the UI and orchestrator import. Install them explicitly:
+
+```powershell
+pip install chainlit truststore python-dotenv langchain   # not in any requirements file
+pip install -r requirements.txt                           # orchestrator deps
+pip install -r budget_agent/requirements.txt              # budget
+pip install -r activities-agent/requirements.txt          # activities
+pip install -r restaurant_agent/requirements.txt          # restaurants
+pip install -r flights_requirements.txt                   # flights
+pip install langchain-mcp-adapters mcp                    # activities' MCP tier
+```
+
+`truststore` matters more than it looks: on a network that intercepts HTTPS,
+omitting it makes Geoapify and Open-Meteo calls hang for ~5 minutes and then
+fail with no useful error. `mcp` matters because Activities spawns its
+OpenTripMap server as a subprocess — if the interpreter running the UI lacks it,
+the MCP tier disappears behind a warning that reads like OpenTripMap being down.
+
+**2. Keys.** `cp .env.example .env`, then fill in only the slots you intend to
+run. **One `.env` at the repo root serves every agent.** Never commit it — it is
+gitignored, and this repo is public.
+
+| Variable | Needed by |
+|---|---|
+| `OPENROUTER_API_KEY` | the orchestrator itself, activities, budget |
+| `ANTHROPIC_API_KEY` | destination, budget (either this **or** OpenRouter) |
+| `GEOAPIFY_API_KEY` | destination — geocoding and places |
+| `COHERE_API_KEY` | money & customs — embeddings |
+| `TRAVELPAYOUTS_TOKEN` | flights |
+| `OPENTRIPMAP_API_KEY` | activities, tier 3 only — **see the warning in §6 before setting this one** |
+
+**3. Vector stores.** Four exist. Two build themselves on first use; **two do
+not and will hard-fail without this step.**
+
+```powershell
+python budget_agent/scripts/build_vectorstore.py        # required
+cd activities-agent ; python build_vector_db.py ; cd .. # required
+```
+
+| Store | Build |
+|---|---|
+| `chroma_db/` (budget) | **manual.** Raises `RuntimeError: Vector store not found` otherwise (`budget_agent/tools/rag_tools.py:33-34`) |
+| `activities-agent/chroma_db/` | **manual.** Semantic search returns `Vector DB not available — run build_vector_db.py first`, and three of `test_jig.py`'s cases fail |
+| `destination_data/chroma_db/` | self-builds (`get_or_create_collection`) |
+| `money_customs_chroma_db/` | self-builds |
+
+First run of either embedding-backed agent downloads ~80 MB of model weights.
+
+**4. Turn slots on.** Nothing above changes what runs — every slot still
+defaults to a stand-in. See §3.
+
+```powershell
+$env:TRAVEL_UI_ORCHESTRATOR = "agent"   # deep agent; omit for the fixed pipeline
+$env:TRAVEL_UI_AGENTS = "flights=real"  # your slot only — see §6
+chainlit run app.py -w
+```
+
+**Verify without a browser** (no keys needed, exercises the whole seam):
+
+```powershell
+python ui/verify_seam.py
+```
+
+> **You do not need everyone else's keys.** To test your own agent, set one key
+> and one slot. See the end of §6.
+
+---
+
 ## 2. What you should see
 
 Two messages on open: a welcome, then **"Agents currently connected"** listing all
@@ -280,7 +363,7 @@ the step people miss:
 | `destination` | `ANTHROPIC_API_KEY`; `GEOAPIFY_API_KEY` for Geoapify tools | ~80 MB embedding download on first corpus query |
 | `restaurants` | none by default | Ollama running; set `RESTAURANT_AGENT_MODEL` to a tag you have actually pulled (`ollama list`) — the default `lfm2.5` is not the one most of us have |
 | `budget` | `ANTHROPIC_API_KEY` **or** `OPENROUTER_API_KEY` | `pip install -r budget_agent/requirements.txt`, then **`python budget_agent/scripts/build_vectorstore.py`** — hard error otherwise |
-| `activities` | `OPENROUTER_API_KEY`; `OPENTRIPMAP_API_KEY` for tier 3 | `pip install langchain-mcp-adapters`; set `DEEP_AGENT_MODEL` (see §3b) |
+| `activities` | `OPENROUTER_API_KEY`; `OPENTRIPMAP_API_KEY` for tier 3 | `pip install langchain-mcp-adapters mcp`; **`cd activities-agent && python build_vector_db.py`** — tier 2 returns `Vector DB not available` otherwise; set `DEEP_AGENT_MODEL` (see §3b) |
 | `money_customs` | `COHERE_API_KEY` | ~80 MB embedding download; index self-builds |
 
 Full detail, with `file:line` for every variable: [`ENVIRONMENT.md`](ENVIRONMENT.md).
