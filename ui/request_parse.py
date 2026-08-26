@@ -21,6 +21,7 @@ the city.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 # Only enough cities to resolve the ones a demo actually types. Anything not
 # listed falls through to being treated as a country name, which is right
@@ -51,7 +52,11 @@ CITY_COUNTRY = {
 
 # A place name runs until punctuation or the next clause keyword.
 _PLACE = (
-    r"([A-Za-z][A-Za-z .'\-]{1,34}?)"
+    # A-Za-z alone cannot match an accented place name. On "a week in Cancun
+    # [with the accent] from Boston in September", the first "in" matched as far
+    # as "Canc", the lookahead failed on the accent, and the engine went on to
+    # match the SECOND "in" -- reporting the destination country as "September".
+    r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'\-]{1,34}?)"
     r"(?=\s*(?:,|\.|;|$|\bfrom\b|\bfor\b|\bwith\b|\bbudget\b|\bon\b|\bunder\b"
     r"|\bbelow\b|\bwho\b|\bthat\b|\band\b|\bin\b|\bnext\b|\bduring\b))"
 )
@@ -73,7 +78,14 @@ def _to_country(place: str | None) -> str:
     cleaned = " ".join(place.split()).strip(" .,'-")
     if not cleaned:
         return ""
-    return CITY_COUNTRY.get(cleaned.lower(), cleaned)
+    # Accent-folded, so the accented and unaccented spellings of a city both
+    # resolve. Without this "Cancun" mapped to Mexico but "Cancún" fell
+    # through and was treated as if it were a country name.
+    folded = "".join(
+        c for c in unicodedata.normalize("NFKD", cleaned.lower())
+        if not unicodedata.combining(c)
+    )
+    return CITY_COUNTRY.get(folded, cleaned)
 
 
 def parse_request(text: str) -> dict:
