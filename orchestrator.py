@@ -30,6 +30,7 @@ import sys
 import os
 
 from orchestrator_config import get_client
+from orchestrator_costs import build_budget_brief
 
 # The only slot names that may reach get_client. Worth a guard now that a model
 # picks them: orchestrator_config.get_client swallows its own KeyError, so an
@@ -182,43 +183,63 @@ async def _run_parallel_subagents(task: str, money_context: str) -> dict:
 
 
 def _build_budget_task(task: str, destination_result: str, parallel_results: dict, stated_budget: str) -> str:
-    """Turn the other subagents' free-text replies into the line-item
-    format Budget's tools actually expect (aggregate_costs wants a list
-    of {"category", "name", "cost"} dicts).
+    """Build Budget's task from DECIDED line items, not the others' prose.
 
-    TODO: this is the biggest unresolved gap in the whole skeleton. Every
-    other subagent returns natural-language text (per the shared
-    itinerary-ready contract), but Budget's tools need structured dicts.
-    Something has to parse dollar amounts and categories out of
-    Flights/Restaurants/Activities' text replies before Budget can run at
-    all. Options worth deciding between:
-      (a) an LLM call here in the orchestrator that extracts structured
-          line items from the three free-text replies
-      (b) asking Flights/Restaurants/Activities to ALSO return a small
-          structured block alongside their prose (breaking their current
-          "reply with ONE self-contained message" contract)
-      (c) something else
-    Neither is implemented below -- this is a placeholder pass-through.
+    RESOLVED (ORCHESTRATOR_DESIGN.md #5, "the biggest unresolved gap in the
+    whole skeleton"). This used to concatenate every subagent's free text into
+    one string and pass it through, which made the orchestrator a relay between
+    subagents rather than the thing that decides -- not the agreed
+    architecture, and the source of Budget billing $425 for a flight Flights
+    had just said it could not find.
+
+    Of the three options the design doc listed, this is (c) rather than (a).
+    An LLM extraction step would add a second model whose job is to read prose
+    and emit numbers -- a new place for figures to be invented, introduced to
+    fix a problem that is entirely about invented figures. orchestrator_costs
+    extracts deterministically instead and VERIFIES every figure appears
+    verbatim in the reply it is attributed to. See that module's docstring.
+
+    (b) -- a structured block at the source -- is still the better long-term
+    answer, but it needs four other people to change their output contract.
     """
+    # The traveller's own words reach Budget via build_budget_brief's `task`.
+    # Without them Budget received the stated budget and the other subagents'
+    # prose but never the request itself, so it could not know trip length,
+    # party size or dates. On "Plan a week in Aruba from Boston, budget $3000"
+    # it costed THREE DAYS and reported "Assumed 3 days (a reasonable default
+    # when not specified)" -- correct reasoning over inputs that had the
+    # duration stripped out of them.
+    #
+    # Destination is deliberately NOT forwarded. It returns climate, holidays
+    # and beaches, none of which are costs, and forwarding it was part of what
+    # made this function a relay.
+    return build_budget_brief(
+        task=task,
+        replies={
+            "flights": parallel_results.get("flights", ""),
+            "restaurants": parallel_results.get("restaurants", ""),
+            "activities": parallel_results.get("activities", ""),
+        },
+        is_failure=_looks_like_failure,
+        stated_budget=stated_budget,
+    )
+
+
+def _looks_like_failure(reply: str) -> bool:
+    """A slot that did not run, for the deterministic path.
+
+    orchestrator_agent has its own version that defers to the seam's detector;
+    this one stays here so orchestrator.py keeps working with no UI imported --
+    that is what makes the deterministic path offline- and keyless-testable.
+    """
+    if not reply:
+        return True
+    lowered = reply.lower()
     return (
-        # The traveller's own words, first. Without this, Budget received
-        # the stated budget and the other subagents' prose but never the
-        # request itself, so it could not know trip length, party size or
-        # dates. On "Plan a week in Aruba from Boston, budget $3000" it
-        # costed THREE DAYS and reported "Assumed 3 days (a reasonable
-        # default when not specified)" -- correct reasoning over inputs
-        # that had the duration stripped out of them. Every other subagent
-        # already receives `task` (_run_destination at :163,
-        # _run_parallel_subagents at :165); Budget was the only one that
-        # did not.
-        f"Traveler's request: {task}\n\n"
-        f"Budget: {stated_budget}\n\n"
-        f"Destination info: {destination_result}\n\n"
-        f"Flights: {parallel_results['flights']}\n\n"
-        f"Restaurants: {parallel_results['restaurants']}\n\n"
-        f"Activities: {parallel_results['activities']}\n\n"
-        f"(NOTE: this is unstructured text, not the line-item dicts "
-        f"Budget's tools expect -- see _build_budget_task's docstring.)"
+        reply.startswith("Not connected")
+        or "[subagent error]" in lowered
+        or "unavailable]" in lowered
+        or "unreachable" in lowered
     )
 
 

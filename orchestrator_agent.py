@@ -37,6 +37,7 @@ from langchain.agents.middleware.types import AgentMiddleware
 from deepagents import create_deep_agent
 
 from orchestrator import SLOTS, ask_slot
+from orchestrator_costs import NO_DATA_PHRASES, build_budget_brief, held_no_data
 from ui.agent_seam import LABELS, _looks_like_error
 
 MODEL = os.getenv("ORCHESTRATOR_MODEL", "openrouter:openai/gpt-4o-mini")
@@ -173,20 +174,25 @@ def _new_run():
                     f"Budget prices what the other agents found, so calling it now would "
                     f"produce invented figures. Wait for their replies, then call budget again."
                 )
-            # Budget can only cost what the others priced, and asking the model
-            # to remember to forward their replies is not enough: observed on
-            # the first live run, it sent Budget a bare "calculate the budget"
-            # and Budget answered $425 for a flight that Flights had reported
-            # it could not find. The deterministic path did this in
-            # _build_budget_task; it has to be guaranteed here too.
-            priced = "\n\n".join(
-                f"{LABELS[s]} reported:\n{r[-1]}" for s, r in ledger.items() if s != "budget"
+            # Budget receives DECIDED INPUTS, not the other agents' replies.
+            #
+            # This used to concatenate every reply into the task string. That
+            # stopped Budget inventing a $425 flight, but it made the
+            # orchestrator a relay between subagents rather than the thing that
+            # decides -- which is not the agreed architecture, and is
+            # ORCHESTRATOR_DESIGN.md #5, "the biggest unresolved gap in the
+            # whole skeleton". orchestrator_costs now extracts verified line
+            # items and, just as importantly, states which categories have no
+            # figure and why. No subagent prose reaches another subagent.
+            task = build_budget_brief(
+                task=task,
+                replies={s: r[-1] for s, r in ledger.items() if s != "budget"},
+                is_failure=_is_failure,
+                trip_facts=(
+                    "\n".join(f"{k.replace('_', ' ')}: {v}" for k, v in state.items())
+                    if state else ""
+                ),
             )
-            if priced:
-                task = (
-                    f"{task}\n\nWhat the other agents actually returned. Cost these, and do "
-                    f"not substitute figures of your own for anything reported here:\n\n{priced}"
-                )
         reply = await ask_slot(slot, task)
         ledger.setdefault(slot, []).append(reply)
         return reply
@@ -228,27 +234,12 @@ def _is_failure(reply: str) -> bool:
     return reply.startswith("Not connected") or _looks_like_error(reply)
 
 
-# Sentences the six agents actually emit when they ran correctly but hold
-# nothing for this request. Substrings rather than a regex on purpose: these
-# are real phrases from real replies, and a reader should be able to check them
-# against the agents by eye.
-#
-# This is deliberately NOT the same as a failure. "No flights found from BOS to
-# AUA in September" is a correct, useful answer. The problem is what happens
-# downstream of it.
-_NO_DATA_PHRASES = (
-    "no flight",
-    "no cached flight",
-    "hold no data",
-    "no data for",
-    "not covered",
-    "outside my coverage",
-    "not in this agent's curated corpus",
-    "no activity in the corpus",
-    "is not covered by local data",
-    "could not find",
-    "no results",
-)
+# "Ran correctly but holds nothing for this request" -- NOT the same as a
+# failure. "No flights found from BOS to AUA in September" is a correct, useful
+# answer; the problem is what happens downstream of it. The phrase list lives in
+# orchestrator_costs (imported as held_no_data / NO_DATA_PHRASES) because the
+# budget brief needs exactly the same distinction, and two copies would drift.
+_held_no_data = held_no_data
 
 # A currency amount: "$850", "1,400 USD", "MXN 300". Deliberately narrow --
 # a bare number is not evidence of a price, and a false positive here would
@@ -257,11 +248,6 @@ _CURRENCY = re.compile(
     r"[$£€]\s?\d|\b\d[\d,]*(?:\.\d{2})?\s?(?:USD|EUR|GBP|MXN|JPY|THB)\b",
     re.IGNORECASE,
 )
-
-
-def _held_no_data(reply: str) -> bool:
-    lowered = reply.lower()
-    return any(p in lowered for p in _NO_DATA_PHRASES)
 
 
 def _unsourced_figures_note(final: str, ledger: dict[str, list[str]]) -> str:

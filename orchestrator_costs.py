@@ -1,0 +1,265 @@
+"""Turn the other subagents' prose into verified line items for Budget.
+
+WHY THIS EXISTS
+
+ORCHESTRATOR_DESIGN.md #5 calls this "the biggest unresolved gap in the whole
+skeleton", and until now it was not closed: `_build_budget_task` concatenated
+every subagent's free-text reply into one string and handed it to Budget
+as-is. Emily's objection is the correct reading of that -- passing one agent's
+response into another agent's prompt is relaying, not orchestrating, and it
+makes the orchestrator a message bus between subagents rather than the thing
+that decides. It is also not the agreed architecture.
+
+The design doc offered three routes:
+
+  (a) an LLM call in the orchestrator that extracts structured line items
+  (b) ask Flights/Restaurants/Activities to also emit a structured block,
+      which breaks their "one self-contained message" contract
+  (c) something else
+
+This is (c), and it is chosen over (a) deliberately. (a) would add a second
+model call whose job is to read prose and emit numbers -- a NEW place for
+figures to be invented, introduced to fix a problem that is entirely about
+invented figures. Budget already billed "$425/person RT from Boston" for a
+flight Flights had just reported it could not find; an extraction model is
+free to do the same, and nothing downstream could tell.
+
+Currency amounts are mechanically findable, so extraction here is
+deterministic and, more importantly, VERIFIABLE: every figure this module
+emits is checked to appear verbatim in the reply it is attributed to
+(`_verify`). A line item that cannot be traced back to its source text is
+dropped rather than passed on. That is a guarantee an LLM extractor cannot
+offer.
+
+(b) is still worth doing eventually -- a structured block at the source beats
+parsing prose downstream -- but it needs four other people to change their
+agents' output contract, and this does not need anyone's permission.
+
+WHAT BUDGET RECEIVES
+
+Not transcripts. A JSON array of verified line items, each attributed to the
+agent that produced it, plus an EXPLICIT list of categories for which no
+figure exists and why. The absence list is the half that matters: Budget's
+invented flight cost happened because "Flights returned nothing" was
+indistinguishable from "nobody mentioned flights".
+"""
+
+import json
+import re
+
+# Slots that can produce a cost. Destination and Money & Customs are excluded
+# on purpose: they return climate, holidays, exchange rates and tipping norms,
+# and an exchange rate is a ratio, not a trip cost. Reading "1 USD = 16.93 MXN"
+# as a line item is exactly the class of mistake this module exists to prevent.
+PRICED_SLOTS = ("flights", "restaurants", "activities")
+
+# Canonical category per slot, matching what Budget's aggregate_costs expects.
+CATEGORY = {
+    "flights": "flights",
+    "restaurants": "food",
+    "activities": "activities",
+}
+
+# Sentences an agent uses when it ran correctly but holds nothing for this
+# request. NOT the same as a failure: "No flights found for these dates" is a
+# correct answer. Shared with orchestrator_agent so there is one copy.
+NO_DATA_PHRASES = (
+    "no flight",
+    "no cached flight",
+    "hold no data",
+    "no data for",
+    "not covered",
+    "outside my coverage",
+    "not in this agent's curated corpus",
+    "no activity in the corpus",
+    "is not covered by local data",
+    "could not find",
+    "no results",
+)
+
+# A currency amount, symbol-first or ISO-suffixed. A bare number is never
+# matched: "rated 4.4/5", "5 nights", "2 travellers" and "10-15%" must not
+# become costs. Group 1/3 is the number, 2/4 the currency.
+_AMOUNT = re.compile(
+    r"[$£€]\s?(\d[\d,]*(?:\.\d{1,2})?)"                      # $1,400.00
+    r"|(?<![\w/.])(\d[\d,]*(?:\.\d{1,2})?)\s?(USD|EUR|GBP|MXN|JPY|THB)\b",
+    re.IGNORECASE,
+)
+
+_SYMBOL_CURRENCY = {"$": "USD", "£": "GBP", "€": "EUR"}
+
+# "per person" / "per night" changes what a number MEANS, so it travels with
+# it. Budget multiplying a per-person fare by party size is correct; doing it
+# to a total is not, and the prose is the only place that distinction lives.
+_PER_PATTERNS = (
+    (re.compile(r"\bper\s+person\b|\beach\b|/\s*person\b|\bpp\b", re.I), "person"),
+    (re.compile(r"\bper\s+night\b|/\s*night\b|\bnightly\b", re.I), "night"),
+    (re.compile(r"\bper\s+day\b|/\s*day\b|\bdaily\b", re.I), "day"),
+    (re.compile(r"\bfor\s+two\b|\btotal\b|\ball\s+in\b", re.I), "total"),
+)
+
+
+def held_no_data(reply: str) -> bool:
+    """True if the agent ran but reported it holds nothing for this request."""
+    lowered = (reply or "").lower()
+    return any(p in lowered for p in NO_DATA_PHRASES)
+
+
+def _per_unit(text: str) -> str:
+    for pattern, unit in _PER_PATTERNS:
+        if pattern.search(text):
+            return unit
+    return ""
+
+
+def _name_from(line: str) -> str:
+    """What the money is for, taken from the start of its own line.
+
+    Subagents write "Villa Toscana - Italian; approx. $44 per person" and
+    "Catamaran snorkel cruise -- outdoor, around $110", so the part before the
+    first dash is the thing being priced. Falls back to a truncation rather
+    than to a guess.
+    """
+    head = re.split(r"\s+[-–—]{1,2}\s+|:\s+|;\s+", line.strip(), maxsplit=1)[0]
+    head = re.sub(r"^[\s*\-•\d.)]+", "", head).strip()
+    return (head[:60] or line.strip()[:60]) or "unnamed"
+
+
+def _verify(cost_text: str, reply: str) -> bool:
+    """The extracted amount must be findable in the source reply.
+
+    The whole point of this module: a figure Budget prices has to be traceable
+    to the agent that reported it. Compared with separators stripped so that
+    "$1,400" matching a reply written "$1400" is not treated as invention.
+    """
+    norm = lambda s: re.sub(r"[,\s]", "", s)
+    return norm(cost_text) in norm(reply)
+
+
+def extract_line_items(slot: str, reply: str) -> list[dict]:
+    """Verified line items from one agent's prose. Never raises."""
+    if not reply or slot not in CATEGORY:
+        return []
+    if held_no_data(reply):
+        # An agent saying "no flights found" may still mention a number in
+        # passing; treating this reply as priced is how a non-answer becomes a
+        # cost.
+        return []
+
+    items, seen = [], set()
+    for line in reply.splitlines():
+        for match in _AMOUNT.finditer(line):
+            raw = match.group(1) or match.group(2)
+            currency = (
+                _SYMBOL_CURRENCY.get(match.group(0).strip()[0])
+                or (match.group(3) or "USD").upper()
+            )
+            try:
+                cost = float(raw.replace(",", ""))
+            except ValueError:
+                continue
+            if cost <= 0:
+                continue
+            if not _verify(match.group(0), reply):
+                continue
+            key = (cost, currency, _name_from(line))
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append({
+                "source": slot,
+                "category": CATEGORY[slot],
+                "name": _name_from(line),
+                "cost": cost,
+                "currency": currency,
+                "per": _per_unit(line),
+                "quote": line.strip()[:200],
+            })
+    return items
+
+
+def absences(replies: dict[str, str], is_failure) -> list[dict]:
+    """Priced categories with no figure, and why. The half that stops invention.
+
+    `is_failure` is passed in rather than imported so this module stays free of
+    a dependency on the seam.
+    """
+    out = []
+    for slot in PRICED_SLOTS:
+        reply = replies.get(slot)
+        if reply is None:
+            out.append({"category": CATEGORY[slot], "source": slot,
+                        "reason": "the agent was not called"})
+        elif is_failure(reply):
+            out.append({"category": CATEGORY[slot], "source": slot,
+                        "reason": "the agent did not run"})
+        elif held_no_data(reply):
+            out.append({"category": CATEGORY[slot], "source": slot,
+                        "reason": "the agent ran and reported it holds no data for this request"})
+        elif not extract_line_items(slot, reply):
+            out.append({"category": CATEGORY[slot], "source": slot,
+                        "reason": "the agent answered but published no prices"})
+    return out
+
+
+def build_budget_brief(
+    task: str,
+    replies: dict[str, str],
+    is_failure,
+    stated_budget: str = "",
+    trip_facts: str = "",
+) -> str:
+    """Budget's task: decided inputs, not other agents' transcripts."""
+    items = [i for slot in PRICED_SLOTS for i in extract_line_items(slot, replies.get(slot, ""))]
+    missing = absences(replies, is_failure)
+
+    # `quote` is dropped HERE, and this is the whole point rather than a detail.
+    #
+    # The quote is the sentence a figure was found in, kept on the line item so
+    # the orchestrator can audit its own extraction and so a human can trace a
+    # number back to the agent that said it. But putting it in Budget's task
+    # would send another subagent's prose into a subagent's prompt, which is
+    # precisely the relaying this module was written to stop -- caught by
+    # test_orchestrator_costs, which found "A romantic trattoria noted for
+    # handmade pasta" reaching Budget through this field.
+    #
+    # Budget gets the decision (what, how much, per what, from whom). It does
+    # not get the transcript.
+    for_budget = [{k: v for k, v in item.items() if k != "quote"} for item in items]
+
+    parts = [f"Traveler's request: {task}"]
+    if trip_facts:
+        parts.append(trip_facts)
+    if stated_budget:
+        parts.append(f"Stated budget: {stated_budget}")
+
+    parts.append(
+        "PRICED INPUTS. The orchestrator extracted these from the specialist "
+        "agents' replies and verified that every figure appears verbatim in the "
+        "reply it is attributed to. This is the complete set of costs known to "
+        "this system.\n"
+        + (json.dumps(for_budget, indent=2) if for_budget else "[]  (no priced inputs at all)")
+    )
+
+    if missing:
+        parts.append(
+            "NO FIGURE AVAILABLE for these categories:\n"
+            + "\n".join(f"- {m['category']} ({m['source']}): {m['reason']}." for m in missing)
+        )
+
+    parts.append(
+        "RULES\n"
+        "1. Cost ONLY the priced inputs above. Do not add, estimate, benchmark or "
+        "recall a figure for anything else -- not from comparable cities, not from "
+        "your knowledge base, not as a placeholder.\n"
+        "2. For every category under NO FIGURE AVAILABLE, say plainly that it is "
+        "unavailable and why. Leave it out of the total.\n"
+        "3. Do not price lodging. No agent in this system provides accommodation "
+        "costs, so any lodging figure would come from nowhere.\n"
+        "4. Respect the 'per' field: 'person' multiplies by party size, 'night' by "
+        "nights, 'total' by neither.\n"
+        "5. If what remains is too incomplete to total honestly, say so instead of "
+        "producing a total. An itinerary that reports what is missing is more "
+        "useful than one with a confident wrong number."
+    )
+    return "\n\n".join(parts)
