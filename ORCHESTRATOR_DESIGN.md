@@ -28,7 +28,15 @@ subagent, `orchestrator_config._build_flights_client()` gets simpler (see
 the commented-out alternative already sitting in that function).
 
 ## 3. Where Money & Customs plugs in
-**Status:** implemented as a provisional guess, worth confirming.
+**Status:** RESOLVED 26 Aug 2026 — its reply is no longer forwarded to any
+other subagent. Emily confirmed the guess below, negatively: one agent's
+response must not be passed into another agent's prompt. Every subagent now
+talks to the orchestrator and to nobody else. Money & Customs instead gets its
+own section in `_assemble_itinerary`, which it never had — previously its reply
+was fetched, injected into Flights' and Restaurants' prompts, printed to DEBUG,
+and never shown to the traveller at all.
+
+The superseded reasoning, kept for the record:
 The orchestrator calls Money & Customs once, in `_call_money_customs_context()`,
 and folds the result into Flights' and Restaurants' task strings, but
 NOT Activities'. Two things worth double-checking with the group:
@@ -47,9 +55,17 @@ once, or something else. Whatever gets decided, it belongs in this one
 function — not scattered across each subagent's own code.
 
 ## 5. The biggest unresolved gap: turning prose into Budget's line items
-**Status:** NOT implemented — `_build_budget_task()` currently just
-concatenates everyone's free-text replies into one string and passes it
-to Budget as-is.
+**Status:** RESOLVED 26 Aug 2026 via option (c) — see `orchestrator_costs.py`.
+Budget receives a verified JSON array of `{source, category, name, cost,
+currency, per}` line items plus an explicit list of categories with no figure
+and why. Option (a), an LLM extraction call, was rejected: it would add a
+second model whose job is to read prose and emit numbers, a new place for
+figures to be invented, introduced to fix a problem entirely about invented
+figures. Extraction is deterministic and every figure is verified to appear
+verbatim in the reply it is attributed to. Option (b), a structured block at
+the source, is still the better long-term answer and still needs group buy-in.
+
+The superseded description, kept for the record:
 Budget's actual tools (`aggregate_costs`, etc.) need structured
 `{"category", "name", "cost"}` dicts, not prose. But every other subagent
 returns natural-language text, per the shared "one self-contained message"

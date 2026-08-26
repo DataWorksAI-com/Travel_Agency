@@ -19,10 +19,24 @@ subagent's code (not a guess):
      the priced line items it receives from the other sub-agents," so it
      cannot run before they have.
 
-Money & Customs is NOT its own pipeline stage (see ORCHESTRATOR_DESIGN.md,
-decision #3) -- it's called once here, by the orchestrator itself, and its
-facts are folded into the task strings sent to the subagents that need
-them, rather than every subagent importing it independently.
+Money & Customs is called once here, by the orchestrator itself, rather than
+every subagent importing it independently. Its reply is reported to the reader
+as its own itinerary section and is NOT folded into any other subagent's task
+string -- see _run_parallel_subagents.
+
+HUB AND SPOKE. Every subagent talks to the orchestrator and to nobody else. No
+subagent's response is passed into another subagent's prompt: doing that makes
+this module a message bus between agents rather than the thing that decides,
+and it is not the agreed architecture. Two places used to break that rule and
+no longer do:
+
+  - Money & Customs' reply was prepended to Flights' and Restaurants' tasks
+    (ORCHESTRATOR_DESIGN.md #3, "implemented as a provisional guess").
+  - Every reply was concatenated into Budget's task (#5). Budget now receives
+    verified line items from orchestrator_costs instead.
+
+If you are tempted to forward one agent's text to another, extract the decided
+fact in here and pass that instead.
 """
 
 import asyncio
@@ -161,8 +175,22 @@ async def _run_parallel_subagents(task: str, money_context: str) -> dict:
     before relying on the placeholder behavior below (currently: pass
     whatever came back straight through, error message or not).
     """
-    flights_task = f"{money_context}\n\n{task}" if money_context else task
-    restaurants_task = f"{money_context}\n\n{task}" if money_context else task
+    # Money & Customs' reply is NOT forwarded here any more.
+    #
+    # It used to be prepended to both of these task strings
+    # (ORCHESTRATOR_DESIGN.md #3, which marked it "implemented as a provisional
+    # guess, worth confirming"). Emily confirmed it, negatively: one agent's
+    # response should not be passed to another agent. Every subagent talks to
+    # the orchestrator and to nobody else -- that is the agreed architecture,
+    # and prepending her reply here made this function a relay.
+    #
+    # Nothing is lost by dropping it. Flights prices routes and never needed
+    # tipping norms; Restaurants returns records that already carry their own
+    # prices. What the traveller actually needed -- the exchange rate and the
+    # customs advice -- now reaches them directly, as a Money & Customs section
+    # in _assemble_itinerary, which it never had before.
+    flights_task = task
+    restaurants_task = task
     activities_task = task  # money/customs likely irrelevant here -- confirm
 
     flights_client = get_client("flights")
@@ -248,26 +276,31 @@ async def _run_budget(budget_task: str) -> str:
     return await client.call(budget_task)
 
 
-def _assemble_itinerary(destination: str, parallel: dict, budget: str) -> str:
+def _assemble_itinerary(destination: str, parallel: dict, budget: str,
+                        money_customs: str = "") -> str:
     """Combine every subagent's reply into one itinerary.
+
+    Money & Customs now gets a section of its own. It previously had none: its
+    reply was fetched, folded into Flights' and Restaurants' task strings, and
+    printed to DEBUG -- so the one agent whose output never reached the reader
+    was the one being used as an input to other agents. A traveller planning a
+    trip to Mexico never saw the exchange rate or the tipping norms.
 
     TODO (ORCHESTRATOR_DESIGN.md, decision #1): once every subagent
     agrees on a single ask-vs-assume policy, this is also where any
     'Assumption:' lines from subagents should probably be surfaced
     together, rather than buried inline per section as they are now.
     """
-    return (
-        "=== Destination ===\n"
-        f"{destination}\n\n"
-        "=== Flights ===\n"
-        f"{parallel['flights']}\n\n"
-        "=== Restaurants ===\n"
-        f"{parallel['restaurants']}\n\n"
-        "=== Activities ===\n"
-        f"{parallel['activities']}\n\n"
-        "=== Budget ===\n"
-        f"{budget}\n"
-    )
+    sections = ["=== Destination ===\n" + destination]
+    if money_customs:
+        sections.append("=== Money & Customs ===\n" + money_customs)
+    sections += [
+        "=== Flights ===\n" + parallel["flights"],
+        "=== Restaurants ===\n" + parallel["restaurants"],
+        "=== Activities ===\n" + parallel["activities"],
+        "=== Budget ===\n" + budget,
+    ]
+    return "\n\n".join(sections) + "\n"
 
 
 async def plan_trip(
@@ -325,7 +358,9 @@ async def _plan_trip_fixed(
     budget_task = _build_budget_task(task, destination_result, parallel_results, stated_budget)
     budget_result = await _run_budget(budget_task)
 
-    return _assemble_itinerary(destination_result, parallel_results, budget_result)
+    return _assemble_itinerary(
+        destination_result, parallel_results, budget_result, money_customs=money_context
+    )
 
 
 if __name__ == "__main__":
