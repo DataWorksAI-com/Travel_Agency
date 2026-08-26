@@ -159,11 +159,18 @@ def _build_money_customs_client() -> LocalFunctionClient:
     #
     # The single line where we differ from her is deliberate: found is
     # match_score >= CONFIDENCE_THRESHOLD here, where hers is hardcoded True
-    # (see fd9f868). Note that the merge base already had True and she never
-    # touched that line, so git auto-merges it in whichever direction the
-    # LAST push happens to run -- there is no conflict marker to catch it.
-    # If this slot ever starts reporting found for a country it holds no
-    # data for, look here first.
+    # (see fd9f868).
+    #
+    # An earlier version of this comment said git would resolve that "in
+    # whichever direction the last push runs". That overstated it. The merge
+    # base already had True and she never modified that line, so a normal merge
+    # keeps the side that DID change it -- ours -- whichever of PR #21 and
+    # PR #22 lands first. It only reverts on a force-push, a hand-resolved
+    # conflict, or a later deliberate change of hers.
+    #
+    # Still worth knowing, because there is no conflict marker either way: if
+    # this slot ever starts reporting found for a country it holds no data for,
+    # look at this line first.
     from money_customs_agent import answer
     return LocalFunctionClient(answer)
 

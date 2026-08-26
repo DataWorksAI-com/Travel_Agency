@@ -22,20 +22,40 @@ the cited line), or **[inf]** (inference, stated as such).
 
 This matters before the table makes sense.
 
-`origin/main` does **not** contain the orchestrator, the Money & Customs agent,
-or a root `.env.example` — those files arrive with `exchange_rate_emily`. **[run]**
-(`git ls-tree -r --name-only origin/main`, 49 files; `git diff --name-status
-origin/main origin/exchange_rate_emily`)
+`origin/main` (78 files) does **not** yet contain the orchestrator, the UI, or
+the Money & Customs agent. Two open PRs bring them: **[run]**
+(`gh pr list --state open`; `git ls-tree -r --name-only origin/main | wc -l`)
 
-Five remote branches are ahead of `origin/main`: **[run]**
-
-| branch | commits ahead | brings |
+| PR | branch | brings |
 |---|---|---|
-| `exchange_rate_emily` | 9 | `orchestrator.py`, `orchestrator_config.py`, `money_customs_agent.py`, `money_tools.py`, `agent.py`, root `.env.example` |
-| `activities_limeng` | 12 | `activities-agent-limeng/` |
-| `activities_jainam` | 8 | `activities/local_activity_docs/` |
-| `budget_cost_rohan` | 7 | `budget_agent_rohan/` |
-| `destination_recommender` | 1 | changes within `destination_agent/` |
+| **#21** | `ui_chainlit_rohan` | `orchestrator.py`, `orchestrator_agent.py`, `orchestrator_config.py`, `subagent_client.py`, `ui/`, `sandbox/`, `evaluation/`, root `.env.example` — **and** Emily's `money_customs_agent.py` + `money_tools.py`, since this branch carries her work as an ancestor |
+| **#22** | `exchange_rate_emily` | `money_customs_agent.py`, `money_tools.py`, `agent.py` |
+
+An earlier version of this section said the orchestrator "arrives with
+`exchange_rate_emily`". That was true of the original shell, which Emily
+designed and handed over, and it is no longer true of the code: the
+orchestrator, the seam and the UI are owned and developed here, on
+`ui_chainlit_rohan`, and nothing in `orchestrator*.py`, `subagent_client.py` or
+`ui/` imports anything that exists only on her branch. The dependency is
+historical attribution, not a code path. **[run]**
+(`grep -rniE "emily|exchange_rate" --include=*.py .` returns no import from a
+branch-specific module)
+
+Remote branches still ahead of `origin/main`: **[run]**
+
+| branch | commits ahead | note |
+|---|---|---|
+| `ui_chainlit_rohan` | 56 | PR #21, open |
+| `sandbox-integration` | 19 | fully contained in `ui_chainlit_rohan`; no separate merge needed |
+| `exchange_rate_emily` | 11 | PR #22, open |
+| `budget_cost_rohan` | 7 | `budget_agent_rohan/` — now `proposed_envelope_agent/`, wired to no slot |
+| `destination_recommender` | 1 | a stray merge commit; the branch is ~7,800 lines *behind* main |
+| `worktree-ui-plan` | 1 | planning notes |
+
+`activities_limeng` and `activities_jainam` are merged (PRs #20 and earlier);
+so are `budget-agent-shashank`, `climate_timing_joel`,
+`destination_recommender_alice`, `flights_Brinda` and
+`restaurant_finder_vrushti`.
 
 Already merged: `budget-agent-shashank`, `climate_timing_joel`,
 `destination_recommender_alice`, `flights_Brinda`, `restaurant_finder_vrushti`.
