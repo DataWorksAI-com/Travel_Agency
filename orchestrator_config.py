@@ -193,6 +193,103 @@ _BUILDERS = {
 _clients_cache = {}
 
 
+# ---------------------------------------------------------------------------
+# Provider fallback
+#
+# A slot's model can stop being reachable for reasons that have nothing to do
+# with the agent: the account behind it runs out of credit, the key is revoked,
+# the provider retires a slug. On 27 Aug the Anthropic account went to zero
+# mid-session and every slot pointed at it died at once, each reporting itself
+# as a broken agent.
+#
+# That is a deployment failure, so it is handled here rather than in six
+# agents. Each slot names the environment variable that chooses its model; when
+# a call comes back with a PROVIDER-level failure, that variable is repointed at
+# FALLBACK_MODEL, the client is rebuilt, and the call is retried once.
+#
+# money_customs is deliberately absent. It constructs ChatCohere directly, so no
+# model string can move it off Cohere -- a fallback entry would promise
+# something this code cannot deliver.
+# ---------------------------------------------------------------------------
+
+FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "openrouter:openai/gpt-4o-mini")
+
+SLOT_MODEL_ENV = {
+    "destination": "DESTINATION_AGENT_MODEL",
+    "flights": "FLIGHTS_MODEL",
+    "restaurants": "RESTAURANT_AGENT_MODEL",
+    "activities": "DEEP_AGENT_MODEL",
+    "budget": "OPENROUTER_MODEL",
+}
+
+# Signatures of the PROVIDER being unusable -- not of the agent having nothing
+# to say. "No flights found for these dates" is a correct answer and must never
+# trigger a rebuild; so must a coverage refusal. Everything here is a failure
+# that a different provider would not have.
+_PROVIDER_DOWN = (
+    "credit balance is too low",
+    "requires more credits",
+    "insufficient credit",
+    "insufficient_quota",
+    "prompt tokens limit exceeded",
+    "invalid api key",
+    "invalid_api_key",
+    "authentication_error",
+    "unauthorized",
+    "permission denied",
+    "no endpoints found",
+    "model not found",
+    "is not a valid model",
+    "does not exist or you do not have access",
+)
+
+
+def provider_unavailable(reply: str) -> bool:
+    """True if this reply says the PROVIDER failed, not that the agent had no data."""
+    lowered = (reply or "").lower()
+    return any(sig in lowered for sig in _PROVIDER_DOWN)
+
+
+class _FallbackClient:
+    """Wraps a slot's real client and retries once on a provider outage.
+
+    Wrapping rather than editing get_client's cache: the seam caches whatever
+    get_client returned, so evicting an entry after the fact would not reach the
+    object the orchestrator is already holding. A wrapper stays in place and
+    swaps what is underneath it.
+    """
+
+    def __init__(self, slot: str, inner):
+        self._slot = slot
+        self._inner = inner
+        self._fell_back = False
+
+    async def call(self, task: str) -> str:
+        reply = await self._inner.call(task)
+        if self._fell_back or not provider_unavailable(reply):
+            return reply
+
+        env = SLOT_MODEL_ENV.get(self._slot)
+        if not env or os.environ.get(env) == FALLBACK_MODEL:
+            return reply
+
+        previous = os.environ.get(env)
+        os.environ[env] = FALLBACK_MODEL
+        self._fell_back = True
+        try:
+            rebuilt = _BUILDERS[self._slot]()
+        except Exception as exc:
+            if previous is None:
+                os.environ.pop(env, None)
+            else:
+                os.environ[env] = previous
+            return reply + f"\n[fallback to {FALLBACK_MODEL} failed to build: {exc}]"
+
+        self._inner = rebuilt
+        print(f"[{self._slot}] provider unavailable; retrying on {FALLBACK_MODEL}")
+        return await rebuilt.call(task)
+
+
 def get_client(name: str) -> LocalFunctionClient:
     """Get (and lazily build) the client for one subagent by name."""
     if name not in _clients_cache:
@@ -215,4 +312,7 @@ def get_client(name: str) -> LocalFunctionClient:
                     return f"[{name} unavailable] {error_message}"
 
             _clients_cache[name] = _BrokenClient()
+        else:
+            if name in SLOT_MODEL_ENV:
+                _clients_cache[name] = _FallbackClient(name, _clients_cache[name])
     return _clients_cache[name]
