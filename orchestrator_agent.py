@@ -186,7 +186,7 @@ def resolve_travel_month(task: str, today=None) -> str:
     return "%04d-%02d" % (year, month)
 
 
-def _new_run(base_facts=None):
+def _new_run(base_facts=None, stated_budget=""):
     """Fresh per-run state and tools, closed over rather than global.
 
     Chainlit serves concurrent sessions; module-level state would let two runs
@@ -260,6 +260,11 @@ def _new_run(base_facts=None):
                 task=task,
                 replies={s: r[-1] for s, r in ledger.items() if s != "budget"},
                 is_failure=_is_failure,
+                # The VALUE guard in build_budget_brief is a no-op without
+                # this, so the traveller's own budget was costable here even
+                # though the deterministic path was protected. record_trip_state
+                # is the fallback when the UI parsed no budget but the model did.
+                stated_budget=stated_budget or state.get("total_budget", ""),
                 trip_facts=(
                     "\n".join(f"{k.replace('_', ' ')}: {v}" for k, v in state.items())
                     if state else ""
@@ -416,7 +421,7 @@ async def plan_trip_agentic(
     """Same signature and return type as orchestrator.plan_trip."""
     travel_month = resolve_travel_month(task)
     base_facts = {"travel month": travel_month} if travel_month else {}
-    state, ledger, tools = _new_run(base_facts)
+    state, ledger, tools = _new_run(base_facts, stated_budget)
     agent = create_deep_agent(
         model=init_chat_model(MODEL.strip(), max_tokens=MAX_TOKENS),
         tools=tools,

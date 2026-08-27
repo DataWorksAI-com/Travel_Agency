@@ -214,6 +214,15 @@ _clients_cache = {}
 
 FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "openrouter:openai/gpt-4o-mini")
 
+# budget_agent/config.py:40 reads OPENROUTER_MODEL as a BARE OpenRouter slug
+# and prefixes it itself ("openrouter:" + value). Every other variable here
+# takes a full "provider:model" string. Writing FALLBACK_MODEL into it
+# unchanged produced "openrouter:openrouter:openai/gpt-4o-mini", a slug
+# OpenRouter rejects. init_chat_model ACCEPTS it, so the rebuild below did not
+# raise, the env restore never ran, and one outage left the Budget slot dead
+# for the life of the process with its single retry already spent.
+_BARE_SLUG_ENV = {"OPENROUTER_MODEL"}
+
 SLOT_MODEL_ENV = {
     "destination": "DESTINATION_AGENT_MODEL",
     "flights": "FLIGHTS_MODEL",
@@ -274,7 +283,9 @@ class _FallbackClient:
             return reply
 
         previous = os.environ.get(env)
-        os.environ[env] = FALLBACK_MODEL
+        os.environ[env] = (
+            FALLBACK_MODEL.split(":", 1)[1] if env in _BARE_SLUG_ENV else FALLBACK_MODEL
+        )
         self._fell_back = True
         try:
             rebuilt = _BUILDERS[self._slot]()
@@ -312,7 +323,13 @@ def get_client(name: str) -> LocalFunctionClient:
                     return f"[{name} unavailable] {error_message}"
 
             _clients_cache[name] = _BrokenClient()
-        else:
-            if name in SLOT_MODEL_ENV:
-                _clients_cache[name] = _FallbackClient(name, _clients_cache[name])
+
+        # Wrapped on BOTH branches. A provider outage can surface at BUILD time
+        # as easily as at call time -- a client whose constructor validates a
+        # dead key raises here -- and wrapping only the success branch meant
+        # exactly those failures were cached permanently with no fallback, which
+        # is the case this mechanism was written for. A _BrokenClient whose
+        # message carries no provider signature is simply never retried.
+        if name in SLOT_MODEL_ENV:
+            _clients_cache[name] = _FallbackClient(name, _clients_cache[name])
     return _clients_cache[name]

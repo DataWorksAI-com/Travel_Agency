@@ -88,6 +88,22 @@ def content_text(content) -> str:
         if parts:
             return "\n".join(parts)
 
+        # Blocks present, none of them text. Falling through to str() below put
+        # the block list's Python repr -- thinking signatures and all -- into the
+        # traveller's itinerary, which is the leak this function exists to stop,
+        # and the seam did not catch it: _looks_like_error only matches a bracket
+        # tag it recognises, so a repr was presented as a genuine reply. Returning
+        # "" instead would be caught, but it discards the one diagnostic there is.
+        #
+        # So: the module's own error shape (see LocalFunctionClient.call), naming
+        # the block types and nothing else. The seam reports it as NOT CONNECTED
+        # with a readable cause, and no signature blob reaches the reader.
+        kinds = ", ".join(
+            (b.get("type") if isinstance(b, dict) else getattr(b, "type", "")) or "?"
+            for b in content
+        ) or "none"
+        return f"[subagent error] final message carried no text blocks (only: {kinds})"
+
     return str(content)
 
 

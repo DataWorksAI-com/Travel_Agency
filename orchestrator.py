@@ -207,18 +207,16 @@ async def _call_money_customs_context(origin_country: str, destination_country: 
     anyone reading only this function would conclude the old behaviour is
     still live.
     """
-    client = get_client("money_customs")
     task = (
         f"Traveler is going from {origin_country} to {destination_country}. "
         f"Give the exchange rate and money customs (tipping/haggling) for "
         f"{destination_country}."
     )
-    return await client.call(task)
+    return await ask_slot("money_customs", task)
 
 
 async def _run_destination(task: str) -> str:
-    client = get_client("destination")
-    return await client.call(task)
+    return await ask_slot("destination", task)
 
 
 async def _run_parallel_subagents(task: str, money_context: str) -> dict:
@@ -251,14 +249,10 @@ async def _run_parallel_subagents(task: str, money_context: str) -> dict:
     restaurants_task = task
     activities_task = task  # money/customs likely irrelevant here -- confirm
 
-    flights_client = get_client("flights")
-    restaurants_client = get_client("restaurants")
-    activities_client = get_client("activities")
-
     flights_result, restaurants_result, activities_result = await asyncio.gather(
-        flights_client.call(flights_task),
-        restaurants_client.call(restaurants_task),
-        activities_client.call(activities_task),
+        ask_slot("flights", flights_task),
+        ask_slot("restaurants", restaurants_task),
+        ask_slot("activities", activities_task),
     )
 
     return {
@@ -330,8 +324,7 @@ def _looks_like_failure(reply: str) -> bool:
 
 
 async def _run_budget(budget_task: str) -> str:
-    client = get_client("budget")
-    return await client.call(budget_task)
+    return await ask_slot("budget", budget_task)
 
 
 def _assemble_itinerary(destination: str, parallel: dict, budget: str,
@@ -403,18 +396,37 @@ async def _plan_trip_fixed(
 ) -> str:
     """The original fixed pipeline: Money & Customs, Destination, the parallel
     three, then Budget. Unchanged behaviour."""
-    money_context = ""
+    # Money & Customs is the slowest slot by a wide margin -- 27-358s measured
+    # on 27 Aug 2026, against single-digit seconds for everything else -- and
+    # NOTHING downstream reads its reply. It depends only on the two country
+    # strings the UI already parsed, and its result is used once, as its own
+    # itinerary section. Awaiting it here put its whole duration on the
+    # critical path, ahead of a pipeline that never needed it.
+    #
+    # Started now, collected at assembly. It takes a permit from the gate like
+    # any other slot, so this overlaps rather than oversubscribes; at
+    # MAX_CONCURRENCY=1 the total is unchanged, which is the honest cost of a
+    # serialised key.
+    money_task = None
     if origin_country and destination_country:
-        money_context = await _call_money_customs_context(origin_country, destination_country)
-        print(f"\n[DEBUG] Money & Customs said: {money_context}\n")
+        money_task = asyncio.create_task(
+            _call_money_customs_context(origin_country, destination_country)
+        )
 
 
     destination_result = await _run_destination(task)
 
-    parallel_results = await _run_parallel_subagents(task, money_context)
+    # "" rather than the reply: it is not resolved yet, and this parameter is
+    # deliberately unused -- see the note in _run_parallel_subagents on why the
+    # relay it used to feed was removed.
+    parallel_results = await _run_parallel_subagents(task, "")
 
     budget_task = _build_budget_task(task, destination_result, parallel_results, stated_budget)
     budget_result = await _run_budget(budget_task)
+
+    money_context = await money_task if money_task is not None else ""
+    if money_context:
+        print(f"\n[DEBUG] Money & Customs said: {money_context}\n")
 
     return _assemble_itinerary(
         destination_result, parallel_results, budget_result, money_customs=money_context
