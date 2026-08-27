@@ -94,17 +94,15 @@ def get_exchange_rate(from_currency: str, to_currency: str) -> dict:
         rate = data["rates"].get(to)
         if rate is None:
             return {"from": frm, "to": to, "rate": None, "date": None,
-                     "found": False, "error": f"No rate found for {frm} to {to}.",
-                     "match_score": None}
+                     "found": False, "error": f"No rate found for {frm} to {to}."}
         return {"from": frm, "to": to, "rate": rate, "date": data.get("date"),
-                 "found": True, "error": None, "match_score": None}
+                 "found": True, "error": None}
     except requests.exceptions.RequestException as exc:
         return {"from": frm, "to": to, "rate": None, "date": None,
-                 "found": False, "error": str(exc), "match_score": None}
+                 "found": False, "error": str(exc)}
     except (KeyError, ValueError):
         return {"from": frm, "to": to, "rate": None, "date": None,
-                 "found": False, "error": "Unexpected response format from provider.",
-                 "match_score": None}
+                 "found": False, "error": "Unexpected response format from provider."}
 
 
 # ---------------------------------------------------------------------------
@@ -401,15 +399,9 @@ def get_money_customs(country: str, service: str = "") -> dict:
 
     if facts is None:
         return {"country": country.strip(), "found": False,
-                 "error": f"No money-customs data for '{country}' yet.",
-                 "match_score": None, "adjusted": None}
+                 "error": f"No money-customs data for '{country}' yet."}
 
-    # match_score=None here means "exact dict key, no fuzzy/semantic step
-    # involved" -- the same convention search_money_customs uses for its
-    # own exact-match branch. Consumers (e.g. an Orchestrator) can treat
-    # None as full confidence and any non-null number as "verify this."
-    result = {"country": country.strip(), "found": True,
-              "match_score": None, "adjusted": None, **facts}
+    result = {"country": country.strip(), "found": True, **facts}
 
     if service:
         service_key = service.strip().lower()
@@ -417,8 +409,7 @@ def get_money_customs(country: str, service: str = "") -> dict:
         if note is None:
             return {"country": country.strip(), "found": False,
                      "error": f"No data for service '{service}' in {country}. "
-                              f"Available services: {list(facts['by_service'].keys())}",
-                     "match_score": None, "adjusted": None}
+                              f"Available services: {list(facts['by_service'].keys())}"}
         result["by_service"] = {service_key: note}
 
     return result
@@ -696,7 +687,7 @@ def get_income_context(country: str) -> dict:
         return {"country": country.strip(), "gni_per_capita_usd": None,
                  "year": None, "found": False,
                  "error": f"No country code mapping for '{country}' yet.",
-                 "note": note, "match_score": None}
+                 "note": note}
 
     try:
         response = requests.get(
@@ -709,19 +700,18 @@ def get_income_context(country: str) -> dict:
     except requests.exceptions.RequestException as exc:
         return {"country": country.strip(), "gni_per_capita_usd": None,
                  "year": None, "found": False,
-                 "error": f"World Bank lookup failed: {exc}", "note": note,
-                 "match_score": None}
+                 "error": f"World Bank lookup failed: {exc}", "note": note}
     except ValueError:
         return {"country": country.strip(), "gni_per_capita_usd": None,
                  "year": None, "found": False,
                  "error": "World Bank returned a response that was not valid JSON.",
-                 "note": note, "match_score": None}
+                 "note": note}
 
     if not isinstance(payload, list) or len(payload) < 2 or not payload[1]:
         return {"country": country.strip(), "gni_per_capita_usd": None,
                  "year": None, "found": False,
                  "error": f"World Bank returned no records for '{country}' ({iso3}).",
-                 "note": note, "match_score": None}
+                 "note": note}
 
     # Records are newest-first; take the first one with a non-null value.
     latest = next((r for r in payload[1] if r.get("value") is not None), None)
@@ -729,7 +719,7 @@ def get_income_context(country: str) -> dict:
         return {"country": country.strip(), "gni_per_capita_usd": None,
                  "year": None, "found": False,
                  "error": f"World Bank had no non-null GNI per capita values for '{country}'.",
-                 "note": note, "match_score": None}
+                 "note": note}
 
     return {
         "country": country.strip(),
@@ -738,7 +728,6 @@ def get_income_context(country: str) -> dict:
         "found": True,
         "error": None,
         "note": note,
-        "match_score": None,
     }
 
 
