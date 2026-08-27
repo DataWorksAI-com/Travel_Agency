@@ -45,6 +45,14 @@ CITY_COUNTRY = {
     "nassau": "Bahamas, The",
     "montego bay": "Jamaica",
     "cancun": "Mexico",
+    # Demo city 2: all six slots cover Honolulu. Without this it falls through
+    # as its own "country", and Money & Customs then has to guess -- its
+    # semantic search lands on Hawaii at 0.435 similarity and labels the whole
+    # answer a best-guess approximation. The agent path happened to survive it
+    # because the model called record_trip_state with USA, but that is the
+    # model's mood, not the code's doing, and the deterministic path has no
+    # model to save it.
+    "honolulu": "USA",
     "lisbon": "Portugal",
     "tokyo": "Japan",
     "paris": "France",

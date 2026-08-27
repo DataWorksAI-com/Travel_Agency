@@ -13,7 +13,8 @@ from orchestrator import plan_trip
 from ui.agent_seam import install_seam
 from ui.request_parse import describe, parse_request
 
-REQ = "Plan 5 nights in Cancun for 2 people from Boston in September, total budget $3000"
+REQ = " ".join(sys.argv[1:]) or (
+    "Plan 5 nights in Cancun for 2 people from Boston in September, total budget $3000")
 T0 = time.perf_counter()
 spans, order = {}, []
 
