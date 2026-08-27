@@ -11,6 +11,7 @@ right answer, and rebuilding a client over it would be a bug.
 import asyncio
 import os
 import sys
+from pathlib import Path
 
 sys.path.insert(0, ".")
 from dotenv import load_dotenv
@@ -90,6 +91,27 @@ check("a correct 'no data' answer is passed through unchanged",
 
 check("money_customs has no fallback entry (Cohere is hardcoded)",
       "money_customs" in oc.SLOT_MODEL_ENV, False)
+
+# A SLOT_MODEL_ENV entry only works if the agent reads that variable when the
+# client is BUILT. _FallbackClient repoints the variable and re-runs the
+# builder, so an agent that captured the value at import returns the same dead
+# model and the fallback is wired but inert -- it prints the retry line and
+# changes nothing. Activities was exactly that until 27 Aug 2026, and it is the
+# slot OpenRouter actually throttles.
+#
+# Source check rather than a call: build_agent is async and spawns the
+# OpenTripMap MCP subprocess, which is far too much to stand up for one
+# assertion. Same approach as test_content_text's source checks.
+#
+# KNOWN, not asserted here: restaurant_agent_ollama.py:96 still has the import
+# -time form. Harmless today -- a local Ollama has no provider to die -- and it
+# is that agent owner's line to change.
+_acts = Path("activities-agent/activities_agent.py").read_text(encoding="utf-8")
+_build = _acts[_acts.index("def build_agent"):_acts.index("\nMODEL =")]
+check("activities reads DEEP_AGENT_MODEL at build time",
+      'os.environ.get("DEEP_AGENT_MODEL"' in _build, True)
+check("activities does not bind the import-time MODEL into the agent",
+      "model=init_chat_model(MODEL" in _build, False)
 
 print()
 print("%d/%d passing" % (passed, passed + failed))

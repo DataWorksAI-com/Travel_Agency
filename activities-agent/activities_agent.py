@@ -506,10 +506,18 @@ async def build_agent():
         if live_cities else ""
     )
 
+    # Re-read at BUILD time, not import time. MODEL below is still the default
+    # and standalone behaviour is unchanged; this only matters when a caller
+    # repoints DEEP_AGENT_MODEL and rebuilds. The orchestrator's provider
+    # fallback does exactly that, and with the value captured at import the
+    # rebuild got the same dead model back -- wired but inert. Same one-line
+    # change destination_agent already made in f830450.
+    model_id = os.environ.get("DEEP_AGENT_MODEL", MODEL)
+
     agent = create_deep_agent(
         # Bare string unless a ceiling was asked for, so the default path is
         # byte-for-byte the original behaviour.
-        model=init_chat_model(MODEL, max_tokens=MAX_TOKENS) if MAX_TOKENS else MODEL,
+        model=init_chat_model(model_id, max_tokens=MAX_TOKENS) if MAX_TOKENS else model_id,
         tools=local_tools + mcp_tools,
         system_prompt=(
             "You are the Activities domain-expert agent in a multi-agent travel planning "
