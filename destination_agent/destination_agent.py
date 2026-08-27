@@ -1,6 +1,8 @@
 from dotenv import load_dotenv
 from deepagents import create_deep_agent
-from langchain_anthropic import ChatAnthropic
+import os
+
+from langchain.chat_models import init_chat_model
 from langchain_core.tools import tool
 from destination_agent.geoapify_data import get_or_build_destination_profile
 from destination_data.resolve_place import resolve_place
@@ -343,9 +345,14 @@ def search_destinations(
 # LLM MODEL
 # --------------------------------------------------------
 
-model = ChatAnthropic(
-    model="claude-haiku-4-5",
-    temperature=0
+# Provider/model is a DEPLOYMENT choice, not this agent's. The default is
+# unchanged, so standalone runs behave exactly as before; setting
+# DESTINATION_AGENT_MODEL lets the orchestrator move this slot off a provider
+# that has gone down. Prompt, tools and recommendation logic are untouched.
+# Approved by Joel, 27 Aug 2026.
+model = init_chat_model(
+    os.environ.get("DESTINATION_AGENT_MODEL", "anthropic:claude-haiku-4-5"),
+    temperature=0,
 )
 
 # --------------------------------------------------------
