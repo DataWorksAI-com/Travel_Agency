@@ -43,9 +43,16 @@ def _build_flights_client() -> LocalFunctionClient:
     # output ceiling, which from_dict_spec caps for every slot
     # (subagent_client.DEFAULT_MAX_TOKENS) rather than each agent capping
     # itself.
+    #
+    # Which PROVIDER is a deployment concern too, not just which model. On
+    # 27 Aug an OpenRouter throttle took this slot and Activities out while the
+    # four slots on other providers ran fine, and there was no way to move them
+    # without editing this line. FLIGHTS_MODEL makes that a config change; the
+    # default is unchanged, so nothing moves unless it is set.
     from flights_agent import flights_subagent
     return LocalFunctionClient.from_dict_spec(
-        flights_subagent, model="openrouter:openai/gpt-4o-mini"
+        flights_subagent,
+        model=os.getenv("FLIGHTS_MODEL", "openrouter:openai/gpt-4o-mini"),
     )
 
     # once aligned:
