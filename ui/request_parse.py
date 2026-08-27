@@ -65,12 +65,38 @@ _PLACE = (
     # as "Canc", the lookahead failed on the accent, and the engine went on to
     # match the SECOND "in" -- reporting the destination country as "September".
     r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'\-]{1,34}?)"
-    r"(?=\s*(?:,|\.|;|$|\bfrom\b|\bfor\b|\bwith\b|\bbudget\b|\bon\b|\bunder\b"
+    # \bto\b was missing until 27 Aug 2026, and it is not cosmetic: on "flying
+    # from Boston to Cancun" the origin captured "Boston to Cancun", because
+    # nothing stopped the place name at the next clause. That string is in no
+    # city table, so it was passed to the agents verbatim as the origin country.
+    r"(?=\s*(?:,|\.|;|$|\bfrom\b|\bto\b|\bfor\b|\bwith\b|\bbudget\b|\bon\b|\bunder\b"
     r"|\bbelow\b|\bwho\b|\bthat\b|\band\b|\bin\b|\bnext\b|\bduring\b))"
 )
 
 _DESTINATION_RE = re.compile(r"\b(?:to|in|visit(?:ing)?|towards?)\s+" + _PLACE, re.I)
 _ORIGIN_RE = re.compile(r"\b(?:from|departing|leaving)\s+" + _PLACE, re.I)
+
+# "in" is the one ambiguous marker. "in Cancun" is where you are GOING;
+# "we're in Boston" is where you ARE. Observed live: a tester typed "me and my
+# girlfriend are in boston and want somewhere warm" and Boston came back as the
+# DESTINATION, so every agent was told "destination country: USA" for a request
+# whose entire point was that the destination was not yet known.
+#
+# to / visit / towards stay in _DESTINATION_RE because they are unambiguous.
+# Bare "are"/"am" rather than "we are"/"i am": the live query was "me and my
+# girlfriend ARE IN boston", where the subject is not a pronoun at all.
+_ORIGIN_IN_RE = re.compile(
+    r"\b(?:we'?re|i'?m|are|am|live|living|based|stay(?:ing)?)\s+in\s+" + _PLACE,
+    re.I,
+)
+
+# Months are not places. "somewhere warm for a week in september" reported the
+# destination country as September: "in <place>" matched the month, and nothing
+# downstream can tell a bad country from a real one.
+_MONTHS = frozenset((
+    "january", "february", "march", "april", "may", "june", "july",
+    "august", "september", "october", "november", "december",
+))
 
 # Same two patterns evaluation/direct_path.py:74-78 uses, so the UI and
 # Budget's own parser agree on what "the budget" is.
@@ -79,11 +105,34 @@ _BUDGET_LABELLED_RE = re.compile(
 )
 _BUDGET_DOLLAR_RE = re.compile(r"\$\s?(\d[\d,]*)")
 
+# "2 grand", "2k". Tried BEFORE the labelled pattern, which stops at the digits
+# and never sees the multiplier -- "under 2 grand" parsed as $2, wrong by a
+# factor of 1000 on the one value the whole stated-budget guard is built on.
+# ponytail: "5k run" would read as $5000. No observed case; add a unit
+# exclusion if someone types one.
+_BUDGET_INFORMAL_RE = re.compile(r"\b(\d[\d,]*)\s*(?:grand|k)\b", re.I)
+
+
+def _clean(place: str | None) -> str:
+    return " ".join((place or "").split()).strip(" .,'-")
+
+
+def _first_place(pattern, text: str):
+    """First match whose captured place is not a month name.
+
+    finditer, not search: rejecting the first match has to let a later one
+    through. "a week in september to Cancun" must still find Cancun.
+    """
+    for match in pattern.finditer(text):
+        if _clean(match.group(1)).lower() not in _MONTHS:
+            return match
+    return None
+
 
 def _to_country(place: str | None) -> str:
     if not place:
         return ""
-    cleaned = " ".join(place.split()).strip(" .,'-")
+    cleaned = _clean(place)
     if not cleaned:
         return ""
     # Accent-folded, so the accented and unaccented spellings of a city both
@@ -100,14 +149,30 @@ def parse_request(text: str) -> dict:
     """Return the kwargs for plan_trip, plus the raw places for display."""
     task = (text or "").strip()
 
-    dest_match = _DESTINATION_RE.search(task)
-    origin_match = _ORIGIN_RE.search(task)
+    origin_match = _first_place(_ORIGIN_RE, task) or _first_place(_ORIGIN_IN_RE, task)
+
+    # Blank the origin clause before looking for a destination, so "we're in
+    # Boston" cannot also be read as "going to Boston". Blanked with spaces
+    # rather than cut out, so every remaining offset still lines up with the
+    # original text.
+    searchable = task
+    if origin_match:
+        searchable = (
+            task[:origin_match.start()]
+            + " " * (origin_match.end() - origin_match.start())
+            + task[origin_match.end():]
+        )
+    dest_match = _first_place(_DESTINATION_RE, searchable)
 
     destination_place = dest_match.group(1) if dest_match else None
     origin_place = origin_match.group(1) if origin_match else None
 
-    budget_match = _BUDGET_LABELLED_RE.search(task) or _BUDGET_DOLLAR_RE.search(task)
-    stated_budget = f"${budget_match.group(1).replace(',', '')}" if budget_match else ""
+    informal = _BUDGET_INFORMAL_RE.search(task)
+    if informal:
+        stated_budget = f"${int(informal.group(1).replace(',', '')) * 1000}"
+    else:
+        budget_match = _BUDGET_LABELLED_RE.search(task) or _BUDGET_DOLLAR_RE.search(task)
+        stated_budget = f"${budget_match.group(1).replace(',', '')}" if budget_match else ""
 
     return {
         "task": task,
