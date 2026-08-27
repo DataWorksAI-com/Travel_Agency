@@ -95,6 +95,27 @@ _AMOUNT = re.compile(
 
 _SYMBOL_CURRENCY = {"$": "USD", "£": "GBP", "€": "EUR"}
 
+# A price written as a RANGE. "$80-120 per person", "$130 to $180", "$15–25".
+#
+# _AMOUNT alone gets this wrong in two different directions, and both understate
+# the trip:
+#
+#   "$80-120"    -> matches $80 only. The second number has no symbol, so the
+#                   high end is invisible and Budget prices the cheapest case.
+#   "$80 - $120" -> matches BOTH, as two independent line items, so one activity
+#                   is counted twice and neither is labelled a range.
+#
+# Systematically optimistic either way, in a system whose entire purpose is not
+# making a trip look more affordable than it is. Ranges are found FIRST and
+# their spans excluded from the single-amount pass, so a range yields exactly
+# one item carrying both ends.
+_RANGE = re.compile(
+    r"[$£€]\s?(\d[\d,]*(?:\.\d{1,2})?)"
+    r"\s*(?:-|–|—|to)\s*"
+    r"[$£€]?\s?(\d[\d,]*(?:\.\d{1,2})?)",
+    re.IGNORECASE,
+)
+
 # "per person" / "per night" changes what a number MEANS, so it travels with
 # it. Budget multiplying a per-person fare by party size is correct; doing it
 # to a total is not, and the prose is the only place that distinction lives.
@@ -249,7 +270,43 @@ def extract_line_items(slot: str, reply: str) -> list[dict]:
     for line in reply.splitlines():
         if _is_not_a_price(line):
             continue
+
+        # Ranges first, and remember where they sat, so the single-amount pass
+        # below cannot re-report either end as a price of its own.
+        spans = []
+        for match in _RANGE.finditer(line):
+            low_text, high_text = match.group(1), match.group(2)
+            if not (_verify(low_text, reply) and _verify(high_text, reply)):
+                continue
+            try:
+                low, high = float(low_text.replace(",", "")), float(high_text.replace(",", ""))
+            except ValueError:
+                continue
+            if low <= 0 or high < low:
+                # "$120 to $80" is not a range, and neither is a match that ran
+                # across two unrelated figures. Leave it to the pass below.
+                continue
+            spans.append(match.span())
+            currency = _SYMBOL_CURRENCY.get(match.group(0).strip()[0], "USD")
+            key = (low, currency, _name_from(line))
+            if key in seen:
+                continue
+            seen.add(key)
+            items.append({
+                "source": slot,
+                "category": CATEGORY[slot],
+                "name": _name_from(line),
+                "cost": low,
+                "cost_high": high,
+                "currency": currency,
+                "per": _per_unit(line),
+                "unverified": disclaimed,
+                "quote": line.strip()[:200],
+            })
+
         for match in _AMOUNT.finditer(line):
+            if any(s <= match.start() < e for s, e in spans):
+                continue
             raw = match.group(1) or match.group(2)
             currency = (
                 _SYMBOL_CURRENCY.get(match.group(0).strip()[0])
@@ -400,6 +457,11 @@ def build_budget_brief(
         "useful than one with a confident wrong number.\n"
         "6. Anything under FIGURES THE SOURCE AGENT DISCLAIMED is not costed "
         "data. Keep it out of every total and subtotal. You may mention it as "
-        "rough context, but say plainly that the agent did not stand behind it."
+        "rough context, but say plainly that the agent did not stand behind it.\n"
+        "7. An item with 'cost_high' was quoted as a RANGE, from 'cost' to "
+        "'cost_high'. Show the range. When you total, use 'cost_high' -- a "
+        "traveller misled downwards discovers it at the destination, with no "
+        "way to recover; one misled upwards finds money left over. Never "
+        "present 'cost' alone as the price of a ranged item."
     )
     return "\n\n".join(parts)
