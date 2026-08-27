@@ -114,6 +114,20 @@ asyncio.run(ask_agents(["flights", "restaurants"], ["a", "b"]))
 check("trip facts prepended to every task in the batch",
       len(seen) == 2 and all("travel month: 2026-09" in t for t in seen))
 
+# A slot that failed once is still remembered when it turns up in a later batch.
+# The memo lives in ask_agent, so the fan-out must not route around it.
+class _Dead:
+    async def call(self, task):
+        return "[subagent error] rate limit"
+
+
+orchestrator.get_client = lambda s: _Dead() if s == "activities" else _Tracker().client(s)
+_, _, _tools = oa._new_run(None, "")
+_, _fan, _ = _tools
+asyncio.run(_fan(["activities"], ["t"]))
+check("a failed slot is still memoised through the fan-out",
+      "already failed" in asyncio.run(_fan(["activities"], ["t"])))
+
 passed = sum(1 for _, ok in cases if ok)
 for name, ok in cases:
     print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
