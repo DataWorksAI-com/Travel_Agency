@@ -31,17 +31,6 @@ AUTOCOMPLETE_URL = "https://autocomplete.travelpayouts.com/places2"
 SEARCH_URL = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
 
 
-def _redact(error: object) -> str:
-    """Stringify an error with the API token removed.
-
-    The token is a query parameter (see search_prices below), and requests'
-    exceptions stringify as the full request URL. Without this, a failed
-    search returns the credential to the caller -- which reaches the browser
-    transcript, and, under the agentic orchestrator, the model's context.
-    """
-    return str(error).replace(TP_TOKEN, "<token redacted>")
-
-
 def get_airport_code(city: str) -> str:
     """Look up the IATA airport or city code for a given city name, using
     Travelpayouts' free Autocomplete API — works for any city worldwide.
@@ -104,7 +93,7 @@ def _fetch_offers(origin_code: str, destination_code: str, date_str: str) -> tup
         )
         response.raise_for_status()
     except requests.RequestException as error:
-        return [], f"Flight search failed for {origin_code}→{destination_code}: {_redact(error)}"
+        return [], f"Flight search failed for {origin_code}→{destination_code}: {error}"
 
     payload = response.json()
     if not payload.get("success", False):
