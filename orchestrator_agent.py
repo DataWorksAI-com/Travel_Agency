@@ -140,15 +140,53 @@ RULES
   information for it, such as a city that agent had not been given yet.
 - Do not ask the user follow-up questions. Work with what you have and state your
   assumptions.
-- When the traveller names a month with no year, resolve it to the NEXT occurrence
-  of that month relative to today's date, and pass it as an explicit YYYY-MM. Never
-  send a bare month name to an agent that searches by date.
+- Trip details carries 'travel month' as an explicit YYYY-MM whenever the traveller
+  named one. Use that value verbatim for anything date-related. Do NOT work out a
+  year yourself, and never send a bare month name to an agent that searches by date.
 
 Valid slot names are exactly: {", ".join(SLOTS)}.
 """
 
 
-def _new_run():
+_MONTHS = ("january", "february", "march", "april", "may", "june", "july",
+           "august", "september", "october", "november", "december")
+
+_MONTH_RE = re.compile(
+    r"\b(" + "|".join(_MONTHS) + r")\b(?:\s+(\d{4}))?", re.I
+)
+
+
+def resolve_travel_month(task: str, today=None) -> str:
+    """The month the traveller meant, as YYYY-MM, or "" if they named none.
+
+    Carrying today's date was not enough. On the 14:0x run the task said
+    "today's date: 2026-08-27" and the orchestrator still instructed Flights to
+    search "September 2024" -- the fact was present and the model did the
+    arithmetic wrong anyway. A weaker model will keep doing that, and the
+    failure is invisible: the agent dutifully reports no cached data for a route
+    that has fares.
+
+    So the resolved month becomes a FACT rather than a derivation. Same
+    principle as record_trip_state and today's date: anything a model can get
+    wrong silently should travel by code.
+
+    A bare month resolves to its NEXT occurrence -- "in September" said in
+    August 2026 means 2026-09, said in October 2026 means 2027-09. An explicit
+    year is honoured as written, even a past one, because that is a statement
+    rather than an omission.
+    """
+    today = today or date.today()
+    match = _MONTH_RE.search(task or "")
+    if not match:
+        return ""
+    month = _MONTHS.index(match.group(1).lower()) + 1
+    if match.group(2):
+        return "%04d-%02d" % (int(match.group(2)), month)
+    year = today.year if month >= today.month else today.year + 1
+    return "%04d-%02d" % (year, month)
+
+
+def _new_run(base_facts=None):
     """Fresh per-run state and tools, closed over rather than global.
 
     Chainlit serves concurrent sessions; module-level state would let two runs
@@ -190,6 +228,7 @@ def _new_run():
         # same reason the trip state does: a prompt rule can be forgotten, and
         # the agent on the other side shares no context with us.
         facts = {"today's date": date.today().isoformat()}
+        facts.update(base_facts or {})
         facts.update({k.replace("_", " "): v for k, v in state.items()})
         detail = "\n".join(f"{k}: {v}" for k, v in facts.items())
         task = f"Trip details:\n{detail}\n\n{task}"
@@ -375,7 +414,9 @@ async def plan_trip_agentic(
     stated_budget: str = "",
 ) -> str:
     """Same signature and return type as orchestrator.plan_trip."""
-    state, ledger, tools = _new_run()
+    travel_month = resolve_travel_month(task)
+    base_facts = {"travel month": travel_month} if travel_month else {}
+    state, ledger, tools = _new_run(base_facts)
     agent = create_deep_agent(
         model=init_chat_model(MODEL.strip(), max_tokens=MAX_TOKENS),
         tools=tools,
