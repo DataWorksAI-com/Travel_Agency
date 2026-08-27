@@ -139,6 +139,51 @@ def _is_not_a_price(line: str) -> bool:
     return any(pattern.search(line) for pattern in _NOT_A_PRICE)
 
 
+# An agent can answer AND disclaim its own numbers in the same reply. Activities
+# did exactly that on 27 Aug 2026:
+#
+#   "The list below is my own compilation of popular regional activities at
+#    typical market pricing, not database-verified entries."
+#
+# ...and then listed prices. _verify passed every one of them, because _verify
+# only asks whether the amount appears in the reply -- and it does; the agent
+# typed it. Appearing in the reply is not the same as the agent standing behind
+# it, and the difference is invisible to a regex looking at one line.
+#
+# Those figures reached Budget under the heading "PRICED INPUTS ... the
+# orchestrator verified that every figure appears verbatim", which is the
+# orchestrator asserting something the agent had explicitly denied. That is this
+# module's claim to get right, not the agent's.
+#
+# Matched against the WHOLE reply, not per line: a disclaimer is written once,
+# in prose, above or below the list it governs. Locating which lines it covers
+# would need to be right about scope, and being wrong about scope here means
+# silently costing disclaimed figures again.
+#
+# These phrases disclaim PROVENANCE ("where this number came from"), not
+# precision. Numeric hedging -- "about $35", "approximately $80", "~$44" -- is
+# how every agent here writes a real price, and must NOT match, or the guard
+# eats the genuine figures it exists to protect.
+_DISCLAIMED = re.compile(
+    r"not\s+database[-\s]verified"
+    r"|not\s+verified|unverified|not\s+sourced|unsourced"
+    r"|own\s+compilation"
+    r"|typical\s+(?:market\s+)?(?:pricing|prices|costs?)"
+    r"|market\s+pricing"
+    r"|(?:my|its|their)\s+own\s+knowledge|knowledge\s+base"
+    r"|for\s+reference\s+only|general\s+reference"
+    r"|not\s+(?:from|in)\s+the\s+database"
+    r"|illustrative|indicative\s+pricing|ballpark"
+    r"|rough\s+estimates?",
+    re.I,
+)
+
+
+def disclaims_own_figures(reply: str) -> bool:
+    """True if the agent told us not to trust the numbers it just gave us."""
+    return bool(_DISCLAIMED.search(reply or ""))
+
+
 def _amount_in(text: str) -> float | None:
     """The first currency amount in `text`, or None."""
     match = _AMOUNT.search(text or "")
@@ -198,6 +243,8 @@ def extract_line_items(slot: str, reply: str) -> list[dict]:
         # cost.
         return []
 
+    disclaimed = disclaims_own_figures(reply)
+
     items, seen = [], set()
     for line in reply.splitlines():
         if _is_not_a_price(line):
@@ -227,6 +274,7 @@ def extract_line_items(slot: str, reply: str) -> list[dict]:
                 "cost": cost,
                 "currency": currency,
                 "per": _per_unit(line),
+                "unverified": disclaimed,
                 "quote": line.strip()[:200],
             })
     return items
@@ -290,7 +338,18 @@ def build_budget_brief(
     #
     # Budget gets the decision (what, how much, per what, from whom). It does
     # not get the transcript.
-    for_budget = [{k: v for k, v in item.items() if k != "quote"} for item in items]
+    # Split before rendering. An agent that disclaimed its own figures must not
+    # have them appear under a heading that calls them verified -- that heading
+    # is the orchestrator vouching for them, and here it would be vouching
+    # against the source's own words.
+    disclaimed = [i for i in items if i.get("unverified")]
+    items = [i for i in items if not i.get("unverified")]
+
+    _render = lambda rows: [
+        {k: v for k, v in row.items() if k not in ("quote", "unverified")}
+        for row in rows
+    ]
+    for_budget = _render(items)
 
     parts = [f"Traveler's request: {task}"]
     if trip_facts:
@@ -305,6 +364,19 @@ def build_budget_brief(
         "this system.\n"
         + (json.dumps(for_budget, indent=2) if for_budget else "[]  (no priced inputs at all)")
     )
+
+    if disclaimed:
+        sources = sorted({i["source"] for i in disclaimed})
+        parts.append(
+            "FIGURES THE SOURCE AGENT DISCLAIMED. These came from "
+            + ", ".join(sources)
+            + ", which stated in its own reply that these numbers are not "
+            "verified data -- typical or illustrative pricing rather than "
+            "anything it looked up. They are listed so you can mention them as "
+            "rough context, clearly labelled as unverified. Do NOT add them to "
+            "any total.\n"
+            + json.dumps(_render(disclaimed), indent=2)
+        )
 
     if missing:
         parts.append(
@@ -325,6 +397,9 @@ def build_budget_brief(
         "nights, 'total' by neither.\n"
         "5. If what remains is too incomplete to total honestly, say so instead of "
         "producing a total. An itinerary that reports what is missing is more "
-        "useful than one with a confident wrong number."
+        "useful than one with a confident wrong number.\n"
+        "6. Anything under FIGURES THE SOURCE AGENT DISCLAIMED is not costed "
+        "data. Keep it out of every total and subtotal. You may mention it as "
+        "rough context, but say plainly that the agent did not stand behind it."
     )
     return "\n\n".join(parts)
