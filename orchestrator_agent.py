@@ -23,6 +23,7 @@ Two things keep a planning layer from making matters worse:
 import asyncio
 import os
 import re
+from datetime import date
 
 from dotenv import load_dotenv
 
@@ -139,6 +140,9 @@ RULES
   information for it, such as a city that agent had not been given yet.
 - Do not ask the user follow-up questions. Work with what you have and state your
   assumptions.
+- When the traveller names a month with no year, resolve it to the NEXT occurrence
+  of that month relative to today's date, and pass it as an explicit YYYY-MM. Never
+  send a bare month name to an agent that searches by date.
 
 Valid slot names are exactly: {", ".join(SLOTS)}.
 """
@@ -173,9 +177,22 @@ def _new_run():
             # process, so a retry here returns the same failure. Say so instead
             # of letting the model spend its loop rediscovering it.
             return f"The {slot} agent already failed this run and will not recover. Do not call it again."
-        if state:
-            facts = "\n".join(f"{k.replace('_', ' ')}: {v}" for k, v in state.items())
-            task = f"Trip details:\n{facts}\n\n{task}"
+        # Today's date travels with every task, by code.
+        #
+        # A traveller writes "in September" and means the next one. A model has
+        # no reliable idea what year it is: on 27 Aug 2026 the Flights slot
+        # searched 2025-09 and reported "no cached flight data" for a route that
+        # had three fares from $154. That reads as an agent with no coverage. It
+        # was a year off. Verified against the live API -- 2026-09 returns data,
+        # 2025-09 returns none, same route, same call.
+        #
+        # This goes in the task string rather than the system prompt for the
+        # same reason the trip state does: a prompt rule can be forgotten, and
+        # the agent on the other side shares no context with us.
+        facts = {"today's date": date.today().isoformat()}
+        facts.update({k.replace("_", " "): v for k, v in state.items()})
+        detail = "\n".join(f"{k}: {v}" for k, v in facts.items())
+        task = f"Trip details:\n{detail}\n\n{task}"
         if slot == "budget":
             # Budget must see the others' replies, and it cannot if the model
             # emits every tool call in one parallel batch -- observed live: all
