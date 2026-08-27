@@ -176,11 +176,23 @@ def _build_money_customs_client() -> LocalFunctionClient:
     # Note for anyone debugging coverage: search_money_customs returns
     # found=True unconditionally, so a fuzzy near-miss is reported as a hit and
     # the nearest held country can be presented as though it were the one
-    # asked for. match_score is returned on every path but nothing here reads
-    # it, because this seam is str -> str: answer() returns prose, so the score
-    # never leaves the agent. Having the orchestrator decide coverage from
-    # match_score needs a structured return from the seam -- that is
-    # orchestrator work, and it is not built yet.
+    # asked for. Measured 27 Aug 2026: "Aruba" resolves to FIJI at 0.286.
+    #
+    # match_score is returned by search_money_customs only. It was briefly on
+    # the exact-match paths too (ejmachad 93e6d52, always None there, meaning
+    # "no fuzzy step was involved"), and her d7fbeba reverted that. Restoring it
+    # would change nothing here either way: this seam is str -> str, answer()
+    # returns prose, so no dict field leaves that agent at all.
+    #
+    # And note what the score IS, before wiring it anywhere: it measures how
+    # well the requested COUNTRY NAME matched a corpus key. It says nothing
+    # about whether the rate or the tipping advice is right. So it belongs to a
+    # coverage/substitution guard -- "did we answer about the place you asked
+    # for" -- not to the unsourced-figures floor, which is about costs and
+    # which excludes this slot anyway (orchestrator_costs.py:50).
+    #
+    # Either way it needs a structured return from the seam. That is
+    # orchestrator work, it is not built yet, and it is not blocked on her.
     from money_customs_agent import answer
     return LocalFunctionClient(answer)
 
