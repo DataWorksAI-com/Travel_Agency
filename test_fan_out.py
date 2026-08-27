@@ -128,6 +128,38 @@ asyncio.run(_fan(["activities"], ["t"]))
 check("a failed slot is still memoised through the fan-out",
       "already failed" in asyncio.run(_fan(["activities"], ["t"])))
 
+# --- the orchestrator has three tools, and cannot execute the other nine ------
+#
+# _OnlyOurTools.wrap_model_call hides the deepagents built-ins from the model,
+# but create_deep_agent builds the graph's ToolNode from the FULL list, so all
+# nine stayed registered and executable:
+#
+#   ask_agent, ask_agents, record_trip_state,
+#   delete, edit_file, execute, glob, grep, ls, read_file, task, write_file
+#
+# A model cannot ordinarily pick a tool it was never offered, and no case has
+# been observed -- but "hidden" and "not executable" are different claims, and
+# execute/delete sit next to agents that write to a shared corpus. wrap_tool_call
+# refuses by name instead of running the handler.
+from orchestrator_agent import _OnlyOurTools, _BUILTINS
+
+
+class _Req:
+    def __init__(self, name):
+        self.tool_call = {"name": name, "id": "call_1"}
+
+
+_mw = _OnlyOurTools()
+check("every built-in is refused, not executed",
+      all(_mw._refuse(_Req(n)) is not None for n in _BUILTINS))
+check("refusal never runs the handler",
+      _mw.wrap_tool_call(_Req("execute"), lambda r: "EXECUTED") != "EXECUTED")
+check("our own three tools are untouched",
+      all(_mw._refuse(_Req(n)) is None
+          for n in ("ask_agent", "ask_agents", "record_trip_state")))
+check("a permitted tool still reaches the handler",
+      _mw.wrap_tool_call(_Req("ask_agent"), lambda r: "RAN") == "RAN")
+
 passed = sum(1 for _, ok in cases if ok)
 for name, ok in cases:
     print(f"  [{'PASS' if ok else 'FAIL'}] {name}")

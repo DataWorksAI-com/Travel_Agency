@@ -34,6 +34,7 @@ load_dotenv()
 
 from langchain.chat_models import init_chat_model
 from langchain.agents.middleware.types import AgentMiddleware
+from langchain_core.messages import ToolMessage
 
 from deepagents import create_deep_agent
 
@@ -76,7 +77,25 @@ _BUILTINS = frozenset(
 
 
 class _OnlyOurTools(AgentMiddleware):
-    """Hide the built-in filesystem/shell suite from the model."""
+    """Hide the built-in filesystem/shell suite from the model, and refuse it.
+
+    Two hooks, because hiding alone was one layer short of the intent above.
+    wrap_model_call edits what the model is OFFERED; the graph's ToolNode is
+    built from the full list and still had all nine registered:
+
+        ask_agent, ask_agents, record_trip_state,
+        delete, edit_file, execute, glob, grep, ls, read_file, task, write_file
+
+    So a call the model was never shown -- hallucinated, replayed from history,
+    or carried in on injected text -- would still have executed. No observed
+    case, and a model cannot ordinarily pick what it is not offered. This is
+    defence in depth on a path that should not exist, which is the right
+    posture for `execute` and `delete` sitting next to agents that write to a
+    shared corpus.
+
+    Costs nothing on the happy path: none of our three tool names is in
+    _BUILTINS, so _refuse returns None and the handler runs untouched.
+    """
 
     def wrap_model_call(self, request, handler):
         return handler(request.override(tools=self._keep(request.tools)))
@@ -84,9 +103,32 @@ class _OnlyOurTools(AgentMiddleware):
     async def awrap_model_call(self, request, handler):
         return await handler(request.override(tools=self._keep(request.tools)))
 
+    def wrap_tool_call(self, request, handler):
+        return self._refuse(request) or handler(request)
+
+    async def awrap_tool_call(self, request, handler):
+        return self._refuse(request) or await handler(request)
+
     @staticmethod
     def _keep(tools):
         return [t for t in tools if getattr(t, "name", None) not in _BUILTINS]
+
+    @staticmethod
+    def _refuse(request):
+        """A ToolMessage instead of an execution, or None to let it through."""
+        call = getattr(request, "tool_call", None) or {}
+        name = call.get("name")
+        if name not in _BUILTINS:
+            return None
+        return ToolMessage(
+            content=(
+                f"{name} is not available to the orchestrator. You have exactly "
+                f"three tools: ask_agent, ask_agents, record_trip_state."
+            ),
+            tool_call_id=call.get("id", ""),
+            name=name,
+            status="error",
+        )
 
 
 SYSTEM_PROMPT = f"""You are the orchestrator for a travel-planning system. You do
