@@ -1,5 +1,8 @@
 import truststore; truststore.inject_into_ssl()
 import asyncio, os, sys, time
+# Windows console is cp1252; run 7 finished all six slots and then died printing
+# the report, because Budget's reply contained a U+2705. Lost the whole run.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from dotenv import load_dotenv
