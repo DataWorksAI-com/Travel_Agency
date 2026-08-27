@@ -1,32 +1,32 @@
 [
   {
-    "name": "T\u014dkaid\u014d",
-    "category": "other",
-    "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Tokyo; pricing not provided."
+    "name": "Senso-ji Temple",
+    "category": "religion",
+    "price_tier": "free",
+    "description": "Tokyo's oldest Buddhist temple, in Asakusa, approached through the iconic Kaminarimon Gate and a lively shopping street lined with traditional snacks and souvenirs."
   },
   {
-    "name": "Tokyo City Hall Tower II",
-    "category": "skyscrapers",
-    "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Tokyo; pricing not provided."
+    "name": "Meiji Jingu Shrine",
+    "category": "religion",
+    "price_tier": "free",
+    "description": "A tranquil Shinto shrine set within a forested park near Harajuku, dedicated to Emperor Meiji and Empress Shoken \u2014 a peaceful contrast to the surrounding city."
   },
   {
-    "name": "Shinjuku Central Park",
-    "category": "urban_environment",
-    "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Tokyo; pricing not provided."
+    "name": "Shibuya Crossing",
+    "category": "sightseeing",
+    "price_tier": "free",
+    "description": "The world's busiest pedestrian scramble crossing, best experienced at street level or viewed from above at the Starbucks or Shibuya Sky observation deck."
   },
   {
-    "name": "Shinjuku Niagara Falls",
-    "category": "fountains",
-    "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Tokyo; pricing not provided."
+    "name": "Tokyo Tower",
+    "category": "sightseeing",
+    "price_tier": "moderate",
+    "description": "A red-and-white communications tower inspired by the Eiffel Tower, with observation decks offering panoramic views across the city."
   },
   {
-    "name": "keio plaza hotel tokyo",
-    "category": "skyscrapers",
-    "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Tokyo; pricing not provided."
+    "name": "Shinjuku Gyoen National Garden",
+    "category": "outdoor",
+    "price_tier": "moderate",
+    "description": "A large landscaped park blending Japanese, French, and English garden styles \u2014 especially popular during cherry blossom season in spring."
   }
 ]

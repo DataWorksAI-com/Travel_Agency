@@ -1,11 +1,5 @@
 [
   {
-    "name": "Iolani Palace",
-    "category": "palaces",
-    "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Honolulu; pricing not provided."
-  },
-  {
     "name": "\u02bbIolani Palace",
     "category": "palaces",
     "price_tier": "unknown",
