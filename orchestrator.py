@@ -195,13 +195,17 @@ async def ask_slot(slot: str, task: str) -> str:
 
 
 async def _call_money_customs_context(origin_country: str, destination_country: str) -> str:
-    """Call Money & Customs once, return a short context blurb to prepend
-    to other subagents' task strings.
+    """Call Money & Customs once and return its reply for the itinerary.
 
-    TODO (ORCHESTRATOR_DESIGN.md, decision #3): confirm this is really the
-    right place for this call. Alternative: only call it for the subagents
-    that actually need it (e.g. Restaurants for tipping, not Activities),
-    rather than one blurb prepended everywhere.
+    RESOLVED (ORCHESTRATOR_DESIGN.md, decision #3). This used to describe a
+    blurb prepended to the other subagents' task strings, and that is no longer
+    what happens: the reply goes to _assemble_itinerary as its own section and
+    reaches no other agent. See the note in _run_parallel_subagents for why.
+
+    The docstring is corrected here rather than left as-was because it
+    described the relay this file was specifically changed to stop doing --
+    anyone reading only this function would conclude the old behaviour is
+    still live.
     """
     client = get_client("money_customs")
     task = (
