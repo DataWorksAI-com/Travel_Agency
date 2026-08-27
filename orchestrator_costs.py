@@ -106,6 +106,51 @@ _PER_PATTERNS = (
 )
 
 
+# Some sentences contain a currency amount that is NOT a price this system
+# produced, and extracting them is worse than missing a real one: they arrive
+# in Budget's task indistinguishable from a verified figure.
+#
+# Found live on 27 Aug 2026. Activities wrote, in passing:
+#
+#   "With $3,000 total budget for 2 travelers over 5 nights, you have
+#    approximately $300/night for accommodation plus activities."
+#
+# and both numbers were handed to Budget as category "activities", per "night".
+# The first was the TRAVELLER'S OWN BUDGET turned into a cost; the second was a
+# lodging figure from an agent that does not price lodging. Budget rejected them
+# ("malformed data artifacts") -- the honesty rules caught what this extractor
+# let through, which is the right layer failing but the wrong one to rely on.
+#
+#   budget   -- a sentence reasoning ABOUT the budget is describing the
+#               constraint, not pricing a good.
+#   lodging  -- rule 3 of Budget's brief says no agent here prices lodging, so
+#               a lodging amount from any slot came from the model.
+_NOT_A_PRICE = (
+    re.compile(r"\bbudgets?\b", re.I),
+    re.compile(
+        r"\b(lodging|accommodations?|hotels?|hostels?|resorts?|airbnbs?"
+        r"|guesthouses?|room\s+rates?)\b",
+        re.I,
+    ),
+)
+
+
+def _is_not_a_price(line: str) -> bool:
+    return any(pattern.search(line) for pattern in _NOT_A_PRICE)
+
+
+def _amount_in(text: str) -> float | None:
+    """The first currency amount in `text`, or None."""
+    match = _AMOUNT.search(text or "")
+    if not match:
+        return None
+    raw = match.group(1) or match.group(2)
+    try:
+        return float(raw.replace(",", ""))
+    except (ValueError, AttributeError):
+        return None
+
+
 def held_no_data(reply: str) -> bool:
     """True if the agent ran but reported it holds nothing for this request."""
     lowered = (reply or "").lower()
@@ -155,6 +200,8 @@ def extract_line_items(slot: str, reply: str) -> list[dict]:
 
     items, seen = [], set()
     for line in reply.splitlines():
+        if _is_not_a_price(line):
+            continue
         for match in _AMOUNT.finditer(line):
             raw = match.group(1) or match.group(2)
             currency = (
@@ -218,6 +265,17 @@ def build_budget_brief(
 ) -> str:
     """Budget's task: decided inputs, not other agents' transcripts."""
     items = [i for slot in PRICED_SLOTS for i in extract_line_items(slot, replies.get(slot, ""))]
+
+    # Second, independent guard on the same failure. _NOT_A_PRICE drops the
+    # sentence; this drops the VALUE, wherever it appears and however it was
+    # phrased. The traveller's own budget is the one number in the whole run
+    # that provably came from the traveller and not from an agent, and this is
+    # the only function that knows it -- so costing it is always wrong, and it
+    # is cheap to make certain of that here rather than trust one regex.
+    budget_amount = _amount_in(stated_budget)
+    if budget_amount is not None:
+        items = [i for i in items if i["cost"] != budget_amount]
+
     missing = absences(replies, is_failure)
 
     # `quote` is dropped HERE, and this is the whole point rather than a detail.
