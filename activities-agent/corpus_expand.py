@@ -20,6 +20,7 @@ guesswork.
 
 import os
 import json
+import unicodedata
 import requests
 
 DOCS_DIR = os.path.join(os.path.dirname(__file__), "local_activity_docs")
@@ -110,12 +111,49 @@ def fetch_live_activities(city: str, category: str = "", limit: int = 5, country
     return activities
 
 
+def city_slug(city: str) -> str:
+    """The corpus filename stem for a city, accents folded.
+
+    ONE implementation, two callers: this module writes the file and
+    activities_agent._city_file reads it and runs the overwrite guard. They
+    used to slug independently -- both did .strip().lower().replace(" ", "_")
+    -- and neither folded accents, so "Cancun" and "Cancún" were two different
+    cities. The reader missed cancún.json, tier 3 re-fetched from OpenTripMap,
+    the existence guard in expand_activities_corpus checked the same unfolded
+    path and passed, and a duplicate was written that build_vector_db then
+    indexed as a twelfth city.
+
+    The real cost is not the duplicate file. A curated corpus for any accented
+    city is invisible to an unaccented lookup, so tier 1 falls through and the
+    agent serves unreviewed OpenTripMap results instead of the entries someone
+    checked -- the same quality problem the tokyo.json cleanup just fixed.
+
+    Same fold as ui/request_parse._to_country, which exists for this bug in the
+    orchestrator's own place parsing.
+    """
+    folded = "".join(
+        c for c in unicodedata.normalize("NFKD", city.strip().lower())
+        if not unicodedata.combining(c)
+    )
+    return folded.replace(" ", "_")
+
+
 def save_activities_for_city(city: str, activities: list) -> str:
     """Write (or overwrite) local_activity_docs/<city>.json in the
     same schema every other city file uses. Returns the file path."""
     os.makedirs(DOCS_DIR, exist_ok=True)
-    slug = city.strip().lower().replace(" ", "_")
-    path = os.path.join(DOCS_DIR, f"{slug}.json")
+    path = os.path.join(DOCS_DIR, f"{city_slug(city)}.json")
     with open(path, "w") as f:
         json.dump(activities, f, indent=2)
     return path
+
+
+if __name__ == "__main__":
+    # Self-check for city_slug. The bug it fixes was silent: a corpus file was
+    # still found by one spelling, so nothing raised -- the agent just answered
+    # from unreviewed live data instead of the curated file.
+    assert city_slug("Cancun") == city_slug("Cancún") == "cancun"
+    assert city_slug("  CANCÚN  ") == "cancun"
+    assert city_slug("New York") == "new_york"
+    assert city_slug("São Paulo") == "sao_paulo"
+    print("city_slug self-check OK")

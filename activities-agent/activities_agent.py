@@ -100,7 +100,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from offline_embedding import OfflineFakeEmbeddingFunction
 import build_vector_db
-from corpus_expand import fetch_live_activities, save_activities_for_city
+from corpus_expand import city_slug, fetch_live_activities, save_activities_for_city
 
 load_dotenv()
 
@@ -183,7 +183,9 @@ def _coverage_split() -> tuple[list[str], list[str]]:
 
 
 def _city_file(city: str) -> str:
-    return os.path.join(DOCS_DIR, f"{city.strip().lower().replace(' ', '_')}.json")
+    # city_slug, not a local copy: this path is also what the overwrite guard in
+    # expand_activities_corpus checks, so reader and writer must agree exactly.
+    return os.path.join(DOCS_DIR, f"{city_slug(city)}.json")
 
 
 # ---------------------------------------------------------------------
