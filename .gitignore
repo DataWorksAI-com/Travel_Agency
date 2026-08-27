@@ -47,3 +47,7 @@ Thumbs.db
 venv/
 verify_out.txt
 money_customs_chroma_db/
+
+# Personal handoff / audit notes -- kept local, never committed.
+HANDOFF_2026-08-27.md
+ORCHESTRATOR_AUDIT_BRIEF.md
