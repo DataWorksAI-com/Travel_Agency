@@ -111,14 +111,16 @@ HOW TO WORK
 2. Then call record_trip_state with what you now know. Everything you record is
    automatically prepended to every later ask_agent call, so the other agents
    can see the resolved city. Do this before calling anyone else.
-3. Call money_customs whenever you know the destination country. A traveller
-   needs the exchange rate and tipping norms; do not skip it.
-4. Then call the agents that can help. flights, restaurants and activities do not
-   depend on each other, so calling them together is fine.
-5. Call budget LAST, on its own, only after flights, restaurants and activities
+3. Then ask flights, restaurants, activities and money_customs with a SINGLE
+   ask_agents call, passing all four slots and their tasks together. None of
+   them depends on another's answer, and ask_agents runs them at the same time,
+   which is most of the difference between a fast run and a slow one. A
+   traveller needs the exchange rate and tipping norms, so do not skip
+   money_customs.
+4. Call budget LAST, on its own, only after flights, restaurants and activities
    have actually returned. It prices what they found. Do not include it in the
    same batch of tool calls as them -- it will have nothing to work from.
-6. Assemble a final itinerary with one "=== Name ===" section per agent you
+5. Assemble a final itinerary with one "=== Name ===" section per agent you
    called, in the order listed above.
 
 RULES
@@ -274,6 +276,38 @@ def _new_run(base_facts=None, stated_budget=""):
         ledger.setdefault(slot, []).append(reply)
         return reply
 
+    async def ask_agents(slots: list[str], tasks: list[str]) -> str:
+        """Ask several INDEPENDENT agents at the same time, and return all replies.
+
+        Args:
+            slots: the agents to ask, e.g. ["flights", "restaurants", "activities",
+                "money_customs"].
+            tasks: one self-contained instruction per slot, in the same order.
+
+        Use this for flights, restaurants, activities and money_customs, which do
+        not depend on each other's answers. It is much faster than asking them one
+        at a time. Do NOT put budget in here -- it prices what the others found and
+        must be asked on its own, afterwards.
+        """
+        # Parallelism is enforced HERE rather than asked for in the prompt.
+        # Measured on three live runs: told to issue the four independent calls as
+        # one batch, the model mostly emitted them one at a time -- run 3 finished
+        # with slot wall-clock 100.7s against a 115.3s total, i.e. no overlap at
+        # all. Whether a run is parallel was therefore a property of the model's
+        # mood, which is exactly the kind of thing this module already refuses to
+        # leave to a model (see resolve_travel_month and record_trip_state).
+        #
+        # Every guard still applies: this only fans out over ask_agent, so the
+        # ledger, the failure memo, the trip-state facts, the budget ordering
+        # refusal, the concurrency gate and the credential scrub are unchanged.
+        # TRAVEL_UI_MAX_CONCURRENCY still caps how many actually run at once.
+        if len(slots) != len(tasks):
+            return (f"Mismatched call: {len(slots)} slots but {len(tasks)} tasks. Pass one task per slot, in the same order.")
+        if not slots:
+            return "No slots given."
+        replies = await asyncio.gather(*(ask_agent(s, t) for s, t in zip(slots, tasks)))
+        return "\n\n".join(f"=== {s} ===\n{r}" for s, r in zip(slots, replies))
+
     def record_trip_state(
         destination_city: str = "",
         destination_country: str = "",
@@ -303,7 +337,7 @@ def _new_run(base_facts=None, stated_budget=""):
         }.items() if v})
         return f"Recorded: {state}"
 
-    return state, ledger, [ask_agent, record_trip_state]
+    return state, ledger, [ask_agent, ask_agents, record_trip_state]
 
 
 def _is_failure(reply: str) -> bool:
@@ -420,7 +454,17 @@ async def plan_trip_agentic(
 ) -> str:
     """Same signature and return type as orchestrator.plan_trip."""
     travel_month = resolve_travel_month(task)
-    base_facts = {"travel month": travel_month} if travel_month else {}
+    # Everything the UI already resolved deterministically travels as a FACT,
+    # prepended to every task by ask_agent -- same principle as travel month and
+    # today's date. Previously these appeared only in the model's own prompt, so
+    # they reached the agents only if the model remembered to call
+    # record_trip_state; anything it records still overrides these.
+    base_facts = {k: v for k, v in {
+        "travel month": travel_month,
+        "origin country": origin_country,
+        "destination country": destination_country,
+        "total budget": stated_budget,
+    }.items() if v}
     state, ledger, tools = _new_run(base_facts, stated_budget)
     agent = create_deep_agent(
         model=init_chat_model(MODEL.strip(), max_tokens=MAX_TOKENS),

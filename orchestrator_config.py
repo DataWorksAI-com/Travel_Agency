@@ -133,8 +133,20 @@ def _build_budget_client() -> LocalFunctionClient:
     # budget_agent/tools/rag_tools.py:33-37).
     from budget_agent.agent import build_agent
 
+    # Built once per CLIENT, not once per request. build_agent() constructs the
+    # Chroma store and loads the sentence-transformers weights every time; a live
+    # run on 27 Aug showed those weight loads immediately before a 65.7s Budget
+    # call, the slowest slot in the run by a wide margin.
+    #
+    # Safe to cache because the provider fallback rebuilds the whole CLIENT --
+    # _FallbackClient calls _BUILDERS[slot](), which re-enters this function and
+    # gets a fresh closure. So a repointed model can never be served from here.
+    agent = None
+
     def _answer(task: str) -> str:
-        agent = build_agent()
+        nonlocal agent
+        if agent is None:
+            agent = build_agent()
         result = agent.invoke({"messages": [{"role": "user", "content": task}]})
         # content_text, not .content: on a model with thinking enabled the last
         # message's content is a LIST of blocks. Returning it raw handed the
