@@ -38,6 +38,7 @@ from deepagents import create_deep_agent
 
 from orchestrator import SLOTS, ask_slot
 from orchestrator_costs import NO_DATA_PHRASES, build_budget_brief, held_no_data
+from subagent_client import content_text
 from ui.agent_seam import LABELS, _looks_like_error
 
 MODEL = os.getenv("ORCHESTRATOR_MODEL", "openrouter:openai/gpt-4o-mini")
@@ -345,53 +346,9 @@ def _floor(final: str, ledger: dict[str, list[str]]) -> str:
     return final + _unsourced_figures_note(final, ledger)
 
 
-def _content_text(content) -> str:
-    """Flatten a final message's content down to the text a traveller reads.
-
-    This function exists because `str(content)` is wrong and looks right.
-
-    A model with thinking enabled does not return a string. It returns a LIST of
-    content blocks:
-
-        [{"type": "thinking", "thinking": "", "signature": "CAISigIKjgEIERgC..."},
-         {"type": "text", "text": "# Cancun -- 5 nights..."}]
-
-    Seen live on 27 Aug 2026, the moment the orchestrator moved to a model whose
-    thinking is on by default. str() on that dumps the Python repr -- quoted
-    dict keys and a multi-hundred-character base64 signature -- as the first
-    thing in the itinerary, and the deterministic floor was then appended to
-    that, so the failure looked like a formatting quirk rather than a bug.
-
-    Thinking blocks are dropped rather than rendered: their text is empty under
-    the default display setting, and the reasoning is not the answer. Only
-    `type == "text"` blocks are kept, in order.
-
-    Falls back to str() for anything unrecognised, because returning a broken
-    string is still better than raising out of the one function that is supposed
-    to return the itinerary no matter what.
-    """
-    if isinstance(content, str):
-        return content
-
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, str):
-                parts.append(block)
-                continue
-            if isinstance(block, dict):
-                if block.get("type") == "text":
-                    text = block.get("text") or ""
-                else:
-                    text = ""
-            else:
-                text = getattr(block, "text", "") if getattr(block, "type", "") == "text" else ""
-            if text:
-                parts.append(text)
-        if parts:
-            return "\n".join(parts)
-
-    return str(content)
+# One definition, three callers -- see subagent_client.content_text for the
+# three different ways this same assumption failed on 27 Aug 2026.
+_content_text = content_text
 
 
 async def plan_trip_agentic(

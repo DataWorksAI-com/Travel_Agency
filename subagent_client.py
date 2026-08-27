@@ -40,6 +40,57 @@ from typing import Callable
 DEFAULT_MAX_TOKENS = int(os.getenv("TRAVEL_UI_MAX_TOKENS", "2048"))
 
 
+def content_text(content) -> str:
+    """Flatten a final message's content down to readable text.
+
+    Lives here, at the lowest layer, because THREE separate places pulled the
+    last message off an agent and assumed `.content` was a string. It is not,
+    once the model has thinking enabled -- it is a list of content blocks:
+
+        [{"type": "thinking", "thinking": "", "signature": "CAISigIKjgEIERgC..."},
+         {"type": "text",     "text": "# Cancun -- 5 nights..."}]
+
+    Each site failed differently on 27 Aug 2026, which is why this took two
+    passes to find:
+
+      orchestrator_agent  did str(content) -> a base64 signature was printed at
+                          the top of the traveller's itinerary.
+      orchestrator_config returned content unchanged -> the seam received a
+                          list where it expected a string and reported the
+                          Budget slot as "the agent returned an empty reply",
+                          which read as the AGENT being broken. It was not.
+      subagent_client     did str(content) -> same repr leak as the first, for
+                          any dict-spec slot.
+
+    One helper, three callers, so the next model change breaks none of them.
+
+    Only `type == "text"` blocks are kept, in order. Thinking blocks are
+    dropped: their text is empty under the default display setting, and the
+    reasoning is not the answer. Anything unrecognised falls back to str()
+    rather than raising -- these are the functions that must return a reply
+    no matter what came back.
+    """
+    if isinstance(content, str):
+        return content
+
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+                continue
+            if isinstance(block, dict):
+                text = block.get("text") or "" if block.get("type") == "text" else ""
+            else:
+                text = getattr(block, "text", "") if getattr(block, "type", "") == "text" else ""
+            if text:
+                parts.append(text)
+        if parts:
+            return "\n".join(parts)
+
+    return str(content)
+
+
 class SubagentClient(ABC):
     """Anything the orchestrator can send one task string to and get one
     self-contained message back from, regardless of transport."""
@@ -131,8 +182,7 @@ class LocalFunctionClient(SubagentClient):
         def _answer(task: str) -> str:
             result = agent.invoke({"messages": [{"role": "user", "content": task}]})
             message = result["messages"][-1]
-            content = getattr(message, "content", message)
-            return content if isinstance(content, str) else str(content)
+            return content_text(getattr(message, "content", message))
 
         return cls(_answer)
 

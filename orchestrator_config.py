@@ -14,7 +14,7 @@ import os
 import sys
 from pathlib import Path
 
-from subagent_client import DEFAULT_MAX_TOKENS, LocalFunctionClient
+from subagent_client import DEFAULT_MAX_TOKENS, LocalFunctionClient, content_text
 
 REPO_ROOT = Path(__file__).resolve().parent
 
@@ -136,7 +136,11 @@ def _build_budget_client() -> LocalFunctionClient:
     def _answer(task: str) -> str:
         agent = build_agent()
         result = agent.invoke({"messages": [{"role": "user", "content": task}]})
-        return result["messages"][-1].content
+        # content_text, not .content: on a model with thinking enabled the last
+        # message's content is a LIST of blocks. Returning it raw handed the
+        # seam a non-string, which surfaced as "the Budget agent returned an
+        # empty reply" -- reported against Shashank's agent, caused here.
+        return content_text(result["messages"][-1].content)
 
     return LocalFunctionClient(_answer)
 

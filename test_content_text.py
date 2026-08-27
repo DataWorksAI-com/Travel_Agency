@@ -7,7 +7,7 @@ thinking on by default, and str() on the returned block list put a base64
 import sys
 
 sys.path.insert(0, ".")
-from orchestrator_agent import _content_text
+from subagent_client import content_text as _content_text
 
 passed = failed = 0
 
@@ -67,6 +67,30 @@ check(
 check("thinking-only list falls back rather than vanishing",
       _content_text([{"type": "thinking", "thinking": "", "signature": "x"}]) != "", True)
 check("None does not raise", isinstance(_content_text(None), str), True)
+
+
+# ---------------------------------------------------------------------------
+# All call sites must share ONE implementation.
+#
+# This bug was found twice, hours apart, because three places independently
+# assumed `.content` was a string. Fixing one left the other two live, and the
+# second failure was reported against a teammate's agent rather than this code.
+# These checks fail if a fourth site appears, or if one drifts back to a local
+# copy.
+# ---------------------------------------------------------------------------
+import orchestrator_agent
+import orchestrator_config
+import subagent_client
+import inspect
+
+check("orchestrator_agent uses the shared helper",
+      orchestrator_agent._content_text is _content_text, True)
+
+for mod in (orchestrator_config, subagent_client):
+    src = inspect.getsource(mod)
+    check("%s calls content_text" % mod.__name__, "content_text(" in src, True)
+    check("%s has no raw str(content) fallback" % mod.__name__,
+          "else str(content)" in src, False)
 
 print()
 print("%d/%d passing" % (passed, passed + failed))
