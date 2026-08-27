@@ -64,12 +64,54 @@ check("_floor: unsourced block comes last",
       full.index("=== Unsourced figures ===") > full.index("=== Agent status ==="))
 
 # 3 -- FALSE POSITIVE GUARD: every slot answered, figures are sourced
+#
+# These two checks used to assert "no note at all" on a healthy run. That was
+# right about slot naming and wrong about lodging, and run 6 of 27 Aug 2026
+# proved it: all six slots green, so the note was suppressed, so the
+# orchestrator's own "$376 per night available for accommodation ... comfortably
+# covers mid-range to nice hotels" shipped with no caveat. No agent prices
+# lodging on ANY run, healthy or not. The false-positive worry this case was
+# written for is naming a slot that answered -- still guarded below.
 all_ok = {
     "destination": [OK_DEST], "money_customs": [OK_MONEY], "flights": [OK_FLIGHTS],
     "restaurants": [OK_REST], "activities": [OK_ACTS], "budget": [OK_BUDGET],
 }
-check("all slots answered: no note", _unsourced_figures_note(OK_BUDGET, all_ok) == "")
-check("all slots answered: _floor adds nothing", _floor(OK_BUDGET, all_ok) == OK_BUDGET)
+healthy = _unsourced_figures_note(OK_BUDGET, all_ok)
+check("all slots answered: no slot is named as unsourced",
+      not any(l.startswith("- ") for l in healthy.splitlines()))
+check("all slots answered: no 'treat those numbers' slot paragraph",
+      "categories listed" not in healthy)
+check("all slots answered: the lodging caveat still fires", "lodging" in healthy.lower())
+check("all slots answered: _floor adds no Agent status",
+      "=== Agent status ===" not in _floor(OK_BUDGET, all_ok))
+
+# 3b -- the run 6 sentence itself, verbatim, on a fully green ledger
+RUN6 = (
+    "After flights and food you have approximately $376 per night available for "
+    "accommodation for both travelers ($188 per person/night), which comfortably "
+    "covers mid-range to nice hotels in Cancun's hotel zone."
+)
+check("run 6: a green run still caveats the invented per-night figure",
+      "lodging" in _floor(RUN6, all_ok).lower())
+check("run 6: the caveat also disowns the 'comfortably covers' claim",
+      "will or will not cover" in _floor(RUN6, all_ok))
+
+# 3c -- run 8 of 27 Aug 2026: the phrase list missed, absences() must not.
+# Activities answered in gpt-4o-mini's own words, which match no NO_DATA_PHRASE.
+# The seam only ever sees the model's paraphrase of the tool's error string, so
+# phrase matching alone cannot hold here; extract_line_items finding nothing is
+# what does. Every other slot is healthy, so this is the ONLY name in the block.
+RUN8_ACTS = (
+    "I encountered an issue while trying to retrieve activities for Cancun, which "
+    "currently lacks the necessary details in the local data. I recommend "
+    "considering some general activities typically found in Cancun:\n\n"
+    "1. **Visit the Cancun Underwater Museum**\n   - **Price Tier:** Unknown\n"
+)
+check("run 8: the phrase list alone does NOT catch it", not _held_no_data(RUN8_ACTS))
+run8 = _unsourced_figures_note("Total $1,858", {**all_ok, "activities": [RUN8_ACTS]})
+check("run 8: Activities is named anyway", "Activities" in run8)
+check("run 8: and no healthy slot is dragged in with it",
+      len([l for l in run8.splitlines() if l.startswith("- ")]) == 1)
 
 # 4 -- FALSE POSITIVE GUARD: a slot held no data, but the itinerary quotes no money
 prose = "=== Flights === No flight prices found for the requested route."

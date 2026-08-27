@@ -38,7 +38,7 @@ from langchain.agents.middleware.types import AgentMiddleware
 from deepagents import create_deep_agent
 
 from orchestrator import SLOTS, ask_slot
-from orchestrator_costs import NO_DATA_PHRASES, build_budget_brief, held_no_data
+from orchestrator_costs import NO_DATA_PHRASES, absences, build_budget_brief, held_no_data
 from subagent_client import content_text
 from ui.agent_seam import LABELS, _looks_like_error
 
@@ -382,36 +382,59 @@ def _unsourced_figures_note(final: str, ledger: dict[str, list[str]]) -> str:
     returned no figures, so any figure here attributed to them is unsourced.
     Appended after the model has finished, for the same reason the rest of the
     floor is -- so it cannot be paraphrased away.
+
+    THE SECOND BUG, observed on run 6 of 27 Aug 2026 with ALL SIX SLOTS GREEN:
+    the lodging sentence used to live inside the slot list, so it only fired
+    when some slot had failed. On a fully successful run the list is empty, the
+    whole note was suppressed, and the orchestrator wrote, unqualified:
+
+      "you have approximately $376 per night available for accommodation for
+       both travelers ($188 per person/night), which comfortably covers
+       mid-range to nice hotels in Cancun's hotel zone"
+
+    No agent prices lodging -- that is true on every run, not only on a broken
+    one -- and the second half is a market-quality claim on top of the invented
+    figure. So the two halves are now gated differently. Naming a slot as
+    unsourced when it answered WOULD be a false positive, and stays gated. The
+    lodging sentence is unconditionally true whenever money is on the page, so
+    it is no longer conditional on someone else having failed.
     """
     if not _CURRENCY.search(final):
         return ""
 
-    unsourced = []
-    for slot in SLOTS:
-        if slot == "budget":
-            # Budget is the slot doing the costing. Naming it here would say
-            # "budget supplied no figures" in the one case where it did.
-            continue
-        replies = ledger.get(slot)
-        if not replies:
-            unsourced.append((LABELS[slot], "was not called"))
-        elif _is_failure(replies[-1]):
-            unsourced.append((LABELS[slot], "did not run"))
-        elif _held_no_data(replies[-1]):
-            unsourced.append((LABELS[slot], "reported it holds no data for this request"))
+    # absences(), not a loop of our own. This used to hand-roll the same three
+    # branches -- not called / failed / held_no_data -- and orchestrator_costs
+    # has had a fourth one all along:
+    #
+    #     elif not extract_line_items(slot, reply): "answered but published no prices"
+    #
+    # That branch is derived by code from the reply, so it holds when the phrase
+    # list misses. Run 8 of 27 Aug 2026 is the case: Activities answered
+    # "Cancun ... lacks the necessary details in the local data" and improvised.
+    # No phrase in NO_DATA_PHRASES matches that -- the two that WOULD match are
+    # literal strings the agent's TOOLS return, and the seam only ever sees
+    # gpt-4o-mini's paraphrase of them, which is reworded every run. The local
+    # copy scored it healthy and named nobody; absences() names it.
+    #
+    # Budget drops out for free: it is not in PRICED_SLOTS, so the explicit skip
+    # this loop needed is gone. So do destination and money_customs, which is
+    # correct here -- neither produces a trip cost by design (orchestrator_costs
+    # :50, an exchange rate is a ratio), and if either breaks, the Agent status
+    # block above names it.
+    gaps = absences({s: r[-1] for s, r in ledger.items()}, _is_failure)
 
-    if not unsourced:
-        return ""
-
-    lines = [f"- {label}: {why}." for label, why in unsourced]
-    return (
-        "\n\n=== Unsourced figures ===\n"
-        + "\n".join(lines)
-        + "\n\nAny cost above for the categories listed came from no agent in this "
-        "system. Treat those numbers as unverified, and do not read the total as "
-        "priced.\n"
-        "Note also that no agent in this system prices lodging, so any "
-        "accommodation figure is likewise unsourced."
+    note = "\n\n=== Unsourced figures ===\n"
+    if gaps:
+        note += "\n".join(f"- {LABELS[g['source']]}: {g['reason']}." for g in gaps)
+        note += (
+            "\n\nAny cost above for the categories listed came from no agent in this "
+            "system. Treat those numbers as unverified, and do not read the total as "
+            "priced.\n"
+        )
+    return note + (
+        "No agent in this system prices lodging. Any accommodation or per-night "
+        "figure above came from no agent, and so does any statement about what "
+        "such a figure will or will not cover."
     )
 
 
