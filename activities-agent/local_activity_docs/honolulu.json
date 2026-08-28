@@ -1,26 +1,32 @@
 [
   {
     "name": "\u02bbIolani Palace",
-    "category": "palaces",
+    "category": "cultural",
     "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Honolulu; pricing not provided."
+    "description": "The \u02bbIolani Palace (Hawaiian: Hale Ali\u02bbi \u02bbIolani) was the royal residence of the rulers of the Kingdom of Hawaii beginning with Kamehameha III under the Kamehameha Dynasty (1845) and ending with Queen Lili\u02bbuokalani (1893) under the Kal\u0101kaua Dynasty, founded by..."
   },
   {
-    "name": "Hawaii Capital Historic District",
-    "category": "historic",
+    "name": "Punchbowl Crater",
+    "category": "outdoor",
     "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Honolulu; pricing not provided."
+    "description": "Punchbowl Crater is an extinct volcanic tuff cone located in Honolulu, Hawaii."
   },
   {
-    "name": "Father Damien Statue",
-    "category": "historic",
+    "name": "Foster Botanical Garden",
+    "category": "outdoor",
     "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Honolulu; pricing not provided."
+    "description": "Foster Botanical Garden, measuring 13.5 acres (5.5 ha), is one of five public botanical gardens on Oahu."
   },
   {
-    "name": "Hawaii State Library",
-    "category": "other",
+    "name": "Honolulu Museum of Art",
+    "category": "art",
     "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Honolulu; pricing not provided."
+    "description": "The Honolulu Museum of Art (formerly the Honolulu Academy of Arts) is an art museum in Honolulu, Hawai\u02bbi. The museum is the largest of its kind in the state, and was founded in 1922 by Anna Rice Cooke."
+  },
+  {
+    "name": "Aloha Tower",
+    "category": "sightseeing",
+    "price_tier": "unknown",
+    "description": "The Aloha Tower is a retired lighthouse that is considered one of the landmarks of the state of Hawaii in the United States. Opened on September 11, 1926, at a then astronomical cost of $160,000, the Aloha Tower is located at Pier 9 of Honolulu Harbor."
   }
 ]

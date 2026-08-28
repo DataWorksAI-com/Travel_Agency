@@ -1,32 +1,32 @@
 [
   {
-    "name": "El Meco",
-    "category": "historic",
-    "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Cancun; pricing not provided."
-  },
-  {
-    "name": "Costa Occidental de Isla Mujeres, Punta Canc\u00fan y Punta Nizuc National Park",
-    "category": "gardens_and_parks",
-    "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Cancun; pricing not provided."
-  },
-  {
-    "name": "Cancun Underwater Museum",
+    "name": "MUSA Cancun Underwater Museum of Art",
     "category": "cultural",
     "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Cancun; pricing not provided."
+    "description": "The Canc\u00fan Underwater Museum (Spanish: Museo Subacu\u00e1tico de Arte, known as MUSA) is a non-profit organization based in Canc\u00fan, Mexico devoted to the art of conservation."
   },
   {
-    "name": "MUSA Cancun Underwater Museum of Art",
-    "category": "dive_spots",
+    "name": "El Rey Archaeological Site",
+    "category": "sightseeing",
     "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Cancun; pricing not provided."
+    "description": "El Rey is an archaeological site of the pre-Columbian Mayan culture, located in the southeast of Mexico, in the tourist resort of Cancun, in the state of Quintana Roo. The El Rey site is located on the Mexican coast of the Caribbean Sea, in the hotel zone of th..."
   },
   {
     "name": "Joyxee Island",
-    "category": "historic",
+    "category": "outdoor",
     "price_tier": "unknown",
-    "description": "Live OpenTripMap place near Cancun; pricing not provided."
+    "description": "Spiral Island is the name of a floating artificial island built in Mexico by British artist Richart \"Reishee\" Sowa."
+  },
+  {
+    "name": "El Meco Archaeological Site",
+    "category": "sightseeing",
+    "price_tier": "unknown",
+    "description": "A pre-Columbian Maya archaeological site in southeastern Mexico, in the state of Quintana Roo, about eight kilometres north of central Cancun on the Caribbean coast."
+  },
+  {
+    "name": "Costa Occidental de Isla Mujeres, Punta Canc\u00fan y Punta Nizuc National Park",
+    "category": "outdoor",
+    "price_tier": "unknown",
+    "description": "A national park forming part of the Great Maya Reef within the Mesoamerican Barrier Reef System, the second-largest reef barrier in the world."
   }
 ]
