@@ -1,0 +1,189 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1500 1300" width="1500" height="1300" font-family="Inter, Segoe UI, Arial, sans-serif">
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#444"/></marker>
+  <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#8a8a8a"/></marker>
+</defs>
+<style>
+  .lbl{font-size:12px;fill:#222}.sm{font-size:10.5px;fill:#555}.ti{font-size:13px;font-weight:600;fill:#111}
+  .hd{font-size:15px;font-weight:700;fill:#111}.num{font-size:13px;font-weight:700;fill:#111}
+  .edge{stroke:#444;stroke-width:2;fill:none;marker-end:url(#a)}
+  .dash{stroke:#8a8a8a;stroke-width:1.6;fill:none;stroke-dasharray:6 4;marker-end:url(#ad)}
+  .grp{fill:#e8f0f8;stroke:#9bb8d4;stroke-width:1.5;rx:8}
+  .orch{fill:#dcd4f2;stroke:#7a6bb5;stroke-width:2.5;rx:8}
+  .agent{fill:#fdf3c9;stroke:#d4b95e;stroke-width:1.8;rx:6}
+  .tool{fill:#d9ead3;stroke:#7fa86f;stroke-width:1.5;rx:5}
+  .user{fill:#e2e2e2;stroke:#999;stroke-width:1.5;rx:6}
+  .note{fill:#ffffff;stroke:#bbb;stroke-width:1;stroke-dasharray:4 3;rx:4}
+  .seam{fill:#f3e6f7;stroke:#a878b8;stroke-width:2;rx:6}
+  .dia{fill:#fff3d6;stroke:#d4a94e;stroke-width:1.8}
+</style>
+
+<rect x="20" y="8" width="1460" height="30" fill="#ffe9e9" stroke="#c88b8b" stroke-width="1.5" rx="4"/>
+<text x="34" y="28" font-size="13" font-weight="700" fill="#8b3a3a">DRAFT — NOT VERIFIED. Re-derive every claim from the live code before using this. Two structural errors were already found and fixed in it once; assume more remain.</text>
+
+<text x="26" y="62" class="hd">Orchestrator Agent — Routes, Delegates and Assembles</text>
+<text x="26" y="82" class="sm">orchestrator.py · orchestrator_agent.py · orchestrator_config.py · orchestrator_costs.py · subagent_client.py · ui/agent_seam.py · ui/request_parse.py</text>
+
+<rect x="600" y="76" width="180" height="40" class="user"/>
+<text x="690" y="94" class="ti" text-anchor="middle">User Chat</text>
+<text x="690" y="109" class="sm" text-anchor="middle">one request in, one itinerary out</text>
+<path class="edge" d="M690,116 L690,150"/><text x="700" y="137" class="sm">user request</text>
+
+<rect x="560" y="150" width="260" height="62" class="tool"/>
+<text x="690" y="169" class="ti" text-anchor="middle">ui/request_parse.parse_request()</text>
+<text x="690" y="184" class="sm" text-anchor="middle">deterministic — no model, no network</text>
+<text x="690" y="198" class="sm" text-anchor="middle">origin/destination country · budget · travel month</text>
+<path class="edge" d="M690,212 L690,244"/>
+
+<path d="M690,244 L800,278 L690,312 L580,278 Z" class="dia"/>
+<text x="690" y="274" class="lbl" text-anchor="middle">TRAVEL_UI_</text>
+<text x="690" y="288" class="lbl" text-anchor="middle">ORCHESTRATOR ?</text>
+<path class="dash" d="M580,278 L300,278 L300,336"/>
+<text x="378" y="271" class="sm">= deterministic (control path)</text>
+<rect x="150" y="336" width="300" height="58" class="grp"/>
+<text x="300" y="356" class="ti" text-anchor="middle">_plan_trip_fixed()</text>
+<text x="300" y="372" class="sm" text-anchor="middle">fixed pipeline, no model of its own —</text>
+<text x="300" y="386" class="sm" text-anchor="middle">reproducible, offline-testable, free</text>
+<path class="dash" d="M300,394 L300,584"/>
+<text x="150" y="500" class="sm">calls ask_slot directly —</text>
+<text x="150" y="514" class="sm">never enters the deep agent,</text>
+<text x="150" y="528" class="sm">so it cannot die on a model call</text>
+<path class="edge" d="M690,312 L690,344"/><text x="700" y="333" class="sm">= agent</text>
+
+<rect x="470" y="344" width="560" height="196" class="orch"/>
+<text x="750" y="368" class="hd" text-anchor="middle">orchestrator_agent — LangGraph deep agent</text>
+<text x="750" y="386" class="sm" text-anchor="middle">openrouter:anthropic/claude-sonnet-4.5 · max_tokens 8000 · whole-run retry 15/30/60s</text>
+<text x="750" y="402" class="sm" text-anchor="middle">plans the task list, delegates, assembles. Writes no trip content of its own.</text>
+
+<rect x="492" y="416" width="168" height="52" class="tool"/>
+<text x="576" y="435" class="lbl" text-anchor="middle" font-weight="600">ask_agent(slot, task)</text>
+<text x="576" y="449" class="sm" text-anchor="middle">one specialist, one task</text>
+<text x="576" y="461" class="sm" text-anchor="middle">prepends date + trip facts</text>
+
+<rect x="668" y="416" width="168" height="52" class="tool"/>
+<text x="752" y="435" class="lbl" text-anchor="middle" font-weight="600">ask_agents(slots, tasks)</text>
+<text x="752" y="449" class="sm" text-anchor="middle">asyncio.gather fan-out</text>
+<text x="752" y="461" class="sm" text-anchor="middle">parallelism enforced in code</text>
+
+<rect x="844" y="416" width="168" height="52" class="tool"/>
+<text x="928" y="435" class="lbl" text-anchor="middle" font-weight="600">record_trip_state(…)</text>
+<text x="928" y="449" class="sm" text-anchor="middle">commits resolved facts once</text>
+<text x="928" y="461" class="sm" text-anchor="middle">reused on every later task</text>
+
+<rect x="492" y="480" width="520" height="46" class="note"/>
+<text x="752" y="498" class="lbl" text-anchor="middle" font-weight="600">middleware _OnlyOurTools — these three are the entire tool surface</text>
+<text x="752" y="514" class="sm" text-anchor="middle">the 9 deepagents built-ins (execute · write_file · delete · edit_file · ls · glob · grep · read_file · task) are hidden from the model AND refused at execution</text>
+
+<path d="M1070,360 a34,11 0 0 1 68,0 v40 a34,11 0 0 1 -68,0 z" fill="#eef3ea" stroke="#7fa86f" stroke-width="1.5"/>
+<ellipse cx="1104" cy="360" rx="34" ry="11" fill="#f7fbf5" stroke="#7fa86f" stroke-width="1.5"/>
+<text x="1104" y="384" class="lbl" text-anchor="middle">ledger</text><text x="1104" y="397" class="sm" text-anchor="middle">per run</text>
+<path d="M1070,432 a34,11 0 0 1 68,0 v40 a34,11 0 0 1 -68,0 z" fill="#eef3ea" stroke="#7fa86f" stroke-width="1.5"/>
+<ellipse cx="1104" cy="432" rx="34" ry="11" fill="#f7fbf5" stroke="#7fa86f" stroke-width="1.5"/>
+<text x="1104" y="456" class="lbl" text-anchor="middle">trip state</text><text x="1104" y="469" class="sm" text-anchor="middle">per run</text>
+<path class="dash" d="M1030,400 L1070,390"/><path class="dash" d="M1030,442 L1070,452"/>
+
+<rect x="1152" y="344" width="322" height="142" class="note"/>
+<text x="1160" y="363" class="lbl" font-weight="600">Why state travels by code</text>
+<text x="1160" y="381" class="sm">Facts recorded once are prepended to every later task string</text>
+<text x="1160" y="395" class="sm">by ask_agent. A prompt rule could be forgotten — and that</text>
+<text x="1160" y="409" class="sm">forgetting was the original bug.</text>
+<text x="1160" y="432" class="lbl" font-weight="600">Failure memo</text>
+<text x="1160" y="450" class="sm">A slot that fails once is remembered as failed, so the model</text>
+<text x="1160" y="464" class="sm">cannot spend its loop rediscovering it.</text>
+<text x="1160" y="478" class="sm">Both live per run — concurrent sessions cannot interfere.</text>
+
+<path class="edge" d="M750,540 L750,584"/>
+<rect x="150" y="584" width="1200" height="66" class="seam"/>
+<text x="750" y="606" class="hd" text-anchor="middle">ask_slot(slot, task) — the seam</text>
+<text x="750" y="624" class="sm" text-anchor="middle">concurrency gate: asyncio.Semaphore(TRAVEL_UI_MAX_CONCURRENCY = 4) · credential scrub: any env var named *_KEY / *_TOKEN / *_SECRET / *_PASSWORD</text>
+<text x="750" y="640" class="sm" text-anchor="middle">the one function every slot passes through, on BOTH orchestrator paths</text>
+
+<path class="edge" d="M750,650 L750,676"/>
+<rect x="380" y="676" width="740" height="54" class="grp"/>
+<text x="750" y="696" class="ti" text-anchor="middle">ui/agent_seam.install_seam → orchestrator_config.get_client(slot) → LocalFunctionClient</text>
+<text x="750" y="712" class="sm" text-anchor="middle">one contract for every agent: call(task: str) → str · a REAL slot that fails reports FAILED — it never silently becomes a stand-in</text>
+<text x="750" y="724" class="sm" text-anchor="middle">_FallbackClient: on a provider outage, repoint that slot's model env var, rebuild once, retry</text>
+
+<path class="edge" d="M750,730 L750,758"/>
+<rect x="60" y="758" width="1380" height="178" class="grp" opacity="0.45"/>
+<text x="76" y="779" class="ti">Six specialist agents — each owned by a teammate, reached only through the seam</text>
+
+<rect x="80" y="796" width="200" height="86" class="agent"/>
+<text x="180" y="820" class="ti" text-anchor="middle">destination</text>
+<text x="180" y="838" class="sm" text-anchor="middle">resolves ONE city and fixes</text>
+<text x="180" y="851" class="sm" text-anchor="middle">it for everything below</text>
+<circle cx="100" cy="810" r="13" fill="#fff" stroke="#444" stroke-width="2"/><text x="100" y="815" class="num" text-anchor="middle">1</text>
+<path class="edge" d="M280,839 L316,839"/>
+
+<rect x="316" y="782" width="836" height="128" fill="none" stroke="#7a6bb5" stroke-width="2" stroke-dasharray="7 4" rx="8"/>
+<text x="734" y="902" class="lbl" text-anchor="middle" font-weight="600">2 — ask_agents() · asyncio.gather · all four run concurrently, gated to 4 permits</text>
+
+<rect x="332" y="798" width="192" height="72" class="agent"/>
+<text x="428" y="820" class="ti" text-anchor="middle">flights</text>
+<text x="428" y="838" class="sm" text-anchor="middle">airport codes, then fares</text>
+<rect x="536" y="798" width="192" height="72" class="agent"/>
+<text x="632" y="820" class="ti" text-anchor="middle">restaurants</text>
+<text x="632" y="838" class="sm" text-anchor="middle">where to eat, with prices</text>
+<rect x="740" y="798" width="192" height="72" class="agent"/>
+<text x="836" y="820" class="ti" text-anchor="middle">activities</text>
+<text x="836" y="838" class="sm" text-anchor="middle">things to do · tiers, not prices</text>
+<rect x="944" y="798" width="192" height="72" class="agent"/>
+<text x="1040" y="820" class="ti" text-anchor="middle">money_customs</text>
+<text x="1040" y="838" class="sm" text-anchor="middle">FX, tipping, haggling</text>
+
+<rect x="1176" y="796" width="252" height="86" class="note"/>
+<text x="1302" y="816" class="sm" text-anchor="middle" font-weight="600">money_customs is asked HERE,</text>
+<text x="1302" y="831" class="sm" text-anchor="middle">in the same concurrent batch.</text>
+<text x="1302" y="849" class="sm" text-anchor="middle">Its reply goes to its own itinerary</text>
+<text x="1302" y="863" class="sm" text-anchor="middle">section — it is not injected into</text>
+<text x="1302" y="877" class="sm" text-anchor="middle">any other agent's task.</text>
+
+<path class="edge" d="M734,936 L734,962"/>
+<path d="M734,962 L860,996 L734,1030 L608,996 Z" class="dia"/>
+<text x="734" y="992" class="sm" text-anchor="middle">flights, restaurants,</text>
+<text x="734" y="1005" class="sm" text-anchor="middle">activities all returned?</text>
+<path class="dash" d="M608,996 L470,996"/>
+<rect x="150" y="972" width="320" height="48" class="note"/>
+<text x="310" y="991" class="sm" text-anchor="middle">No → “Budget cannot run yet: … have not</text>
+<text x="310" y="1005" class="sm" text-anchor="middle">returned.” The tool refuses and says why.</text>
+<text x="310" y="1015" class="sm" text-anchor="middle" font-style="italic">Budget once billed $425 for a flight Flights could not find.</text>
+
+<path class="edge" d="M734,1030 L734,1056"/><text x="744" y="1048" class="sm">yes</text>
+<rect x="454" y="1056" width="560" height="66" class="tool"/>
+<text x="734" y="1076" class="ti" text-anchor="middle">orchestrator_costs.build_budget_brief() + absences()</text>
+<text x="734" y="1092" class="sm" text-anchor="middle">extracts line items and verifies each figure appears VERBATIM in the reply it is attributed to</text>
+<text x="734" y="1107" class="sm" text-anchor="middle">plus “NO FIGURE AVAILABLE for these categories” and why — no agent's prose ever reaches another agent</text>
+
+<path class="edge" d="M734,1122 L734,1148"/>
+<rect x="596" y="1148" width="276" height="60" class="agent"/>
+<text x="734" y="1170" class="ti" text-anchor="middle">budget</text>
+<text x="734" y="1188" class="sm" text-anchor="middle">prices what the others found,</text>
+<text x="734" y="1201" class="sm" text-anchor="middle">checks against the stated budget</text>
+<circle cx="616" cy="1162" r="13" fill="#fff" stroke="#444" stroke-width="2"/><text x="616" y="1167" class="num" text-anchor="middle">3</text>
+
+<rect x="900" y="1148" width="320" height="60" class="note"/>
+<text x="1060" y="1168" class="sm" text-anchor="middle" font-weight="600">RUNS LAST — enforced by refusal, not by prompt</text>
+<text x="1060" y="1185" class="sm" text-anchor="middle">It receives decided line items, never the other</text>
+<text x="1060" y="1199" class="sm" text-anchor="middle">agents' replies. That relay was removed.</text>
+
+<path class="edge" d="M734,1208 L734,1230"/>
+<rect x="300" y="1230" width="868" height="46" class="tool"/>
+<text x="734" y="1249" class="ti" text-anchor="middle">orchestrator_agent._floor() — the deterministic floor  →  assembled itinerary to User Chat</text>
+<text x="734" y="1266" class="sm" text-anchor="middle">appends “=== Agent status ===” and “=== Unsourced figures ===” AFTER the model finishes, so it cannot be paraphrased away · no agent prices lodging, so that caveat fires on every run quoting money</text>
+
+<rect x="60" y="1056" width="380" height="118" class="note"/>
+<text x="72" y="1076" class="lbl" font-weight="600">The rule that shapes this diagram</text>
+<text x="72" y="1096" class="sm">Sub-agents never call each other. Every reply returns to the</text>
+<text x="72" y="1110" class="sm">orchestrator, which decides what — if anything — travels on.</text>
+<text x="72" y="1124" class="sm">The orchestrator is a hub, not a bus.</text>
+<text x="72" y="1146" class="sm">One contract for all six: call(task: str) → str. Agents are</text>
+<text x="72" y="1160" class="sm">swappable behind it; the orchestrator never sees internals.</text>
+
+<rect x="1152" y="960" width="322" height="72" class="note"/>
+<text x="1160" y="979" class="lbl" font-weight="600">Legend (board convention)</text>
+<text x="1160" y="996" class="sm">Solid = runtime data flow · Dashed = conditional / update flow</text>
+<text x="1160" y="1010" class="sm">Cylinder = data at rest · Diamond = decision</text>
+<text x="1160" y="1024" class="sm">Rectangle = process / tool · ① = position in execution order</text>
+</svg>
