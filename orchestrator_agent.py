@@ -282,7 +282,14 @@ def _new_run(base_facts=None, stated_budget="", request=""):
         facts.update(base_facts or {})
         facts.update({k.replace("_", " "): v for k, v in state.items()})
         detail = "\n".join(f"{k}: {v}" for k, v in facts.items())
-        task = f"Trip details:\n{detail}\n\n{task}"
+        # The traveller's own sentence, alongside the parsed facts. The parser
+        # has fields for city, country, nights, travellers and budget and none
+        # for "honeymoon", "who like snorkeling and seafood", or "we're
+        # celebrating" -- and what an agent hears about those today is whatever
+        # the model chose to paraphrase into its task. Verbatim costs one line
+        # and cannot be paraphrased away.
+        verbatim = f'Traveller\'s own words: "{request}"\n\n' if request else ""
+        task = f"Trip details:\n{detail}\n\n{verbatim}{task}"
         if slot == "budget":
             # Budget must see the others' replies, and it cannot if the model
             # emits every tool call in one parallel batch -- observed live: all
@@ -575,20 +582,32 @@ _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 _HEADING = re.compile(r"^\s*#*\s*===", re.M)
 
 
+_BLANKS = re.compile(r"\n{3,}")
+
+
 def _bounded(summary: str) -> tuple[str, bool]:
     """Drop sentences quoting a lodging price. Returns (summary, dropped_any)."""
     summary = _HEADING.split(summary, maxsplit=1)[0]
     kept, dropped = [], False
     for line in summary.splitlines():
+        sentences = _SENTENCE.split(line)
         parts = [
-            s for s in _SENTENCE.split(line)
+            s for s in sentences
             # ponytail: regex sentence split, so "approx." or "St. Lucia" ends a
             # sentence early. Costs at most a slightly shorter drop.
             if not (LODGING.search(s) and _AMOUNT.search(s))
         ]
-        dropped = dropped or len(parts) != len(_SENTENCE.split(line))
+        if len(parts) != len(sentences):
+            dropped = True
+            # A bullet emptied by the drop leaves a hole, not a tidy gap. Live,
+            # 28 Aug 2026: "**Key Planning Considerations:**" stranded over three
+            # blank lines, which reads as a broken renderer rather than a guard
+            # doing its job. Blank lines the model wrote are paragraph breaks and
+            # are left alone; only ones this created are removed.
+            if not "".join(parts).strip():
+                continue
         kept.append(" ".join(parts))
-    return "\n".join(kept).strip(), dropped
+    return _BLANKS.sub("\n\n", "\n".join(kept)).strip(), dropped
 
 
 def _itinerary(summary: str, ledger: dict[str, list[str]]) -> str:

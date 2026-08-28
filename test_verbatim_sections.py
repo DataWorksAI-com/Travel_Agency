@@ -98,6 +98,23 @@ check("...and so is everything after them",
       "Recommended destination: Bridgetown, Barbados." in _t.split("The sections below")[0], False)
 check("the real section still follows", "=== Flights ===\nB6: $538, direct, arrives BGI" in _t, True)
 
+# Live, 28 Aug 2026: dropping a bullet left its heading stranded over blank
+# lines, which reads as a broken page rather than a guard working.
+_bullets = (
+    "**Key Planning Considerations:**\n"
+    "- Flights are $650 for two.\n"
+    "- Budget hotels run $200/night.\n"
+    "- Most activities are free.\n\n"
+    "The good news: the beaches cost nothing."
+)
+_b = _itinerary(_bullets, LEDGER)
+check("the lodging bullet is gone", "$200/night" in _b, False)
+check("the surrounding bullets stay", "- Flights are $650 for two." in _b, True)
+check("...and the last one too", "- Most activities are free." in _b, True)
+check("no hole is left behind", "\n\n\n" in _b, False)
+check("the model's own paragraph break survives",
+      "free.\n\nThe good news" in _b, True)
+
 # A lodging mention with no figure is fine -- naming the gap is the honest move.
 _gap = "No agent priced lodging, so budget for accommodation separately."
 check("a lodging gap with no figure survives", _gap in _itinerary(_gap, LEDGER), True)
