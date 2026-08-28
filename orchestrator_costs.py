@@ -146,13 +146,19 @@ _PER_PATTERNS = (
 #               constraint, not pricing a good.
 #   lodging  -- rule 3 of Budget's brief says no agent here prices lodging, so
 #               a lodging amount from any slot came from the model.
+# Named separately so the OUTBOUND guard can reuse it. The reasoning is the
+# same in both directions: no agent in this system prices lodging, so a lodging
+# amount is model-invented wherever it turns up -- entering Budget's brief, or
+# leaving in the orchestrator's own summary.
+LODGING = re.compile(
+    r"\b(lodging|accommodations?|hotels?|hostels?|resorts?|airbnbs?"
+    r"|guesthouses?|room\s+rates?)\b",
+    re.I,
+)
+
 _NOT_A_PRICE = (
     re.compile(r"\bbudgets?\b", re.I),
-    re.compile(
-        r"\b(lodging|accommodations?|hotels?|hostels?|resorts?|airbnbs?"
-        r"|guesthouses?|room\s+rates?)\b",
-        re.I,
-    ),
+    LODGING,
 )
 
 

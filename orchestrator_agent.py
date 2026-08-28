@@ -39,7 +39,9 @@ from langchain_core.messages import ToolMessage
 from deepagents import create_deep_agent
 
 from orchestrator import SLOTS, ask_slot
-from orchestrator_costs import NO_DATA_PHRASES, absences, build_budget_brief, held_no_data
+from orchestrator_costs import (
+    LODGING, NO_DATA_PHRASES, _AMOUNT, absences, build_budget_brief, held_no_data,
+)
 from subagent_client import content_text
 from ui.agent_seam import LABELS, _looks_like_error
 
@@ -162,8 +164,14 @@ HOW TO WORK
 4. Call budget LAST, on its own, only after flights, restaurants and activities
    have actually returned. It prices what they found. Do not include it in the
    same batch of tool calls as them -- it will have nothing to work from.
-5. Assemble a final itinerary with one "=== Name ===" section per agent you
-   called, in the order listed above.
+5. Your final message is a SHORT SUMMARY, not the itinerary. Each agent's own
+   reply is appended below it verbatim, under its own heading, automatically --
+   so do NOT write "=== Name ===" sections and do not restate what an agent
+   said. Write a few sentences that only an orchestrator can write: how the
+   pieces fit, what the traveller should decide, and anything one agent's
+   answer implies for another's. If two agents disagree, or one reports a gap
+   that undercuts another's answer, say so -- that is the part no single agent
+   can see.
 
 RULES
 
@@ -171,15 +179,14 @@ RULES
   customs advice from your own knowledge. If a figure did not come from an agent,
   do not state it.
 - If an agent says a destination is outside its coverage, that is a final answer
-  and a useful one. Say so plainly in its section. Do NOT retry it with a
+  and a useful one. Say so plainly in your summary. Do NOT retry it with a
   different spelling, a nearby city, or a rephrased task -- the answer will not
   change, and you will waste the run.
-- If an agent reports it did not run, say that in its section. Never write the
-  section from your own knowledge instead.
-- Never write a section for an agent you did not call. If you skipped one, leave
-  its section out entirely rather than filling it in from the request or from
-  what you already know -- a section carries the authority of the agent named in
-  its heading.
+- If an agent reports it did not run, say so in your summary and say what the
+  itinerary is therefore missing. Never fill the gap from your own knowledge.
+- Never speak for an agent you did not call, and never attribute a figure or a
+  claim to an agent that did not make it. Only agents that actually replied get
+  a section, and their sections are their own words -- yours is the summary.
 - Call each agent once. Call one a second time only if you have genuinely new
   information for it, such as a city that agent had not been given yet.
 - Do not ask the user follow-up questions. Work with what you have and state your
@@ -230,7 +237,7 @@ def resolve_travel_month(task: str, today=None) -> str:
     return "%04d-%02d" % (year, month)
 
 
-def _new_run(base_facts=None, stated_budget=""):
+def _new_run(base_facts=None, stated_budget="", request=""):
     """Fresh per-run state and tools, closed over rather than global.
 
     Chainlit serves concurrent sessions; module-level state would let two runs
@@ -300,8 +307,24 @@ def _new_run(base_facts=None, stated_budget=""):
             # whole skeleton". orchestrator_costs now extracts verified line
             # items and, just as importantly, states which categories have no
             # figure and why. No subagent prose reaches another subagent.
+            # The TRAVELLER'S words, not the model's composition of them.
+            #
+            # Whatever the model wrote here went in above the verified ledger and
+            # undid both of this module's guarantees. Captured 28 Aug 2026: "...
+            # Flights: B6 at $538 per person. Restaurants: mix of Champers ($95
+            # for two) ... Determine if this fits the budget and provide cost
+            # breakdown." That relays three agents' figures as unverified prose
+            # -- the relaying the comment above says does not happen -- and
+            # instructs Budget to produce the total rule 5 tells it to withhold.
+            # Budget resolved that contradiction toward the instruction.
+            #
+            # The deterministic path already passes the traveller's request here
+            # and does not have the problem, because a traveller states a trip,
+            # not a method. Falls back to the model's text only if the request
+            # never arrived, since orchestrator.py:285 records what Budget does
+            # with no request at all: it invented a 3-day trip.
             task = build_budget_brief(
-                task=task,
+                task=request or task,
                 replies={s: r[-1] for s, r in ledger.items() if s != "budget"},
                 is_failure=_is_failure,
                 # The VALUE guard in build_budget_brief is a no-op without
@@ -480,6 +503,114 @@ def _unsourced_figures_note(final: str, ledger: dict[str, list[str]]) -> str:
     )
 
 
+# A correction an agent stated about its OWN answer -- "Note: I interpreted X as
+# Y", "Assumption: ...". Measured 27 Aug 2026, Rome run: money_customs replied
+# 'Note: I interpreted "Italy" as Germany.' and the assembling model rewrote the
+# section as Italy's customs with that line deleted, then added "Not expected in
+# Italy" on its own authority. Same reasoning as the failure notes below --
+# a caveat that lives only in prose is one the model is free to drop.
+_CAVEAT_RE = re.compile(r"^[ \t]*(?:Note|Assumption|Adjusted)[ \t]*:.*", re.M)
+
+
+def _stated_caveats(final: str, ledger: dict[str, list[str]]) -> str:
+    lowered = final.lower()
+    # ponytail: exact-substring containment, so a caveat the model KEPT but
+    # reworded gets repeated here. Duplicated is the safe direction; tighten to
+    # fuzzy matching only if the repetition actually bothers a reader.
+    notes = [
+        f"- {LABELS[slot]}: {line.strip()}"
+        for slot in SLOTS
+        for reply in ledger.get(slot, [])
+        for line in _CAVEAT_RE.findall(reply)
+        if line.strip().lower() not in lowered
+    ]
+    return "\n\n=== Stated by the agents ===\n" + "\n".join(notes) if notes else ""
+
+
+# The model's own writing keeps its own heading, and every agent section below
+# it is that agent's reply verbatim.
+#
+# Measured 28 Aug 2026, with the model writing the sections itself: Budget
+# crashed and returned only "Not connected -- the Budget agent did not run",
+# and the === Budget === section still read "Flights: $1,076 ... approximately
+# $385 per night for lodging". Every figure invented, under a heading naming an
+# agent that produced nothing, directly above the floor's own notice that no
+# agent prices lodging. Earlier the same day: Germany's tipping norms relabelled
+# as Italy's, and Budget's "INCOMPLETE BUT PROMISING" rewritten to "FEASIBLE".
+#
+# Those are all one failure -- the model was authoring text under someone else's
+# name. Guards downstream of that argue with the output after the fact, and the
+# floor already proved a correct notice at the bottom does not undo a confident
+# claim at the top. So the model no longer writes the sections. It still decides
+# everything that makes it an orchestrator: who to call, with what, in what
+# order, and when to stop. It just no longer speaks for them.
+_SUMMARY_HEADING = "=== Summary (orchestrator) ==="
+
+# The summary is the one place a model still writes freely, and lodging is where
+# it reaches. Measured across 28 Aug 2026: "$385 per night for lodging",
+# "~$300-400/night", "$70-120/night for guesthouses", "Expect $350-$1,500 for 5
+# nights" -- every one of them on a run where the itinerary also said, correctly,
+# that no agent prices lodging. So that single claim is barred outbound, the same
+# way _NOT_A_PRICE bars it inbound.
+#
+# No exemption for "leaving $X for accommodation". An earlier version spared a
+# line if it read like an allowance rather than a quote, to save the sentence
+# "leaving $1,924 for accommodations, meals and activities". The very next live
+# run wrote "leaving you $1,924 ... allocate roughly $350-600 for budget-friendly
+# guesthouses, leaving $1,300-1,575 for meals" -- an invented nightly range that
+# walked through on the word "leaving". Two keyword signals with one vetoing the
+# other is a classifier, and a classifier leaks. A dropped good sentence costs a
+# rephrase; a missed one puts an unsourced price in a customer's itinerary.
+#
+# Sentence, not line: models write the summary as one paragraph, so line
+# granularity would delete all of it over a single clause.
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+
+
+# SYSTEM_PROMPT rule 5 tells the model its final message is a summary and that
+# the sections are appended for it. Measured 28 Aug 2026: it wrote them anyway,
+# as "=== destination ===" ... "=== money_customs ===", restating every agent
+# above the real ones. Asking was worth a try; the summary is now simply
+# everything before the model's first heading.
+_HEADING = re.compile(r"^\s*#*\s*===", re.M)
+
+
+def _bounded(summary: str) -> tuple[str, bool]:
+    """Drop sentences quoting a lodging price. Returns (summary, dropped_any)."""
+    summary = _HEADING.split(summary, maxsplit=1)[0]
+    kept, dropped = [], False
+    for line in summary.splitlines():
+        parts = [
+            s for s in _SENTENCE.split(line)
+            # ponytail: regex sentence split, so "approx." or "St. Lucia" ends a
+            # sentence early. Costs at most a slightly shorter drop.
+            if not (LODGING.search(s) and _AMOUNT.search(s))
+        ]
+        dropped = dropped or len(parts) != len(_SENTENCE.split(line))
+        kept.append(" ".join(parts))
+    return "\n".join(kept).strip(), dropped
+
+
+def _itinerary(summary: str, ledger: dict[str, list[str]]) -> str:
+    summary, dropped = _bounded(summary)
+    if dropped:
+        summary += (
+            "\n\n(A line quoting a price for lodging was removed from this "
+            "summary: no agent in this system prices lodging, so the figure "
+            "came from no source.)"
+        )
+    sections = [
+        f"{_SUMMARY_HEADING}\n{summary.strip()}\n\n"
+        "The sections below are each agent's own reply, unedited."
+    ]
+    sections += [
+        f"=== {LABELS[slot]} ===\n{ledger[slot][-1].strip()}"
+        for slot in SLOTS
+        if ledger.get(slot) and ledger[slot][-1].strip()
+    ]
+    return "\n\n".join(sections)
+
+
 def _floor(final: str, ledger: dict[str, list[str]]) -> str:
     """Append what the model left out. Concatenated after the fact, so the model
     cannot paraphrase a failure away or quietly drop an agent."""
@@ -503,7 +634,7 @@ def _floor(final: str, ledger: dict[str, list[str]]) -> str:
     # Appended last, and separately: a slot can be perfectly healthy and still
     # have supplied no figures ("No flights found for these dates"), which the
     # Agent status block above deliberately says nothing about.
-    return final + _unsourced_figures_note(final, ledger)
+    return final + _stated_caveats(final, ledger) + _unsourced_figures_note(final, ledger)
 
 
 # One definition, three callers -- see subagent_client.content_text for the
@@ -530,7 +661,7 @@ async def plan_trip_agentic(
         "destination country": destination_country,
         "total budget": stated_budget,
     }.items() if v}
-    state, ledger, tools = _new_run(base_facts, stated_budget)
+    state, ledger, tools = _new_run(base_facts, stated_budget, request=task)
     agent = create_deep_agent(
         model=init_chat_model(MODEL.strip(), max_tokens=MAX_TOKENS),
         tools=tools,
@@ -558,4 +689,4 @@ async def plan_trip_agentic(
             await asyncio.sleep(wait)
 
     message = result["messages"][-1]
-    return _floor(_content_text(getattr(message, "content", message)), ledger)
+    return _floor(_itinerary(_content_text(getattr(message, "content", message)), ledger), ledger)
