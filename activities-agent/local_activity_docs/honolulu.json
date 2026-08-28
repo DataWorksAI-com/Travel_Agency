@@ -28,5 +28,23 @@
     "category": "sightseeing",
     "price_tier": "unknown",
     "description": "The Aloha Tower is a retired lighthouse that is considered one of the landmarks of the state of Hawaii in the United States. Opened on September 11, 1926, at a then astronomical cost of $160,000, the Aloha Tower is located at Pier 9 of Honolulu Harbor."
+  },
+  {
+    "name": "Ala Moana Beach Park",
+    "category": "outdoor",
+    "price_tier": "free",
+    "description": "Ala Moana Beach Park is a free public park on the island of Oahu."
+  },
+  {
+    "name": "Kapiolani Regional Park",
+    "category": "outdoor",
+    "price_tier": "unknown",
+    "description": "Queen Kapi\u02bbolani Regional Park is the largest and second-oldest public park in Hawaii, located in Honolulu on the east end of Waikiki just beyond Kuhio Beach Park and the Waikiki residential neighborhood. The 300-acre (1.2 km2) park, named after Queen Kapi\u02bbolani, the queen consort of King David Kal\u0101kaua, is home to the Waikiki Shell and the Honolulu Zoo."
+  },
+  {
+    "name": "Manoa Falls",
+    "category": "outdoor",
+    "price_tier": "unknown",
+    "description": "Manoa Falls is a 150-foot waterfall along the Manoa Falls Trail in Honolulu, Hawaii. Swimming in the pool below the waterfall is highly discouraged because there is a threat of becoming infected with Leptospirosis, a disease causing mild to moderate flulike symptoms that can last for 1 to 2 weeks."
   }
 ]
