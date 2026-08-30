@@ -1,4 +1,4 @@
-requests>=2.31.0
-deepagents>=0.7.5
-langchain-cohere>=0.4.0
-chromadb>=0.5.0
+requests
+chromadb
+langchain-cohere
+deepagents

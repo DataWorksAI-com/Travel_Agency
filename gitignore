@@ -1,0 +1,15 @@
+# Secrets -- never commit real API keys
+.env
+
+# Generated at runtime -- ChromaDB's persistent vector store, rebuilt
+# automatically from MONEY_CUSTOMS_FACTS/GEOGRAPHY on first run
+money_customs_chroma_db/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS cruft
+.DS_Store
