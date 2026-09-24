@@ -1,0 +1,12 @@
+# Shared dependencies for the Destination, Flights, Money & Customs agents, and Chainlit UI
+ 
+deepagents==0.7.4
+chainlit
+chromadb
+langchain
+langchain-anthropic
+langchain-cohere
+langchain-openrouter==0.2.7
+python-dotenv==1.2.2
+requests
+truststore
