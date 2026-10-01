@@ -388,95 +388,565 @@ Recommended Python version: **Python 3.11**.
 
 ---
 
+## External Services and APIs
+
+The system combines local retrieval with several external services. Some require API keys and some can be used without authentication.
+
+| Service | Used By | What It Provides | API Key Required? | Where to Get Access / Documentation |
+|---|---|---|---|---|
+| **Anthropic Claude** | Destination Agent | LLM reasoning and tool-calling for destination lookup and recommendation | Yes | https://console.anthropic.com/settings/keys |
+| **Geoapify Geocoding API** | Destination Agent | Resolves destination names to geographic coordinates and structured location information | Yes | https://myprojects.geoapify.com/ |
+| **Geoapify Places API** | Destination Agent | Returns destination POIs and travel features such as beaches, attractions, nature areas, and diving locations | Yes | https://apidocs.geoapify.com/docs/places/ |
+| **Open-Meteo** | Destination Agent | Location/geocoding and climate or historical weather data used for destination context | No key for normal public access | https://open-meteo.com/en/docs |
+| **Nager.Date** | Destination Agent | Public-holiday data by year and country | No | https://date.nager.at/Api |
+| **ChromaDB** | Destination and Money & Customs | Local vector database used for semantic retrieval | No | https://docs.trychroma.com/ |
+| **Travelpayouts** | Flights Agent | Cached flight-price and route data | Yes | https://support.travelpayouts.com/hc/en-us/articles/13024069738386-Where-to-find-API-token |
+| **OpenRouter** | Flights Agent | LLM access used by the Flights Agent | Yes | https://openrouter.ai/settings/keys |
+| **Cohere** | Money & Customs Agent | LLM used by the Deep Agent | Yes | https://dashboard.cohere.com/api-keys |
+| **Frankfurter** | Money & Customs Agent | Current and historical currency exchange rates | No | https://frankfurter.dev/ |
+| **World Bank Indicators API** | Money & Customs Agent | Country-level economic context, including GNI-per-capita data used as a rough price-scale reference | No | https://datahelpdesk.worldbank.org/knowledgebase/articles/889392 |
+| **LangSmith** | Optional tracing | Tracing and debugging of agent/tool calls | Optional | https://smith.langchain.com/ |
+
+### What each required API key is for
+
+#### `ANTHROPIC_API_KEY`
+
+Used by the **Destination Agent** to access Claude for reasoning and tool use.
+
+To obtain a key:
+
+1. Go to https://console.anthropic.com/.
+2. Sign in or create an Anthropic account.
+3. Open **Settings / API Keys**.
+4. Create a new API key.
+5. Copy the key and store it in the root `.env` file as:
+
+```env
+ANTHROPIC_API_KEY=your_anthropic_api_key
+```
+
+Do not paste a real key into GitHub, Slack, screenshots, or the README.
+
+#### `GEOAPIFY_API_KEY`
+
+Used by the **Destination Agent** for destination geocoding and place/POI retrieval.
+
+Geoapify data in this project is used to help resolve destinations and enrich them with travel-related places such as attractions, beaches, nature areas, and diving locations.
+
+To obtain a key:
+
+1. Go to https://myprojects.geoapify.com/.
+2. Create a Geoapify account or sign in.
+3. Create a project.
+4. Open the project's **API Keys** section.
+5. Copy the generated API key.
+6. Add it to `.env`:
+
+```env
+GEOAPIFY_API_KEY=your_geoapify_api_key
+```
+
+#### `TRAVELPAYOUTS_TOKEN`
+
+Used by the **Flights Agent** to query Travelpayouts flight-price data.
+
+The flight data are useful for travel recommendations, but they are cached price data and should not be treated as guaranteed live booking availability.
+
+To obtain the token:
+
+1. Go to https://www.travelpayouts.com/ and create an account.
+2. Log in.
+3. Open your **Profile**.
+4. Open the **API token** tab.
+5. Copy your token.
+6. Add it to `.env`:
+
+```env
+TRAVELPAYOUTS_TOKEN=your_travelpayouts_token
+```
+
+#### `OPENROUTER_API_KEY`
+
+Used by the **Flights Agent** for LLM access.
+
+To obtain a key:
+
+1. Go to https://openrouter.ai/.
+2. Sign in.
+3. Open https://openrouter.ai/settings/keys.
+4. Create a new API key.
+5. Copy the key into `.env`:
+
+```env
+OPENROUTER_API_KEY=your_openrouter_api_key
+```
+
+#### `COHERE_API_KEY`
+
+Used by the **Money & Customs Agent** for its Deep Agent / LLM reasoning.
+
+To obtain a key:
+
+1. Go to https://dashboard.cohere.com/api-keys.
+2. Sign in or create a Cohere account.
+3. Create or copy an API key.
+4. Add it to `.env`:
+
+```env
+COHERE_API_KEY=your_cohere_api_key
+```
+
+#### `LANGSMITH_API_KEY` — optional
+
+LangSmith is used only for tracing/debugging when tracing is enabled. The system can be run without LangSmith if tracing is not needed.
+
+1. Go to https://smith.langchain.com/.
+2. Sign in.
+3. Open the LangSmith settings and create an API key.
+4. Add the following values to `.env`:
+
+```env
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_TRACING=true
+LANGSMITH_PROJECT=travel-agency-ui
+```
+
+If you are not using LangSmith, omit these variables or set tracing to `false`.
+
+---
+
 ## Environment Variables
 
-Create a local `.env` file or configure the required environment variables in the shell. Never commit real API keys.
+All secret keys should be stored locally in a root `.env` file. **Never commit `.env` to Git.**
+
+A complete example for the reduced three-agent system is:
+
+```env
+# Destination Agent
+ANTHROPIC_API_KEY=your_anthropic_api_key
+GEOAPIFY_API_KEY=your_geoapify_api_key
+
+# Flights Agent
+TRAVELPAYOUTS_TOKEN=your_travelpayouts_token
+OPENROUTER_API_KEY=your_openrouter_api_key
+
+# Money & Customs Agent
+COHERE_API_KEY=your_cohere_api_key
+
+# Optional LangSmith tracing
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_TRACING=true
+LANGSMITH_PROJECT=travel-agency-ui
+```
+
+The following services do **not** require a project API key for the way they are used here:
+
+- Open-Meteo
+- Nager.Date
+- Frankfurter
+- World Bank Indicators API
+- ChromaDB, because it runs locally
+
+---
+
+## Setup: Step-by-Step for a New User
+
+The steps below assume the user is starting with a new computer and has not run the project before.
+
+### 0. Prerequisites
+
+Install the following before starting:
+
+1. **Python 3.11**
+   - Download: https://www.python.org/downloads/
+   - During Windows installation, select **Add Python to PATH**.
+
+2. **Git**
+   - Download: https://git-scm.com/downloads
+
+3. **VS Code** — optional but recommended
+   - Download: https://code.visualstudio.com/
+
+Verify Python and Git from PowerShell:
+
+```powershell
+python --version
+git --version
+```
+
+Expected Python output should begin with:
+
+```text
+Python 3.11
+```
+
+### 1. Clone the repository
+
+Open PowerShell and run:
+
+```powershell
+git clone https://github.com/DataWorksAI-com/Travel_Agency.git
+cd Travel_Agency
+```
+
+The current reduced system is on the `subset_dest_flights_money_orch` branch. Switch to it:
+
+```powershell
+git fetch origin
+git switch subset_dest_flights_money_orch
+git pull origin subset_dest_flights_money_orch
+```
+
+Confirm the current branch:
+
+```powershell
+git branch --show-current
+```
+
+Expected output:
+
+```text
+subset_dest_flights_money_orch
+```
+
+### 2. Create a Python virtual environment
+
+From the project root:
+
+```powershell
+python -m venv .venv
+```
+
+This creates an isolated Python environment inside the `.venv` folder so the project's packages do not interfere with packages installed for other projects.
+
+### 3. Activate the virtual environment
+
+Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+After activation, the terminal should begin with something similar to:
+
+```text
+(.venv) PS C:\...\Travel_Agency>
+```
+
+If PowerShell blocks the activation script, run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+### 4. Upgrade `pip`
+
+```powershell
+python -m pip install --upgrade pip
+```
+
+### 5. Install all shared dependencies
+
+From the repository root:
+
+```powershell
+pip install -r requirements.txt
+```
+
+This installs the packages needed by the three agents and the Chainlit UI.
+
+Optional verification:
+
+```powershell
+python -c "import chainlit, chromadb, langchain; print('Core dependencies imported successfully')"
+```
+
+Expected output:
+
+```text
+Core dependencies imported successfully
+```
+
+### 6. Create the `.env` file
+
+The repository contains `.env.example`, which lists the environment-variable names without real secrets.
+
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+On macOS/Linux:
+
+```bash
+cp .env.example .env
+```
+
+Open `.env` in VS Code or another text editor and replace placeholder values with your own API keys.
 
 Example:
 
 ```env
-ANTHROPIC_API_KEY=your_anthropic_api_key
-GEOAPIFY_API_KEY=your_geoapify_api_key
-TRAVELPAYOUTS_TOKEN=your_travelpayouts_token
-OPENROUTER_API_KEY=your_openrouter_api_key
-COHERE_API_KEY=your_cohere_api_key
-
-# Optional tracing
-LANGSMITH_API_KEY=your_langsmith_api_key
-LANGSMITH_TRACING=true
-LANGSMITH_PROJECT=destination-agent
+ANTHROPIC_API_KEY=your_real_key_here
+GEOAPIFY_API_KEY=your_real_key_here
+TRAVELPAYOUTS_TOKEN=your_real_token_here
+OPENROUTER_API_KEY=your_real_key_here
+COHERE_API_KEY=your_real_key_here
 ```
 
-Notes:
+Do **not** add quotation marks unless a provider specifically requires them.
 
-- Destination requires Anthropic and Geoapify access for its full external-data workflow.
-- Flights uses Travelpayouts and OpenRouter configuration.
-- Money & Customs uses Cohere for the Deep Agent; Frankfurter exchange-rate access does not require a key.
-- LangSmith is optional and used for tracing when configured.
+### 7. Verify that required keys are visible
 
----
-
-## Setup
-
-### 1. Create and activate a virtual environment
-
-PowerShell:
+This command only prints whether each variable exists; it does **not** print the secret values.
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python -c "from dotenv import load_dotenv; import os; load_dotenv(); keys=['ANTHROPIC_API_KEY','GEOAPIFY_API_KEY','TRAVELPAYOUTS_TOKEN','OPENROUTER_API_KEY','COHERE_API_KEY']; [print(k, 'SET' if os.getenv(k) else 'MISSING') for k in keys]"
 ```
 
-### 2. Install shared dependencies
+Expected result:
 
-```bash
-pip install -r requirements.txt
+```text
+ANTHROPIC_API_KEY SET
+GEOAPIFY_API_KEY SET
+TRAVELPAYOUTS_TOKEN SET
+OPENROUTER_API_KEY SET
+COHERE_API_KEY SET
 ```
 
-### 3. Configure environment variables
+If a variable shows `MISSING`, reopen `.env`, confirm the spelling, save the file, and run the check again.
 
-Copy or create a local `.env` file using `.env.example` as a reference, then provide the required API keys. Do not commit `.env`.
+### 8. Optional: enable LangSmith tracing
+
+If you have a LangSmith key, add:
+
+```env
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_TRACING=true
+LANGSMITH_PROJECT=travel-agency-ui
+```
+
+LangSmith is optional and is mainly useful for inspecting model/tool traces while debugging.
 
 ---
 
-## Running Individual Agents
+## Running and Testing Individual Agents
 
-### Destination Agent
+Run all commands below from the project root unless a step explicitly says otherwise.
 
-```bash
+### 1. Destination Agent
+
+Run:
+
+```powershell
 python -m destination_agent.destination_agent
 ```
 
-### Flights Agent
+The Destination Agent can:
 
-```bash
+- resolve a named destination,
+- retrieve destination/POI evidence,
+- return climate and holiday context,
+- or recommend one destination from user preferences.
+
+Run its test suites:
+
+```powershell
+python -m destination_agent.test_destination_agent
+python -m destination_agent.test_geoapify_data
+```
+
+Example request handled by this agent:
+
+```text
+Tell me about Aruba.
+```
+
+or:
+
+```text
+I want a tropical destination with beaches and diving.
+```
+
+If this agent fails with an authentication error, first check `ANTHROPIC_API_KEY` and `GEOAPIFY_API_KEY`.
+
+### 2. Flights Agent
+
+Run:
+
+```powershell
 python flights_agent.py
 ```
 
-### Money & Customs Agent
+The built-in test prints the agent message trace, including tool calls and the final response.
 
-The Orchestrator imports and calls:
+The Flights Agent expects city names and resolves airport codes internally.
+
+Example task:
+
+```text
+Find a flight from Boston to Paris under $700.
+```
+
+If no flights are returned, this does not always mean the code is broken. Travelpayouts coverage varies by route, and the project uses cached price data rather than guaranteed live booking inventory.
+
+If the agent reports authentication problems, check:
+
+```env
+TRAVELPAYOUTS_TOKEN=...
+OPENROUTER_API_KEY=...
+```
+
+### 3. Money & Customs Agent
+
+The Money & Customs component is normally called by the Orchestrator through:
 
 ```python
 answer(task: str) -> str
 ```
 
-from the Money & Customs agent module.
+To test it manually from PowerShell, run:
+
+```powershell
+cd "money&customs_agent"
+python -c "from dotenv import load_dotenv; load_dotenv('../.env'); from money_customs_agent import answer; print(answer('What are the exchange rate and tipping customs for France?'))"
+cd ..
+```
+
+This agent combines:
+
+- exchange-rate data from Frankfurter,
+- curated tipping/haggling knowledge,
+- semantic fallback retrieval through ChromaDB,
+- and World Bank country-level economic context.
+
+If the Cohere request returns `401 Unauthorized`, check that `COHERE_API_KEY` is current and valid.
 
 ---
 
-## Running the Integrated UI
+## Running the Integrated 3-Agent UI
 
-From the project root, after dependencies and environment variables are configured:
+After the individual agents have been tested, run the complete reduced system.
 
-```bash
+### 1. Make sure the virtual environment is active
+
+The PowerShell prompt should begin with:
+
+```text
+(.venv)
+```
+
+If it does not, activate it:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+### 2. Select the real reduced-system agents
+
+In PowerShell:
+
+```powershell
+$env:TRAVEL_UI_ORCHESTRATOR = "agent"
+$env:TRAVEL_UI_AGENTS = "destination=real,flights=real,money_customs=real"
+```
+
+These settings tell the UI to use the real Destination, Flights, and Money & Customs agents.
+
+### 3. Start Chainlit
+
+```powershell
 chainlit run app.py -w
 ```
 
-Additional setup and UI instructions are documented in:
+Chainlit will print a local URL in the terminal. Open that address in a browser. It is commonly:
+
+```text
+http://localhost:8000
+```
+
+### 4. Try an end-to-end request
+
+Example:
+
+```text
+Plan a 7-day trip from Boston to Paris.
+Include destination information, flight options,
+exchange-rate information, and local tipping customs.
+```
+
+A successful run should show the Orchestrator calling the relevant specialized agents and assembling their results into one response.
+
+### 5. Stop the UI
+
+Return to the terminal and press:
+
+```text
+Ctrl + C
+```
+
+For additional UI notes, see:
 
 ```text
 RUNNING_THE_UI.md
+```
+
+---
+
+## Common Setup Problems
+
+### `python` is not recognized
+
+Python is either not installed or was not added to `PATH`.
+
+Reinstall Python 3.11 and select **Add Python to PATH**, then reopen PowerShell.
+
+### PowerShell cannot run `Activate.ps1`
+
+Run:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+
+Then activate the environment again:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+### `ModuleNotFoundError`
+
+Confirm the virtual environment is active, then reinstall dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+### API returns `401 Unauthorized`
+
+The API key/token is missing, expired, revoked, or incorrect.
+
+Check the matching variable in `.env`, but never print or share the full key publicly.
+
+### Agent returns no result
+
+A valid "no data" result is different from a software failure. For example, Travelpayouts may have no cached fare for a particular route, and a retrieval agent may intentionally decline to answer when confidence is too low.
+
+### Changes to `.env` are not taking effect
+
+Stop the running UI with `Ctrl + C`, save `.env`, and restart:
+
+```powershell
+chainlit run app.py -w
 ```
 
 ---
