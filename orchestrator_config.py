@@ -43,7 +43,12 @@ def _build_flights_client() -> LocalFunctionClient:
     # output ceiling, which from_dict_spec caps for every slot
     # (subagent_client.DEFAULT_MAX_TOKENS) rather than each agent capping
     # itself.
-    from flights_agent import flights_subagent
+    from flights_agent import flights_subagent, TP_TOKEN
+    if not TP_TOKEN:
+        return LocalFunctionClient(lambda task: (
+            "Flight prices are unavailable because no flight-data API token "
+            "is configured. No flight quote was retrieved."
+        ))
     return LocalFunctionClient.from_dict_spec(
         flights_subagent, model="openrouter:openai/gpt-4o-mini"
     )
@@ -171,6 +176,9 @@ def _build_money_customs_client() -> LocalFunctionClient:
     # Still worth knowing, because there is no conflict marker either way: if
     # this slot ever starts reporting found for a country it holds no data for,
     # look at this line first.
+    money_dir = REPO_ROOT / "money&customs_agent"
+    if str(money_dir) not in sys.path:
+        sys.path.insert(0, str(money_dir))
     from money_customs_agent import answer
     return LocalFunctionClient(answer)
 

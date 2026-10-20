@@ -1,0 +1,2 @@
+# Local OpenAI-compatible protocol client for LM Studio. No cloud key required.
+langchain-openai==1.7.2

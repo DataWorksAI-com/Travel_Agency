@@ -24,9 +24,10 @@ from datetime import date, timedelta
 
 import requests
 from dotenv import load_dotenv
+from airport_transport import get_airport_transport
 load_dotenv()
 
-TP_TOKEN = os.environ["TRAVELPAYOUTS_TOKEN"]
+TP_TOKEN = os.getenv("TRAVELPAYOUTS_TOKEN", "")
 AUTOCOMPLETE_URL = "https://autocomplete.travelpayouts.com/places2"
 SEARCH_URL = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
 
@@ -86,6 +87,8 @@ def _format_minutes(minutes) -> str:
 
 def _fetch_offers(origin_code: str, destination_code: str, date_str: str) -> tuple:
     """Single request to the search API. Returns (offers, error_message_or_None)."""
+    if not TP_TOKEN:
+        return [], "Flight prices are unavailable: configure your own TRAVELPAYOUTS_TOKEN in Data API settings. No flight quote was retrieved."
     try:
         response = requests.get(
             SEARCH_URL,
@@ -176,32 +179,47 @@ def search_flights(
 # ── SubAgent config — plug this into your orchestrator ──────────────────
 flights_subagent = {
     "name": "flights-agent",
-    "description": "Handles flight search, routes, and budget comparisons.",
+    "description": "Handles flight search and sourced airport-to-city transport information.",
     "system_prompt": (
         "You are a flights specialist. Use get_airport_code to resolve city "
         "names to airport codes BEFORE calling search_flights — search_flights "
         "requires codes, not city names. Stay focused on flights only; "
         "do not discuss hotels, activities, or destinations.\n\n"
+        "AIRPORT TRANSPORT\n"
+        "After a successful flight search, call get_airport_transport for each distinct "
+        "actual arrival airport in the flight results. Use destination_airport codes "
+        "such as ORY or CDG, not city codes such as PAR. If the arrival airport is "
+        "unknown, say transport information is unavailable; do not guess an airport. "
+        "If there are no flight results, do not invent an arrival airport or transport plan.\n"
+        "Use only options returned with status=ok. For status=not_found or error, "
+        "briefly report that verified transport information is unavailable. "
+        "For each airport with data, add one brief transport line with the route, "
+        "specific destination stop, fare currency and per-person basis, approximate "
+        "station-to-station duration, verification date, and source URL. "
+        "Say operating hours and disruptions must be checked for the travel date. "
+        "Do not claim the traveller can catch a service after landing, or that an "
+        "option is cheapest/fastest based on a single recorded route. "
+        "Do not add EUR ground fares to USD flight fares without a verified conversion.\n\n"
         "IMPORTANT — keep your final answer SHORT and DATA-ONLY:\n"
         "- List at most 3 options, one per line, e.g.: 'EY: $371, 16h, 1 stop, arrives DEL'\n"
-        "- No headers, no bold/markdown formatting, no emojis\n"
-        "- No written recommendation paragraph — just state which option is cheapest\n"
+        "- No headers or emojis; source links are allowed\n"
+        "- No written recommendation paragraph; state the cheapest flight, then the airport transport lines\n"
         "- If prices are cached/widened-month data, say so in ONE short trailing "
         "note, not a full paragraph\n"
         "The orchestrator handles final formatting and recommendations for the "
         "user — your job is to hand back clean facts, not a finished answer."
     ),
-    "tools": [get_airport_code, search_flights],
+    "tools": [get_airport_code, search_flights, get_airport_transport],
 }
 
 
 # ── Standalone test — run this file directly to test just this sub-agent ──
 if __name__ == "__main__":
-    from deepagents import create_deep_agent
+    from local_llm import create_travel_agent, local_enabled, local_model
 
-    agent = create_deep_agent(
-        model="openrouter:anthropic/claude-sonnet-4.5",
-        tools=[get_airport_code, search_flights],
+    agent = create_travel_agent(
+        model=local_model() if local_enabled() else "openrouter:anthropic/claude-sonnet-4.5",
+        tools=[get_airport_code, search_flights, get_airport_transport],
         system_prompt=flights_subagent["system_prompt"],
     )
 

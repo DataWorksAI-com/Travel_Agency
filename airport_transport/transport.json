@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "airports": {
+    "ORY": {
+      "airport_name": "Paris Orly Airport",
+      "city": "Paris",
+      "country_code": "FR",
+      "options": [
+        {
+          "id": "ory_metro14_chatelet",
+          "mode": "metro",
+          "route": "Metro line 14",
+          "origin": "Aeroport d'Orly station",
+          "destination": "Chatelet-Les-Halles station, Paris",
+          "price": 14.0,
+          "currency": "EUR",
+          "fare_basis": "Full-price single Paris Region <> Airports ticket per person; fare effective 2026-01-01. Any cost of purchasing a physical ticket holder is not included.",
+          "duration_minutes": 25,
+          "duration_basis": "Approximate station-to-station journey; excludes baggage collection, terminal walking, waiting and onward travel to a hotel.",
+          "operating_hours": "General published metro operating window: approximately 05:30 to 01:55, depending on the day. This is not a verified first/last departure from Orly station.",
+          "timezone": "Europe/Paris",
+          "arrival_time_feasibility": "not_checked",
+          "source_url": "https://www.iledefrance-mobilites.fr/en/titres-et-tarifs/detail/ticket-paris-region-aeroports",
+          "sources": {
+            "fare": "https://www.iledefrance-mobilites.fr/en/titres-et-tarifs/detail/ticket-paris-region-aeroports",
+            "route_and_duration": "https://www.iledefrance-mobilites.fr/en/actualites/fermeture-orlybus",
+            "general_operating_hours": "https://www.iledefrance-mobilites.fr/en/acceder-aux-aeroports-franciliens-"
+          },
+          "verified_on": "2026-10-12",
+          "notes": [
+            "Reference information, not live departures or disruption status. Check the operator's journey planner for the travel date.",
+            "The airport ticket includes eligible metro/RER/train connections within two hours without leaving the network; it excludes bus and tram journeys.",
+            "The airport-access overview contains an older EUR 13 fare; use the separate 2026 fare page for pricing.",
+            "A single documented option does not establish the cheapest or fastest airport transport option."
+          ]
+        }
+      ]
+    },
+    "CDG": {
+      "airport_name": "Paris Charles de Gaulle Airport",
+      "city": "Paris",
+      "country_code": "FR",
+      "options": []
+    }
+  }
+}

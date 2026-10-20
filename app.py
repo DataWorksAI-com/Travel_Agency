@@ -35,10 +35,16 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import chainlit as cl
+from chainlit.config import config
+
+# Keep the desktop UI in English even when Windows/browser locale is Chinese.
+config.ui.name = "Travel Agency"
+config.ui.language = "en-US"
 
 from orchestrator import plan_trip
 from ui.agent_seam import DUMMY, FAILED, LABELS, REAL, install_seam
 from ui.request_parse import describe, parse_request
+from local_llm import local_enabled, local_settings
 
 WELCOME = (
     "**Travel Planning Assistant**\n\n"
@@ -68,7 +74,7 @@ EMPTY_MESSAGE = (
 # How the seam's effective mode is labelled in the step header. The UI knows
 # these are labels; it does not know how the seam decides between them.
 MODE_LABEL = {
-    REAL: "live agent",
+    REAL: "local LLM agent" if local_enabled() else "live agent",
     DUMMY: "sample data",
     # An outcome, not a configurable mode -- a slot set to REAL whose agent
     # could not be reached. Labelled distinctly from "sample data" because
@@ -155,6 +161,8 @@ def _modes_summary() -> str:
 @cl.on_chat_start
 async def on_chat_start():
     await cl.Message(content=WELCOME).send()
+    if local_enabled():
+        await cl.Message(content=f"**Local LLM: {local_settings()[1]}**\n\nModel inference runs on this computer. Travel data tools may still use online services. Cloud LLM fallback is disabled.").send()
     await cl.Message(
         content="**Agents currently connected**\n\n" + _modes_summary()
     ).send()

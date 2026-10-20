@@ -92,7 +92,7 @@ class LocalFunctionClient(SubagentClient):
         build_agent()/answer() like every other subagent, this method
         becomes unnecessary and Flights can be wrapped the normal way.
         """
-        from deepagents import create_deep_agent
+        from local_llm import create_travel_agent, local_enabled, local_model
 
         model = model or spec.get("model", "openrouter:anthropic/claude-sonnet-4.5")
 
@@ -118,11 +118,14 @@ class LocalFunctionClient(SubagentClient):
         # is asked for a short itinerary-ready message, not an essay.
         from langchain.chat_models import init_chat_model
 
-        model = init_chat_model(
-            model, max_tokens=spec.get("max_tokens", DEFAULT_MAX_TOKENS)
+        model = (
+            local_model(max_tokens=spec.get("max_tokens", DEFAULT_MAX_TOKENS))
+            if local_enabled() else init_chat_model(
+                model, max_tokens=spec.get("max_tokens", DEFAULT_MAX_TOKENS)
+            )
         )
 
-        agent = create_deep_agent(
+        agent = create_travel_agent(
             model=model,
             tools=spec["tools"],
             system_prompt=spec["system_prompt"],

@@ -28,8 +28,10 @@ them, rather than every subagent importing it independently.
 import asyncio
 import sys
 import os
+import re
 
 from orchestrator_config import get_client
+from desktop.dining_policy import UNAVAILABLE as DINING_UNAVAILABLE, is_dining_only
 
 # The only slot names that may reach get_client. Worth a guard now that a model
 # picks them: orchestrator_config.get_client swallows its own KeyError, so an
@@ -50,6 +52,8 @@ async def ask_slot(slot: str, task: str) -> str:
     """
     if slot not in SLOTS:
         raise ValueError(f"unknown slot {slot!r}; expected one of {SLOTS}")
+    if slot == "restaurants" and os.getenv("TRAVEL_STANDALONE") == "1":
+        return DINING_UNAVAILABLE
     return await get_client(slot).call(task)
 
 
@@ -93,12 +97,11 @@ async def _run_parallel_subagents(task: str, money_context: str) -> dict:
     activities_task = task  # money/customs likely irrelevant here -- confirm
 
     flights_client = get_client("flights")
-    restaurants_client = get_client("restaurants")
     activities_client = get_client("activities")
 
     flights_result, restaurants_result, activities_result = await asyncio.gather(
         flights_client.call(flights_task),
-        restaurants_client.call(restaurants_task),
+        ask_slot("restaurants", restaurants_task),
         activities_client.call(activities_task),
     )
 
@@ -195,6 +198,8 @@ async def plan_trip(
     Both are kept: the deterministic path is the control condition the agent is
     measured against, not merely a fallback.
     """
+    if os.getenv("TRAVEL_STANDALONE") == "1" and is_dining_only(task):
+        return DINING_UNAVAILABLE
     if os.getenv("TRAVEL_UI_ORCHESTRATOR", "deterministic").strip().lower() == "agent":
         # Deferred so the deterministic path never imports deepagents or a model
         # client -- that is what keeps it offline, keyless and free to test.
@@ -226,6 +231,15 @@ async def _plan_trip_fixed(
 
 
     destination_result = await _run_destination(task)
+
+    # A place name or an explicit request for its introduction does not
+    # request flights or a costed itinerary. Return its answer immediately.
+    stripped = task.strip().rstrip(".!?")
+    introduction = re.match(r"^(?:tell me about|information about|describe)\s+", stripped, re.I)
+    bare_place = re.fullmatch(r"[^\W\d_]+(?:[ '\-][^\W\d_]+){0,4}", stripped, re.UNICODE)
+    planning_words = re.search(r"\b(?:plan|trip|flight|budget|travel|recommend|want|find|help)\b", stripped, re.I)
+    if introduction or (bare_place and not planning_words):
+        return "=== Destination ===\n" + destination_result
 
     parallel_results = await _run_parallel_subagents(task, money_context)
 

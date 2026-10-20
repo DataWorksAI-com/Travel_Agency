@@ -35,6 +35,7 @@ from langchain.chat_models import init_chat_model
 from langchain.agents.middleware.types import AgentMiddleware
 
 from deepagents import create_deep_agent
+from local_llm import local_enabled, local_model
 
 from orchestrator import SLOTS, ask_slot
 from ui.agent_seam import LABELS, _looks_like_error
@@ -353,7 +354,7 @@ async def plan_trip_agentic(
     """Same signature and return type as orchestrator.plan_trip."""
     state, ledger, tools = _new_run()
     agent = create_deep_agent(
-        model=init_chat_model(MODEL.strip(), max_tokens=4000),
+        model=local_model(max_tokens=4000) if local_enabled() else init_chat_model(MODEL.strip(), max_tokens=4000),
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
         middleware=[_OnlyOurTools()],
