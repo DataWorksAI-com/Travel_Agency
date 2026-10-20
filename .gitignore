@@ -1,4 +1,4 @@
-﻿
+
 # Agent workspace / run artifacts
 # Chainlit auto-generated artifacts (recreated on first launch)
 # Chroma local database/cache (per-agent, regenerated via build_vectorstore.py)
@@ -47,3 +47,7 @@ Thumbs.db
 venv/
 verify_out.txt
 money_customs_chroma_db/
+
+# Local inference weights
+models/
+*.gguf

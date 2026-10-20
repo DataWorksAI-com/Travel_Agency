@@ -21,10 +21,12 @@ import os
 # For shared/repo use, prefer setting this via a real .env file instead
 # (see .env.example) and python-dotenv, rather than hardcoding it here.
 # ---------------------------------------------------------------------------
-os.environ.setdefault("COHERE_API_KEY", "REALKEYGOESHERE")
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from langchain_cohere import ChatCohere
-from deepagents import create_deep_agent
+from local_llm import create_travel_agent, local_enabled, local_model
 
 from money_tools import get_exchange_rate, search_money_customs, get_income_context, get_comparative_context
 
@@ -99,8 +101,8 @@ def build_agent():
     """Construct and return the Money & Customs deep agent, ready to invoke."""
     global _AGENT
     if _AGENT is None:
-        llm = ChatCohere(model=MODEL)
-        _AGENT = create_deep_agent(
+        llm = local_model() if local_enabled() else ChatCohere(model=MODEL)
+        _AGENT = create_travel_agent(
             model=llm,
             tools=[get_exchange_rate, search_money_customs, get_income_context, get_comparative_context],
             system_prompt=SYSTEM_PROMPT,
