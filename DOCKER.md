@@ -1,4 +1,4 @@
-# Docker setup (CPU; runtime verification pending)
+# Docker setup (CPU)
 
 This Compose configuration is intended to provide one Linux-container workflow
 for Windows, macOS and Ubuntu. It runs llama.cpp and the English Chainlit UI,
@@ -40,10 +40,9 @@ API is not published. Do not change the local endpoint to a Docker service name.
 
 CPU inference is the portable baseline. This is not a GPU configuration; Apple
 Metal, CUDA and Vulkan support require separate host-specific work and testing.
-Do not assume equal performance on all hosts or CPU architectures. The server
-image currently uses the upstream `server` tag; pin a tested digest before a
-reproducible release. Application dependencies also include existing unpinned
-requirements, so this is not yet a locked release environment.
+Do not assume equal performance on all hosts or CPU architectures. The model-server image is pinned to a verified multi-architecture digest with
+linux/amd64 and linux/arm64 manifests. Application dependencies still include
+existing unpinned requirements, so this is not yet a fully locked release environment.
 
 The default configuration uses bundled destination data and unverified model
 guidance. Restaurant recommendations are unavailable; Activities and Budget are
@@ -54,12 +53,24 @@ offline distribution on its first run. Each chat message is planned independentl
 
 ## Validation status
 
-The authoring machine does not have Docker installed. Python syntax, Compose YAML
-structure and the existing 11 regression tests were checked; no image build or
-container runtime success is claimed. Before treating Docker as the team's main
-setup, test `docker compose up --build` on Windows, macOS (including Apple Silicon)
-and Ubuntu. Verify an English UI, a local model/tool round trip, an uncovered
-city introduction, a restaurant refusal, and clean shutdown on each target.
+Validated on Windows with Docker Desktop's WSL2 Linux/amd64 backend:
+- `docker compose config` and a complete image build/start.
+- English HTTP UI and translations, including a Chinese locale request.
+- A real Qwen tool call preserving the tool's fare and currency.
+- Standalone restaurant refusal and an uncovered Colorado introduction with
+  the unverified-source disclosure and no flight pipeline.
+- `pip check` reports no broken requirements.
+
+Run the live smoke checks after startup:
+
+```sh
+docker compose exec -T web python docker/smoke_test.py
+```
+
+These checks call the real local model and can take a few minutes. The smoke
+check exercises HTTP and the planning backend; it does not automate browser
+chat input. Native macOS/Apple Silicon and Ubuntu host acceptance tests remain
+pending. Image architecture support alone does not constitute host testing.
 
 References:
 - https://docs.docker.com/compose/install/

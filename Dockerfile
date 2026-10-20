@@ -17,7 +17,7 @@ COPY --chown=app:app destination_data/ destination_data/
 COPY --chown=app:app airport_transport/ airport_transport/
 COPY --chown=app:app money&customs_agent/ money&customs_agent/
 COPY --chown=app:app desktop/bundled_data.py desktop/dining_policy.py desktop/
-COPY --chown=app:app docker/start_web.py docker/start_web.py
+COPY --chown=app:app docker/ docker/
 RUN mkdir -p .chainlit && chown -R app:app /app
 USER app
 EXPOSE 8000

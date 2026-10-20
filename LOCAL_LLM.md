@@ -6,7 +6,8 @@ No model weights, installers, personal credentials or virtual environments are c
 ## Docker setup
 
 See [DOCKER.md](DOCKER.md) for the proposed cross-platform CPU Compose setup.
-Container build and OS acceptance tests are still pending.
+Build and live model checks passed on Windows Docker Desktop (Linux/amd64).
+Native macOS and Ubuntu host acceptance tests remain pending.
 
 ## Run from source
 
