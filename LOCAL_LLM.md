@@ -3,6 +3,11 @@
 This branch adds optional local inference and English Windows standalone packaging.
 No model weights, installers, personal credentials or virtual environments are committed.
 
+## Docker setup
+
+See [DOCKER.md](DOCKER.md) for the proposed cross-platform CPU Compose setup.
+Container build and OS acceptance tests are still pending.
+
 ## Run from source
 
 Install the existing project dependencies and `desktop/requirements.txt`.

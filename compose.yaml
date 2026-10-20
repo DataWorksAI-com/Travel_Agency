@@ -1,0 +1,48 @@
+services:
+  model:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    command:
+      - --model
+      - /models/Qwen3-8B-Q4_K_M.gguf
+      - --alias
+      - qwen3-8b
+      - --host
+      - 127.0.0.1
+      - --port
+      - "8080"
+      - --ctx-size
+      - "16384"
+      - --parallel
+      - "1"
+      - --n-gpu-layers
+      - "0"
+      - --jinja
+    volumes:
+      - type: bind
+        source: ./models
+        target: /models
+        read_only: true
+    # The web service shares this network namespace; inference stays on loopback.
+    ports:
+      - "127.0.0.1:8000:8000"
+  web:
+    build: .
+    network_mode: "service:model"
+    depends_on:
+      model:
+        condition: service_started
+    environment:
+      TRAVEL_LLM_PROVIDER: local
+      TRAVEL_LOCAL_BASE_URL: http://127.0.0.1:8080/v1
+      TRAVEL_LOCAL_MODEL: qwen3-8b
+      TRAVEL_LOCAL_TIMEOUT: "600"
+      TRAVEL_STANDALONE: "1"
+      TRAVEL_UI_ORCHESTRATOR: pipeline
+      TRAVEL_UI_AGENTS: destination=real,flights=real,money_customs=real,restaurants=dummy,activities=dummy,budget=dummy
+      LANGSMITH_TRACING: "false"
+      LANGCHAIN_TRACING_V2: "false"
+      LANGCHAIN_TRACING: "false"
+    volumes:
+      - app-cache:/home/app/.cache
+volumes:
+  app-cache:
