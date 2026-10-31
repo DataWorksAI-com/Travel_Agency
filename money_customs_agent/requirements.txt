@@ -1,0 +1,7 @@
+requests
+chromadb
+deepagents
+langchain
+langchain-openrouter
+python-dotenv
+langchain-openai
