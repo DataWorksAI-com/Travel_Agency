@@ -1,7 +1,6 @@
 """Black-box scoring loop for the orchestrator.
 
-Ported from budget_agent_rohan/evaluation/run_jig.py, which scores one agent.
-This scores the *coordination* instead, so the questions are different:
+Adapted from a single-agent scoring jig. This scores the *coordination* instead, so the questions are different:
 
   coverage     did it call the agents this request needed?
   propagation  did the resolved city actually reach the agents downstream?
@@ -11,8 +10,7 @@ This scores the *coordination* instead, so the questions are different:
                agent's reply. Ground truth is harvested from the run itself,
                not typed here, so it cannot drift from what the agents did.
 
-Scores are kept separate and never blended, for the same reason the budget jig
-keeps them separate: a run can be perfectly honest and still have skipped an
+Scores are kept separate and never blended: a run can be perfectly honest and still have skipped an
 agent, and averaging the two hides both.
 
 `propagation` is the measurement worth having. The deterministic orchestrator
@@ -74,47 +72,46 @@ MONEY_FLOOR = 10
 CASES = {
     "cancun": {
         "request": "Plan a week in Cancún from Boston in September, budget $3000",
-        "expect_called": ["destination", "flights", "restaurants", "activities", "budget", "money_customs"],
-        "city_reaches": ["flights", "restaurants", "activities", "budget"],
+        "expect_called": ["destination", "flights", "money_customs"],
+        "city_reaches": ["flights"],
         "must_say": ["cancún"],
         "must_not_say": [],
-        "note": "Best coverage available: 5 of 6 agents hold real data.",
+        "note": "Best coverage available.",
     },
     "rome": {
         "request": "Plan a week in Rome from Boston in September, budget $3000",
-        "expect_called": ["destination", "flights", "restaurants", "activities", "budget", "money_customs"],
-        "city_reaches": ["flights", "restaurants", "activities", "budget"],
-        # Restaurants holds 6 Caribbean cities and Money & Customs 17 countries,
-        # neither including Rome or Italy. Both gaps must survive into the text.
+        "expect_called": ["destination", "flights", "money_customs"],
+        "city_reaches": ["flights"],
+        # Money & Customs holds 17 countries, not including Italy. The gap must
+        # survive into the text.
         "must_say": ["rome"],
         "must_not_say": ["bali", "cancun cost", "germany", "german"],
-        "expect_gap": ["restaurants", "money_customs", "budget"],
-        "note": "Mirror of cancun: Activities has curated data, Restaurants/Budget/Money do not.",
+        "expect_gap": ["money_customs"],
+        "note": "Money & Customs has no data for Italy.",
     },
     "tokyo": {
         "request": "Plan a week in Tokyo from Boston in September, budget $3000",
-        "expect_called": ["destination", "flights", "restaurants", "activities", "budget", "money_customs"],
-        "city_reaches": ["flights", "restaurants", "activities", "budget"],
+        "expect_called": ["destination", "flights", "money_customs"],
+        "city_reaches": ["flights"],
         "must_say": ["tokyo"],
         "must_not_say": ["aruba", "bali", "cancun"],
-        "expect_gap": ["restaurants", "activities", "budget"],
-        "note": "Three agents uncovered. Japan IS in Money & Customs' 17.",
+        "expect_gap": [],
+        "note": "Japan IS in Money & Customs' 17.",
     },
     "aruba": {
         "request": "Plan a week in Aruba from Boston in September, budget $2500",
-        "expect_called": ["destination", "flights", "restaurants", "activities", "budget", "money_customs"],
-        "city_reaches": ["flights", "restaurants", "activities", "budget"],
+        "expect_called": ["destination", "flights", "money_customs"],
+        "city_reaches": ["flights"],
         "must_say": ["aruba"],
-        # Aruba is absent from Budget's 15 cities and Money & Customs' 17, and
-        # its OpenTripMap geoname collides with a town in Italy.
+        # Aruba is absent from Money & Customs' 17.
         "must_not_say": ["italy", "piedmont", "castle", "bali"],
-        "expect_gap": ["budget", "money_customs"],
-        "note": "Worst case: 3 of 6. Also the Aruba/Italy geocode collision.",
+        "expect_gap": ["money_customs"],
+        "note": "Worst case. Also the Aruba/Italy geocode collision.",
     },
     "vague": {
         "request": "Plan a week somewhere warm from Boston in September, budget $3000",
         "expect_called": ["destination"],
-        "city_reaches": ["flights", "restaurants", "activities"],
+        "city_reaches": ["flights"],
         "must_say": [],
         "must_not_say": ["somewhere warm to"],
         "note": "The propagation case. No city is named, so only Destination can "
@@ -122,8 +119,8 @@ CASES = {
     },
     "accent": {
         "request": "Plan a week in Cancun from Boston in September, budget $3000",
-        "expect_called": ["destination", "flights", "restaurants", "activities", "budget", "money_customs"],
-        "city_reaches": ["flights", "restaurants", "activities", "budget"],
+        "expect_called": ["destination", "flights", "money_customs"],
+        "city_reaches": ["flights"],
         "must_say": [],
         # Unaccented spelling used to geocode to Guangxi, China and get written
         # into the committed RAG corpus.
@@ -209,7 +206,7 @@ def score(case: dict, final: str, calls: list[dict]) -> dict:
                 "could not find", "not found", "not present", "no cached"))
             if agent_admitted and not any(k in low for k in (
                     "no data", "not available", "coverage", "unavailable",
-                    "not found", "no restaurant", "estimate", "not in the")):
+                    "not found", "estimate", "not in the")):
                 failures.append(f"{slot} reported a gap the itinerary does not mention")
     honesty = 1.0 if not any(
         f.startswith(("missing", "said")) or "does not mention" in f for f in failures) else 0.0

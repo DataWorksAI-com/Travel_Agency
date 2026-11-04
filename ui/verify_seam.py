@@ -19,9 +19,7 @@ What this checks, and why each matters for the UI:
            is the specific substitution that made an all-fake itinerary
            look like a real one.
 
-Every slot is a stand-in by default now, including budget: the budget slot's
-real path is Shashank's repo-root RAG agent (orchestrator_config.py:
-_build_budget_client), which needs deps, a key and a built vectorstore.
+Every slot is a stand-in by default now.
 
 Run:  python ui/verify_seam.py
 """
@@ -131,7 +129,7 @@ def report(request, modes, final, observed) -> None:
         print(f"    {LABELS.get(slot, slot):<16} [{mode:<6}] {first[:88]}")
 
     check(
-        "all six slots reported through the hook",
+        "all slots reported through the hook",
         {s for s, _, _ in observed} == set(LABELS),
         f"{len(observed)} calls",
     )
@@ -145,8 +143,7 @@ def report(request, modes, final, observed) -> None:
 
 
 async def main() -> int:
-    # -- Case 1: the happy path, defaults (everything unconnected -> stand-in,
-    #    every slot including budget on its stand-in).
+    # -- Case 1: the happy path, defaults (everything unconnected -> stand-in).
     # Ambient config that gets silently discarded is the same hazard as
     # ambient config that silently applies -- say which one happened.
     if _AMBIENT is not None:
@@ -169,7 +166,7 @@ async def main() -> int:
     #    each must report FAILED and carry its cause -- NOT quietly become
     #    a stand-in, which is what this case used to assert.
     rule("CASE 2 -- forced REAL: per-slot expected effective mode")
-    overrides = {"flights": REAL, "restaurants": REAL, "destination": REAL}
+    overrides = {"flights": REAL, "destination": REAL}
     final2, observed2, modes2 = await run_case(request, overrides, env=None)
     report(request, modes2, final2, observed2)
     forced = {s: m for s, m, _ in observed2 if s in overrides}
@@ -192,11 +189,6 @@ async def main() -> int:
     #       Aruban public holidays incl. Betico Croes Day.
     #       If this reports FAILED again, check the key before suspecting
     #       the wiring.
-    #   restaurants -> REAL: went live on the local Ollama RAG path
-    #       (restaurant_agent/restaurant_agent_ollama.py). Note it answers
-    #       retrieval-only when the Ollama tag at that file's line 36 is not
-    #       pulled -- still REAL, the seam only cares that it came back
-    #       usable, not which internal path produced it.
     #   flights -> REAL. FLIPPED FROM FAILED on 2026-08-24. It was never
     #       unconnected: flights_agent.py:184 pins a free OpenRouter model,
     #       and the old FAILED entry only recorded a spent daily quota
@@ -207,40 +199,8 @@ async def main() -> int:
     #       Still QUOTA-DEPENDENT in the other direction: if this reports
     #       FAILED, read the [seam] cause line before assuming a regression,
     #       because a spent quota and a broken wiring look identical here.
-    #
-    #   activities -> deliberately NOT asserted, though it IS live as of
-    #       2026-08-24. Its default model (activities_agent.py:419,
-    #       openrouter:z-ai/glm-5.2) asks for 65536 max_tokens and is refused
-    #       on a low OpenRouter balance, so reaching it needs
-    #       DEEP_AGENT_MODEL=openrouter:openrouter/free in the environment.
-    #       This harness pins TRAVEL_UI_AGENTS but deliberately does not pin
-    #       DEEP_AGENT_MODEL, so asserting activities here would make the
-    #       result depend on an ambient var and on spending credit. It is
-    #       verified by direct probe instead. Note also that when it does
-    #       run, it correctly reports having no Aruba data -- its corpus
-    #       covers only boston/chicago/kyoto/new_york/paris/rome. Live is
-    #       not the same as useful, and this file should not imply it is.
-    #
-    #   restaurants -> REAL: went live on the local Ollama RAG path
-    #       (restaurant_agent/restaurant_agent_ollama.py). THIS ENTRY FAILS
-    #       in any interpreter without chromadb, reporting FAILED instead.
-    #       That is an environment difference, not a regression, so the
-    #       expectation is deliberately NOT relaxed to FAILED -- run this
-    #       file in the venv that has the deps (wt-sandbox's) to see it pass.
-    #
-    #       Be careful reading its failure message. The seam reports
-    #       "No module named 'restaurant_finder'", which is misleading: the
-    #       real cause is "No module named 'chromadb'". A broad
-    #       `except ImportError` at restaurant_agent_ollama.py:68 catches
-    #       the relative import's failure and retries it as a bare import,
-    #       so the second, less informative error is the one that escapes.
-    #       Verified by importing restaurant_agent.restaurant_finder
-    #       directly, which reports chromadb. Worth raising with Vrushti --
-    #       narrowing that except would make the seam's cause line accurate
-    #       for this slot.
     EXPECTED_MODES = {
         "destination": REAL,
-        "restaurants": REAL,
         "flights": REAL,
     }
     for slot, expected in EXPECTED_MODES.items():
@@ -283,19 +243,19 @@ async def main() -> int:
     #    Without this, a seam that ignored DUMMY and always ran the real
     #    agent would still pass every check above. Costs no API calls.
     rule("CASE 3 -- connected agent forced to DUMMY: must report dummy")
-    overrides3 = {"restaurants": DUMMY}
+    overrides3 = {"destination": DUMMY}
     final3, observed3, modes3 = await run_case(request, overrides3, env=None)
     report(request, modes3, final3, observed3)
-    mode3 = next((m for s, m, _ in observed3 if s == "restaurants"), None)
-    reply3 = next((r for s, _, r in observed3 if s == "restaurants"), "")
+    mode3 = next((m for s, m, _ in observed3 if s == "destination"), None)
+    reply3 = next((r for s, _, r in observed3 if s == "destination"), "")
     check(
-        "restaurants: connected agent forced to DUMMY reports 'dummy'",
+        "destination: connected agent forced to DUMMY reports 'dummy'",
         mode3 == DUMMY,
         f"got '{mode3}'",
     )
     check(
-        "restaurants: forced-dummy reply is the stand-in, not live data",
-        reply3 == _dummy_reply("restaurants"),
+        "destination: forced-dummy reply is the stand-in, not live data",
+        reply3 == _dummy_reply("destination"),
         reply3.splitlines()[0][:60] if reply3 else "(empty)",
     )
 
@@ -348,13 +308,6 @@ async def main() -> int:
         "Not connected" in reply4 and "simulated transport failure" in reply4,
         reply4.splitlines()[0][:60] if reply4 else "(empty)",
     )
-
-    # -- Case 4 used to check the envelope agent's refusal prose via
-    #    evaluation/direct_path.render. That agent (now
-    #    proposed_envelope_agent) is no longer an orchestrator option --
-    #    proposed future work -- so its behaviour is not part of the UI's
-    #    surface and is not asserted here. Its own checks live in
-    #    budget_agent_rohan/tests/ and sandbox/run_envelope_test.py.
 
     rule("RESULT")
     if FAILURES:

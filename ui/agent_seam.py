@@ -51,9 +51,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# The repo root, for orchestrator/orchestrator_config. (budget_agent_rohan was
-# needed here too while the budget slot ran the envelope direct path; that is
-# no longer an orchestrator option, so nothing under it is imported now.)
+# The repo root, for orchestrator/orchestrator_config.
 #
 # APPENDED, and re-checked before every call, and neither is a style choice.
 # Chainlit loads app.py with sys.path.insert(0, target_dir) at
@@ -84,23 +82,14 @@ _ensure_paths()
 from sandbox import fakes  # noqa: E402  deterministic stand-ins, prose left as-is
 
 # ---------------------------------------------------------------------------
-# Modes. One per orchestrator slot (the six keys of
-# orchestrator_config._BUILDERS, orchestrator_config.py:99-106).
+# Modes. One per orchestrator slot (the keys of
+# orchestrator_config._BUILDERS).
 #
 #   REAL   -- build through orchestrator_config.get_client(); needs that
 #             agent's branch merged, its deps installed and its key present.
 #   DUMMY  -- the deterministic stand-in in sandbox/fakes.py.
 #
-# There is deliberately no third mode. An earlier DIRECT mode routed the
-# budget slot to budget_agent_rohan/evaluation/direct_path.render -- the
-# per-diem envelope proposer, now `proposed_envelope_agent`. That agent is
-# PROPOSED FUTURE WORK and is not an orchestrator option yet, so the mode is
-# gone rather than merely defaulted off: leaving it selectable would let a
-# stray TRAVEL_UI_AGENTS value put unreleased work in front of a user.
-#
-# The envelope agent itself is untouched and still runs standalone --
-# budget_agent_rohan/ plus sandbox/run_envelope_test.py. Re-wiring it is a
-# deliberate future change here, not a config flip.
+# There is deliberately no third mode.
 #
 # THE SWAP: flip one value to REAL (or set TRAVEL_UI_AGENTS, below). No UI
 # edit, no orchestrator edit. A slot left on DUMMY shows stand-in content
@@ -121,9 +110,6 @@ FAILED = "failed"
 MODES: dict[str, str] = {
     "destination": DUMMY,
     "flights": DUMMY,
-    "restaurants": DUMMY,
-    "activities": DUMMY,
-    "budget": DUMMY,
     "money_customs": DUMMY,
 }
 
@@ -134,25 +120,12 @@ ENV_VAR = "TRAVEL_UI_AGENTS"
 LABELS = {
     "destination": "Destination",
     "flights": "Flights",
-    "restaurants": "Restaurants",
-    "activities": "Activities",
-    "budget": "Budget",
     "money_customs": "Money & Customs",
 }
 
-# fakes.REPLIES (sandbox/fakes.py:56) covers the five key-needing agents. It
-# has no Budget entry, because in the sandbox Budget used to run the real
-# envelope direct path. That path is no longer an orchestrator option, so
-# the budget slot needs a stand-in like every other slot; the string lives
-# here rather than in fakes.py so the sandbox's own fixtures stay untouched.
-_BUDGET_DUMMY = (
-    "Sample allocation: lodging $1,400, meals $760, activities $480, local "
-    "transport $160, reserve $200. Stand-in figures, not a costed plan."
-)
-
 
 def _dummy_reply(slot: str) -> str:
-    return fakes.REPLIES.get(slot, _BUDGET_DUMMY)
+    return fakes.REPLIES.get(slot, "")
 
 
 def _extract_cause(reply) -> str:

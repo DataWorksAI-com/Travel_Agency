@@ -38,7 +38,7 @@ chainlit run app.py -w
 ```
 
 That is the **complete** dependency list for the default path. No API keys, no
-vector stores, no Ollama. Your browser opens automatically; `-w` reloads on edit.
+vector stores. Your browser opens automatically; `-w` reloads on edit.
 
 macOS/Linux: `source .venv/bin/activate`.
 
@@ -51,9 +51,6 @@ for going from a fresh clone to **real agents**, in order. §6 has the per-slot
 detail and a `file:line` for every variable; this is the checklist, so nothing
 gets missed.
 
-Two of these are gitignored build artefacts, which is the step people miss —
-the repo cannot ship them, so a fresh clone does not have them.
-
 **1. Dependencies.** There is no single install; each agent has its own file.
 
 **`requirements.txt` is not sufficient on its own.** It holds four lines
@@ -64,18 +61,12 @@ the UI and orchestrator import. Install them explicitly:
 ```powershell
 pip install chainlit truststore python-dotenv langchain   # not in any requirements file
 pip install -r requirements.txt                           # orchestrator deps
-pip install -r budget_agent/requirements.txt              # budget
-pip install -r activities-agent/requirements.txt          # activities
-pip install -r restaurant_agent/requirements.txt          # restaurants
 pip install -r flights_requirements.txt                   # flights
-pip install langchain-mcp-adapters mcp                    # activities' MCP tier
 ```
 
 `truststore` matters more than it looks: on a network that intercepts HTTPS,
 omitting it makes Geoapify and Open-Meteo calls hang for ~5 minutes and then
-fail with no useful error. `mcp` matters because Activities spawns its
-OpenTripMap server as a subprocess — if the interpreter running the UI lacks it,
-the MCP tier disappears behind a warning that reads like OpenTripMap being down.
+fail with no useful error.
 
 **2. Keys.** `cp .env.example .env`, then fill in only the slots you intend to
 run. **One `.env` at the repo root serves every agent.** Never commit it — it is
@@ -83,25 +74,16 @@ gitignored, and this repo is public.
 
 | Variable | Needed by |
 |---|---|
-| `OPENROUTER_API_KEY` | the orchestrator itself, activities, budget |
-| `ANTHROPIC_API_KEY` | destination, budget (either this **or** OpenRouter) |
+| `OPENROUTER_API_KEY` | the orchestrator itself, flights |
+| `ANTHROPIC_API_KEY` | destination |
 | `GEOAPIFY_API_KEY` | destination — geocoding and places |
 | `COHERE_API_KEY` | money & customs — embeddings |
 | `TRAVELPAYOUTS_TOKEN` | flights |
-| `OPENTRIPMAP_API_KEY` | activities, tier 3 only — **see the warning in §6 before setting this one** |
 
-**3. Vector stores.** Four exist. Two build themselves on first use; **two do
-not and will hard-fail without this step.**
-
-```powershell
-python budget_agent/scripts/build_vectorstore.py        # required
-cd activities-agent ; python build_vector_db.py ; cd .. # required
-```
+**3. Vector stores.** Both build themselves on first use.
 
 | Store | Build |
 |---|---|
-| `chroma_db/` (budget) | **manual.** Raises `RuntimeError: Vector store not found` otherwise (`budget_agent/tools/rag_tools.py:33-34`) |
-| `activities-agent/chroma_db/` | **manual.** Semantic search returns `Vector DB not available — run build_vector_db.py first`, and three of `test_jig.py`'s cases fail |
 | `destination_data/chroma_db/` | self-builds (`get_or_create_collection`) |
 | `money_customs_chroma_db/` | self-builds |
 
@@ -130,31 +112,28 @@ python ui/verify_seam.py
 ## 2. What you should see
 
 Two messages on open: a welcome, then **"Agents currently connected"** listing all
-six slots and what each is running. Read that list first — it tells you the
+three slots and what each is running. Read that list first — it tells you the
 truth about the current configuration before you type anything.
 
 Then ask for a trip:
 
 > Plan a week in Aruba from Boston, budget $3000
 
-You get **7 steps**, appearing as each finishes:
+You get **4 steps**, appearing as each finishes:
 
 ```
 [tool] Request parsed                  how your sentence was split
 [tool] Money & Customs (sample data)
 [tool] Destination (sample data)
 [tool] Flights (sample data)
-[tool] Restaurants (sample data)
-[tool] Activities (sample data)
-[tool] Budget (sample data)
 ```
 
-…followed by the assembled itinerary. Include a destination, an origin and a
-budget — each message is planned on its own, there's no memory between turns.
+…followed by the assembled itinerary. Include a destination and an origin —
+each message is planned on its own, there's no memory between turns.
 
-Fewer than 7 steps is not necessarily a bug: Money & Customs only runs when
+Fewer than 4 steps is not necessarily a bug: Money & Customs only runs when
 **both** countries are detected (`orchestrator.py:158`). If your phrasing hides
-the origin, it is correctly skipped and you'll see 6.
+the origin, it is correctly skipped and you'll see 3.
 
 ---
 
@@ -170,7 +149,7 @@ chainlit run app.py -w
 Several at once, comma-separated:
 
 ```powershell
-$env:TRAVEL_UI_AGENTS = "flights=real,restaurants=real"
+$env:TRAVEL_UI_AGENTS = "flights=real,destination=real"
 ```
 
 Slot names — use these exactly:
@@ -179,9 +158,6 @@ Slot names — use these exactly:
 |---|---|---|
 | `destination` | Destination | Joel / Alice |
 | `flights` | Flights | Brinda |
-| `restaurants` | Restaurants | Vrushti |
-| `activities` | Activities | Jainam / Limeng |
-| `budget` | Budget (RAG cost estimator) | Shashank |
 | `money_customs` | Money & Customs | `exchange_rate_emily` branch |
 
 Modes are `real` and `dummy`. Anything else — including a typo — is ignored, and
@@ -192,9 +168,9 @@ message to confirm your value was accepted.**
 
 ## 3b. A known-good configuration
 
-Verified end to end on 2026-08-24. Three agents live, all returning correct
-Aruba data, whole run about 24 seconds. If you want to see the pipeline working
-before you debug your own slot, start here.
+Verified end to end on 2026-08-24 with Flights live, returning correct Aruba
+data. If you want to see the pipeline working before you debug your own slot,
+start here.
 
 ```powershell
 cd C:\path\to\Travel_Agency          # must be the repo root, see below
@@ -202,10 +178,7 @@ cd C:\path\to\Travel_Agency          # must be the repo root, see below
 python -c "import sys; print(sys.prefix)"   # must print your venv path
 
 Remove-Item Env:TRAVEL_UI_AGENTS -ErrorAction SilentlyContinue
-$env:TRAVEL_UI_AGENTS       = "restaurants=real,flights=real,budget=real"
-$env:RESTAURANT_AGENT_MODEL = "ollama:qwen2.5:7b"
-$env:DEEP_AGENT_MODEL       = "openrouter:openai/gpt-4o-mini"
-$env:OPENROUTER_MODEL       = "openai/gpt-4o-mini"
+$env:TRAVEL_UI_AGENTS = "flights=real"
 
 chainlit run app.py -w
 ```
@@ -219,26 +192,14 @@ Always confirm with the `sys.prefix` line above.
 `load_dotenv(os.path.join(os.getcwd(), ".env"))` (`chainlit/__init__.py:8`), so
 from any other directory your keys are silently absent.
 
-### Why each of those three model variables exists
-
-They are not decoration. Without them the pipeline looks broken for reasons
-that have nothing to do with anyone's agent.
-
-| Variable | Without it | Why |
-|---|---|---|
-| `RESTAURANT_AGENT_MODEL` | falls back to retrieval-only, no LLM | the default is `ollama:lfm2.5` (`restaurant_agent_ollama.py:96`) and most of us have `qwen2.5:7b` pulled instead |
-| `DEEP_AGENT_MODEL` | Activities refused on `max_tokens`, or returned empty | its default `openrouter:z-ai/glm-5.2` requests 65536 tokens, which a low OpenRouter balance rejects |
-| `OPENROUTER_MODEL` | Budget bills a paid Sonnet | the default is `anthropic/claude-sonnet-4.5` (`budget_agent/config.py:40`) |
-
 ### Do not use the free model tier for the pipeline
 
-`openrouter/free` shares **one daily allowance** across every free-model call,
-and `orchestrator.py:76-80` fires Flights, Restaurants and Activities
-concurrently — so they race each other to exhaust it. Observed: all three
-returned *"Rate limit exceeded: free-models-per-day"* in a single run.
+`openrouter/free` shares **one daily allowance** across every free-model call.
+Observed: *"Rate limit exceeded: free-models-per-day"* in a single run.
 
-Paid models have no daily cap and the cost is not the issue: **one full
-six-agent run measured $0.0039.** A $5 balance is roughly 1,250 runs.
+Paid models have no daily cap and the cost is not the issue: **one full run of
+the earlier six-agent pipeline measured $0.0039.** A $5 balance is roughly
+1,250 runs.
 
 Model choice also affects correctness, not just speed. Same prompt, three runs
 of the flights slot:
@@ -285,8 +246,7 @@ Real numbers from a working run, for calibration:
 
 ```
 Flights      (live agent,  7.8s)     Destination     (sample data, 0.0s)
-Restaurants  (live agent,  7.0s)     Activities      (sample data, 0.0s)
-Budget       (live agent, 16.3s)     Money & Customs (sample data, 0.0s)
+                                     Money & Customs (sample data, 0.0s)
 ```
 
 ### The terminal
@@ -326,12 +286,8 @@ Common causes and the fix:
 | `No module named 'deepagents'` | `pip install deepagents` |
 | `No module named 'langchain'` | `pip install langchain` |
 | `No module named 'langchain_cohere'` | `pip install langchain-cohere` |
-| `No module named 'langchain_mcp_adapters'` | `pip install langchain-mcp-adapters` (Activities) |
-| `No module named 'langchain_chroma'` / `langchain_huggingface` | `pip install -r budget_agent/requirements.txt` (Budget) |
 | `Rate limit exceeded: free-models-per-day` | not a bug — stop using `openrouter/free`, see §3b |
 | `KeyError: 'TRAVELPAYOUTS_TOKEN'` | set the key — see §6 |
-| `No module named 'activities_agent'` | **fixed** in `f23dc6f` — pull latest `ui_chainlit_rohan` |
-| `RuntimeError: No API key found` | set `ANTHROPIC_API_KEY` or `OPENROUTER_API_KEY` |
 | a Chroma / vectorstore error | run that agent's build step first — see §6 |
 
 Your agent's own `requirements.txt` is the authority on its dependencies. The
@@ -361,21 +317,9 @@ the step people miss:
 |---|---|---|
 | `flights` | `TRAVELPAYOUTS_TOKEN` | — (deps already satisfied; a token is the only blocker) |
 | `destination` | `ANTHROPIC_API_KEY`; `GEOAPIFY_API_KEY` for Geoapify tools | ~80 MB embedding download on first corpus query |
-| `restaurants` | none by default | Ollama running; set `RESTAURANT_AGENT_MODEL` to a tag you have actually pulled (`ollama list`) — the default `lfm2.5` is not the one most of us have |
-| `budget` | `ANTHROPIC_API_KEY` **or** `OPENROUTER_API_KEY` | `pip install -r budget_agent/requirements.txt`, then **`python budget_agent/scripts/build_vectorstore.py`** — hard error otherwise |
-| `activities` | `OPENROUTER_API_KEY`; `OPENTRIPMAP_API_KEY` for tier 3 | `pip install langchain-mcp-adapters mcp`; **`cd activities-agent && python build_vector_db.py`** — tier 2 returns `Vector DB not available` otherwise; set `DEEP_AGENT_MODEL` (see §3b) |
 | `money_customs` | `COHERE_API_KEY` | ~80 MB embedding download; index self-builds |
 
 Full detail, with `file:line` for every variable: [`ENVIRONMENT.md`](ENVIRONMENT.md).
-
-> **A key can make an agent worse.** With `OPENTRIPMAP_API_KEY` set, Activities
-> stops refusing unknown cities and starts answering them — but its geocode has
-> no country filter, so `name=Aruba` resolves to a town in **Italy**
-> (`country:"IT"`, Europe/Rome) and it returns Piedmont castles described as
-> Aruba attractions, then caches them to `local_activity_docs/aruba.json` so
-> every later query repeats it without re-querying. `name=Oranjestad` resolves
-> correctly to `AW`. Reported to Limeng/Jainam; until it is fixed, leaving that
-> key unset produces a more honest answer than setting it.
 
 ### You do not need everyone else's keys
 
@@ -383,7 +327,7 @@ This is the part people get wrong, because the instinct is to think the UI needs
 the whole table above filled in before it is useful. It doesn't.
 
 **To verify your own agent, you need exactly one key: yours.** Turn on your slot
-and leave the other five as stand-ins:
+and leave the other two as stand-ins:
 
 ```powershell
 $env:TRAVEL_UI_AGENTS = "flights=real"     # your slot only
@@ -392,31 +336,28 @@ chainlit run app.py -w
 
 Your agent is live, runs on your key, and you see it inside the real pipeline —
 receiving the real task string the orchestrator composes, with its output landing
-in the real assembled itinerary. The other five slots return fixed strings and
+in the real assembled itinerary. The other two slots return fixed strings and
 cost nothing. This is the intended daily workflow.
 
 ### Why the *full* pipeline is a different problem
 
 Every agent is imported into one Python process today
-(`orchestrator_config.py` → `LocalFunctionClient`). So running all six live at
-once means one machine holding **all six agents' keys and all six agents'
-dependencies simultaneously**.
+(`orchestrator_config.py` → `LocalFunctionClient`). So running all three live
+at once means one machine holding **all three agents' keys and all three
+agents' dependencies simultaneously**.
 
 That does not compose out of per-person `.env` files, and it has two consequences
 worth knowing before anyone tries:
 
 - **Keys.** Nobody can run the whole thing without collecting every teammate's
   credentials onto one machine — and whoever's key is used pays for the calls.
-- **Dependencies.** Six stacks share one venv, so they can conflict for reasons
-  nobody caused. The already-found example: `destination_data` builds its Chroma
-  collection with `all-MiniLM-L6-v2` while the restaurant corpus uses Chroma's
-  default embedding function, and two collections built with different embedding
-  functions cannot share one index.
+- **Dependencies.** Three stacks share one venv, so they can conflict for reasons
+  nobody caused.
 
 So: **per-slot for development, all-slots only for a rehearsed demo.** For the
 demo, one machine assembles one `.env` once. If the team standardises the LLM
 provider (an open question — see `UI_STATUS.md`), that shrinks to roughly one
-model key plus the three domain API keys (Travelpayouts, Geoapify, OpenTripMap),
+model key plus the two domain API keys (Travelpayouts, Geoapify),
 which are per-provider and unavoidable.
 
 The longer-term fix is architectural, not a secrets problem: agents behind a
@@ -438,27 +379,20 @@ the orchestrator↔agent link A2A.
 
 ## 7. Known problems that are not your fault
 
-1. **Activities is wired to the wrong import path.** `orchestrator_config.py:53`
-   imports `activities_agent`, which matches neither on-disk copy
-   (`activities/local_activity_docs/` and `activities-agent-limeng/`). Forcing
-   `activities=real` will always fall back until the team settles on one copy and
-   one path.
-2. **`budget_agent` used to be ambiguous.** Two packages shared the name, and
-   import order decided which one you got. Fixed — `budget_agent` now means
-   Shashank's agent alone. If you have a stale checkout with odd budget import
-   errors, pull.
-3. **A stale `TRAVEL_UI_AGENTS` in your shell will mislead you.** It persists for
+1. **A stale `TRAVEL_UI_AGENTS` in your shell will mislead you.** It persists for
    the whole terminal session. If the UI asks for a key you didn't expect, or a
    slot is live when you didn't ask, clear it:
    ```powershell
    Remove-Item Env:TRAVEL_UI_AGENTS -ErrorAction SilentlyContinue
    ```
-4. **Without `-w`, edits are not picked up.** You will edit a file, see no
+2. **Without `-w`, edits are not picked up.** You will edit a file, see no
    change, and doubt yourself.
 
 ---
 
 ## 7b. Findings from the 25 Aug agentic-orchestrator runs
+
+> Historical findings — measured on the earlier 6-agent system (preserved at tag v1.0-full-system).
 
 Everything below was observed in live runs while building `orchestrator_agent.py`,
 not read off the code. Where it is fixed, the fix is named.
@@ -638,7 +572,7 @@ Pooled across all 14 Rome runs:
 ## 8. Checking things without a browser
 
 ```powershell
-python ui/verify_seam.py        # asserts the seam's guarantees, all six slots
+python ui/verify_seam.py        # asserts the seam's guarantees, all slots
 python sandbox/run_pipeline.py  # shows the exact task string each agent receives
 ```
 

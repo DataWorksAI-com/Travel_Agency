@@ -10,11 +10,9 @@
 # Python
 # Python cache
 # RAG corpus, and rebuilding it costs ~140 live API calls.
-# Restaurant agent - local database, run artefacts and pre-change backups
 # Secrets -- never commit real keys
 # Virtual environments
 **/chroma_db/
-# Rebuilt by activities-agent/run_tests_offline.py on every run.
 **/chroma_db_offline/
 *.backup
 *.egg-info/
