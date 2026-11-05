@@ -43,13 +43,12 @@ from ui.request_parse import describe, parse_request
 WELCOME = (
     "**Travel Planning Assistant**\n\n"
     "Describe the trip you want and the coordinator will run the whole "
-    "pipeline: destination, money & customs, flights, restaurants, "
-    "activities, then budget.\n\n"
+    "pipeline: destination, money & customs, then flights.\n\n"
     "Try:\n"
     "- *Plan a week in Aruba from Boston, budget $3000*\n"
     "- *Plan a 4 night trip to Barbados for 2 people who like snorkeling "
     "and seafood, budget $5000*\n\n"
-    "Include the destination, where you are leaving from, and a budget -- "
+    "Include the destination and where you are leaving from -- "
     "each message is planned on its own."
 )
 
@@ -61,8 +60,8 @@ ERROR_MESSAGE = (
 )
 
 EMPTY_MESSAGE = (
-    "I did not get a plan back for that. Try naming a destination, where you "
-    "are travelling from, and a budget."
+    "I did not get a plan back for that. Try naming a destination and where "
+    "you are travelling from."
 )
 
 # How the seam's effective mode is labelled in the step header. The UI knows
@@ -108,11 +107,9 @@ async def _on_agent_done(slot, effective_mode, task, reply, elapsed):
     """Seam `after` hook: render one finished agent as a Chainlit step.
 
     The step is opened and closed inside this coroutine rather than spanning
-    the agent call, because Flights/Restaurants/Activities run concurrently
-    (orchestrator.py:76-80) and Chainlit tracks step nesting in a contextvar
-    -- three steps held open across that gather would nest arbitrarily.
-    Closing each one here keeps the transcript flat and ordered by
-    completion.
+    the agent call, because Chainlit tracks step nesting in a contextvar --
+    steps held open across concurrent calls would nest arbitrarily. Closing
+    each one here keeps the transcript flat and ordered by completion.
     """
     label = LABELS.get(slot, slot.title())
     suffix = MODE_LABEL.get(effective_mode, effective_mode)

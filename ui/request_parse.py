@@ -64,8 +64,7 @@ _PLACE = (
 _DESTINATION_RE = re.compile(r"\b(?:to|in|visit(?:ing)?|towards?)\s+" + _PLACE, re.I)
 _ORIGIN_RE = re.compile(r"\b(?:from|departing|leaving)\s+" + _PLACE, re.I)
 
-# Same two patterns evaluation/direct_path.py:74-78 uses, so the UI and
-# Budget's own parser agree on what "the budget" is.
+# The traveller's stated budget: a labelled amount first, else any dollar figure.
 _BUDGET_LABELLED_RE = re.compile(
     r"(?:budget|under|below|max(?:imum)?)\D{0,12}(\d[\d,]*)", re.I
 )

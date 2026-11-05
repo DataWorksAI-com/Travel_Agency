@@ -1,3 +1,5 @@
+> Historical document — describes the earlier 7-agent system (preserved at tag v1.0-full-system). The current system has three agents: Destination, Flights, Money & Customs.
+
 # UI Build Report — Chainlit over the orchestrator
 
 Rohan Shivakumar · ALY6980 capstone · sponsor DataWorksAI

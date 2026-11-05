@@ -4,17 +4,15 @@ the SubagentClient interface, so orchestrator.py never needs to know how
 a given subagent is reached.
 
 Import paths below were verified against main as merged on 23 Aug 2026
-(through PR #20). Four of the six slots now point at real, merged code;
-the two that don't are called out individually. Remaining TODO markers
+(through PR #20). Remaining TODO markers
 correspond to open decisions in ORCHESTRATOR_DESIGN.md -- resolve those,
 then update this file, not orchestrator.py.
 """
 
-import os
 import sys
 from pathlib import Path
 
-from subagent_client import DEFAULT_MAX_TOKENS, LocalFunctionClient
+from subagent_client import LocalFunctionClient
 
 REPO_ROOT = Path(__file__).resolve().parent
 
@@ -51,87 +49,6 @@ def _build_flights_client() -> LocalFunctionClient:
     # once aligned:
     # from flights_agent import answer
     # return LocalFunctionClient(answer)
-
-
-def _build_restaurants_client() -> LocalFunctionClient:
-    # Real, merged. restaurant_agent/__init__.py:23 defines answer(task).
-    from restaurant_agent import answer
-    return LocalFunctionClient(answer)
-
-
-def _build_activities_client() -> LocalFunctionClient:
-    # Real, merged -- and this slot changed the most. Three fixes over what
-    # was here before:
-    #
-    # 1. The import was `from activities_agent import build_agent`, which
-    #    could never resolve: the package directory is `activities-agent`
-    #    with a HYPHEN, which is not a legal Python module name. Adding the
-    #    directory itself to sys.path makes the inner activities_agent.py
-    #    importable by its own (legal) name. Same approach used at
-    #    sandbox/run_envelope_test.py:29 and app.py:35.
-    # 2. PR #20 (merged Limeng + Jainam) exposes `answer(task)` directly, so
-    #    the hand-rolled build_agent/ainvoke wrapper is now redundant --
-    #    and it skipped the deterministic food-request guard that lives
-    #    inside answer(), which was a real behaviour difference.
-    # 3. `answer` is a NATIVE COROUTINE. The old wrapper called
-    #    asyncio.run() on it, which raises RuntimeError when a loop is
-    #    already running -- exactly the case here, since
-    #    _run_parallel_subagents() calls this from inside asyncio.gather().
-    #    LocalFunctionClient.call now awaits a coroutine function directly
-    #    instead of pushing it to a worker thread.
-    #
-    # NOTE: `activities/` (no hyphen, also in main) is a different, older
-    # copy of this agent. `activities-agent/` is the merged one -- do not
-    # switch this to the shorter path just because it imports more cleanly.
-    activities_dir = REPO_ROOT / "activities-agent"
-    if str(activities_dir) not in sys.path:
-        sys.path.insert(0, str(activities_dir))
-
-    # Cap the output ceiling from out here rather than in the agent's own
-    # default. glm-5.2's default is 65536, and on a free-tier OpenRouter key
-    # the affordable max_tokens scales with remaining credit, so that default
-    # eventually exceeds it and the slot dies with "requested up to 65536
-    # tokens, but can only afford N" -- which looks like a broken agent and is
-    # a config cliff. The agent reads DEEP_AGENT_MAX_TOKENS and leaves its
-    # behaviour unchanged when it is unset, so running it standalone is
-    # unaffected by this line. Set before the import, since MAX_TOKENS is read
-    # at module scope.
-    #
-    # An explicit value already in the environment wins -- this is a default,
-    # not an override.
-    os.environ.setdefault("DEEP_AGENT_MAX_TOKENS", str(DEFAULT_MAX_TOKENS))
-
-    from activities_agent import answer
-    return LocalFunctionClient(answer)
-
-
-def _build_budget_client() -> LocalFunctionClient:
-    # Real, merged (Shashank's, PRs #17/#18). The budget slot is the
-    # repo-root RAG cost estimator: vector search over city cost docs ->
-    # total estimate -> feasibility check. build_agent() is at
-    # budget_agent/agent.py:86 and returns an .invoke()-able agent.
-    #
-    # This used to be ambiguous: budget_agent_rohan/ shipped a SECOND
-    # package also named `budget_agent` (the per-diem envelope proposer),
-    # so `import budget_agent` resolved to whichever landed in sys.modules
-    # first -- import order, not intent, picked the agent. That package is
-    # now `proposed_envelope_agent` and is NOT wired to any slot; it is
-    # proposed future work. This name means one thing again.
-    #
-    # Going live needs three things, not just the import: `langchain` +
-    # `deepagents` installed, ANTHROPIC_API_KEY or OPENROUTER_API_KEY set
-    # (budget_agent/config.py:29-49 raises RuntimeError with neither), and
-    # the Chroma vectorstore built via
-    # budget_agent/scripts/build_vectorstore.py (enforced at
-    # budget_agent/tools/rag_tools.py:33-37).
-    from budget_agent.agent import build_agent
-
-    def _answer(task: str) -> str:
-        agent = build_agent()
-        result = agent.invoke({"messages": [{"role": "user", "content": task}]})
-        return result["messages"][-1].content
-
-    return LocalFunctionClient(_answer)
 
 
 def _build_money_customs_client() -> LocalFunctionClient:
@@ -186,9 +103,6 @@ def _build_money_customs_client() -> LocalFunctionClient:
 _BUILDERS = {
     "destination": _build_destination_client,
     "flights": _build_flights_client,
-    "restaurants": _build_restaurants_client,
-    "activities": _build_activities_client,
-    "budget": _build_budget_client,
     "money_customs": _build_money_customs_client,
 }
 

@@ -1,5 +1,5 @@
 """
-orchestrator.py -- routes, sequences, and assembles the five subagents into
+orchestrator.py -- routes, sequences, and assembles the three subagents into
 one itinerary response.
 
 This is a SKELETON. It runs today against LocalFunctionClient stand-ins
@@ -10,14 +10,10 @@ open decisions this file currently makes a provisional call on.
 
 Sequencing, per the actual dependencies found while reviewing each
 subagent's code (not a guess):
-  1. Destination runs first -- Flights/Restaurants/Activities all need a
-     resolved city; Destination is the only subagent that can produce one
-     from either a named city or vague preferences.
-  2. Flights, Restaurants, Activities run in parallel -- none of the three
-     depends on either of the other two's output.
-  3. Budget runs last -- its own docstring states its knowledge is "purely
-     the priced line items it receives from the other sub-agents," so it
-     cannot run before they have.
+  1. Destination runs first -- Flights needs a resolved city; Destination
+     is the only subagent that can produce one from either a named city or
+     vague preferences.
+  2. Flights runs next.
 
 Money & Customs is NOT its own pipeline stage (see ORCHESTRATOR_DESIGN.md,
 decision #3) -- it's called once here, by the orchestrator itself, and its
@@ -36,7 +32,7 @@ from orchestrator_config import get_client
 # unknown name returns "[typo unavailable] 'typo'", and agent_seam falls back to
 # modes.get(name, DUMMY) -- sample data. A hallucinated slot would come back as
 # plausible prose instead of an error.
-SLOTS = ("destination", "flights", "restaurants", "activities", "budget", "money_customs")
+SLOTS = ("destination", "flights", "money_customs")
 
 
 async def ask_slot(slot: str, task: str) -> str:
@@ -59,8 +55,7 @@ async def _call_money_customs_context(origin_country: str, destination_country: 
 
     TODO (ORCHESTRATOR_DESIGN.md, decision #3): confirm this is really the
     right place for this call. Alternative: only call it for the subagents
-    that actually need it (e.g. Restaurants for tipping, not Activities),
-    rather than one blurb prepended everywhere.
+    that actually need it, rather than one blurb prepended everywhere.
     """
     client = get_client("money_customs")
     task = (
@@ -77,85 +72,28 @@ async def _run_destination(task: str) -> str:
 
 
 async def _run_parallel_subagents(task: str, money_context: str) -> dict:
-    """Run Flights, Restaurants, Activities together -- none depends on
-    the others' output, only on Destination having already resolved a
-    city (assumed already folded into `task` by the caller).
+    """Run Flights, which depends only on Destination having already
+    resolved a city (assumed already folded into `task` by the caller).
 
     TODO (ORCHESTRATOR_DESIGN.md, decision #4): this currently has no
-    uniform failure policy. If one of the three comes back with an
-    error-shaped message, what should happen to final assembly -- omit
-    that section and say so, retry once, or something else? Decide this
-    before relying on the placeholder behavior below (currently: pass
-    whatever came back straight through, error message or not).
+    uniform failure policy. If Flights comes back with an error-shaped
+    message, what should happen to final assembly -- omit that section and
+    say so, retry once, or something else? Decide this before relying on
+    the placeholder behavior below (currently: pass whatever came back
+    straight through, error message or not).
     """
     flights_task = f"{money_context}\n\n{task}" if money_context else task
-    restaurants_task = f"{money_context}\n\n{task}" if money_context else task
-    activities_task = task  # money/customs likely irrelevant here -- confirm
 
     flights_client = get_client("flights")
-    restaurants_client = get_client("restaurants")
-    activities_client = get_client("activities")
 
-    flights_result, restaurants_result, activities_result = await asyncio.gather(
-        flights_client.call(flights_task),
-        restaurants_client.call(restaurants_task),
-        activities_client.call(activities_task),
-    )
+    flights_result = await flights_client.call(flights_task)
 
     return {
         "flights": flights_result,
-        "restaurants": restaurants_result,
-        "activities": activities_result,
     }
 
 
-def _build_budget_task(task: str, destination_result: str, parallel_results: dict, stated_budget: str) -> str:
-    """Turn the other subagents' free-text replies into the line-item
-    format Budget's tools actually expect (aggregate_costs wants a list
-    of {"category", "name", "cost"} dicts).
-
-    TODO: this is the biggest unresolved gap in the whole skeleton. Every
-    other subagent returns natural-language text (per the shared
-    itinerary-ready contract), but Budget's tools need structured dicts.
-    Something has to parse dollar amounts and categories out of
-    Flights/Restaurants/Activities' text replies before Budget can run at
-    all. Options worth deciding between:
-      (a) an LLM call here in the orchestrator that extracts structured
-          line items from the three free-text replies
-      (b) asking Flights/Restaurants/Activities to ALSO return a small
-          structured block alongside their prose (breaking their current
-          "reply with ONE self-contained message" contract)
-      (c) something else
-    Neither is implemented below -- this is a placeholder pass-through.
-    """
-    return (
-        # The traveller's own words, first. Without this, Budget received
-        # the stated budget and the other subagents' prose but never the
-        # request itself, so it could not know trip length, party size or
-        # dates. On "Plan a week in Aruba from Boston, budget $3000" it
-        # costed THREE DAYS and reported "Assumed 3 days (a reasonable
-        # default when not specified)" -- correct reasoning over inputs
-        # that had the duration stripped out of them. Every other subagent
-        # already receives `task` (_run_destination at :163,
-        # _run_parallel_subagents at :165); Budget was the only one that
-        # did not.
-        f"Traveler's request: {task}\n\n"
-        f"Budget: {stated_budget}\n\n"
-        f"Destination info: {destination_result}\n\n"
-        f"Flights: {parallel_results['flights']}\n\n"
-        f"Restaurants: {parallel_results['restaurants']}\n\n"
-        f"Activities: {parallel_results['activities']}\n\n"
-        f"(NOTE: this is unstructured text, not the line-item dicts "
-        f"Budget's tools expect -- see _build_budget_task's docstring.)"
-    )
-
-
-async def _run_budget(budget_task: str) -> str:
-    client = get_client("budget")
-    return await client.call(budget_task)
-
-
-def _assemble_itinerary(destination: str, parallel: dict, budget: str) -> str:
+def _assemble_itinerary(destination: str, parallel: dict) -> str:
     """Combine every subagent's reply into one itinerary.
 
     TODO (ORCHESTRATOR_DESIGN.md, decision #1): once every subagent
@@ -167,13 +105,7 @@ def _assemble_itinerary(destination: str, parallel: dict, budget: str) -> str:
         "=== Destination ===\n"
         f"{destination}\n\n"
         "=== Flights ===\n"
-        f"{parallel['flights']}\n\n"
-        "=== Restaurants ===\n"
-        f"{parallel['restaurants']}\n\n"
-        "=== Activities ===\n"
-        f"{parallel['activities']}\n\n"
-        "=== Budget ===\n"
-        f"{budget}\n"
+        f"{parallel['flights']}\n"
     )
 
 
@@ -217,8 +149,8 @@ async def _plan_trip_fixed(
     destination_country: str = "",
     stated_budget: str = "",
 ) -> str:
-    """The original fixed pipeline: Money & Customs, Destination, the parallel
-    three, then Budget. Unchanged behaviour."""
+    """The original fixed pipeline: Money & Customs, Destination, then
+    Flights."""
     money_context = ""
     if origin_country and destination_country:
         money_context = await _call_money_customs_context(origin_country, destination_country)
@@ -229,10 +161,7 @@ async def _plan_trip_fixed(
 
     parallel_results = await _run_parallel_subagents(task, money_context)
 
-    budget_task = _build_budget_task(task, destination_result, parallel_results, stated_budget)
-    budget_result = await _run_budget(budget_task)
-
-    return _assemble_itinerary(destination_result, parallel_results, budget_result)
+    return _assemble_itinerary(destination_result, parallel_results)
 
 
 if __name__ == "__main__":

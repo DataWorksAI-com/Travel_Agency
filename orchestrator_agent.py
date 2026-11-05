@@ -1,6 +1,6 @@
 """The orchestrator, as a deep agent.
 
-The deterministic pipeline in orchestrator.py calls six subagents in a fixed
+The deterministic pipeline in orchestrator.py calls three subagents in a fixed
 order and concatenates their replies. It cannot carry a resolved city forward
 (orchestrator.py computes one and drops it), cannot react to an agent that says
 "outside my coverage", and has no failure policy. This module replaces that
@@ -42,8 +42,7 @@ from ui.agent_seam import LABELS, _looks_like_error
 MODEL = os.getenv("ORCHESTRATOR_MODEL", "openrouter:openai/gpt-4o-mini")
 
 # Whole-run backoff, not per-call: a deep agent makes many model calls, so a 429
-# surfaces from the middle of the graph rather than from one request. Lifted from
-# budget_agent_rohan/proposed_envelope_agent/agent.py.
+# surfaces from the middle of the graph rather than from one request.
 RETRY_BACKOFF = (15, 30, 60)
 TRANSIENT = ("429", "rate", "too many requests", "timeout", "overloaded")
 
@@ -72,16 +71,13 @@ class _OnlyOurTools(AgentMiddleware):
 
 
 SYSTEM_PROMPT = f"""You are the orchestrator for a travel-planning system. You do
-not plan trips yourself. You delegate to six specialist agents and assemble what
+not plan trips yourself. You delegate to three specialist agents and assemble what
 they return.
 
 The agents, reachable with ask_agent(slot, task):
 
   destination    resolves a city from a name or vague preferences; climate, holidays
   flights        live prices (cached up to 7 days -- not live availability)
-  restaurants    dining; holds records for 6 Caribbean cities only
-  activities     things to do; holds 6 temperate cities only
-  budget         feasibility and totals; tropical destinations only
   money_customs  exchange rate, tipping, haggling; 17 countries only
 
 HOW TO WORK
@@ -95,12 +91,8 @@ HOW TO WORK
    can see the resolved city. Do this before calling anyone else.
 3. Call money_customs whenever you know the destination country. A traveller
    needs the exchange rate and tipping norms; do not skip it.
-4. Then call the agents that can help. flights, restaurants and activities do not
-   depend on each other, so calling them together is fine.
-5. Call budget LAST, on its own, only after flights, restaurants and activities
-   have actually returned. It prices what they found. Do not include it in the
-   same batch of tool calls as them -- it will have nothing to work from.
-6. Assemble a final itinerary with one "=== Name ===" section per agent you
+4. Then call flights.
+5. Assemble a final itinerary with one "=== Name ===" section per agent you
    called, in the order listed above.
 
 RULES
@@ -140,8 +132,7 @@ def _new_run():
         """Ask one specialist agent to do one thing, and return its reply.
 
         Args:
-            slot: one of destination, flights, restaurants, activities, budget,
-                money_customs.
+            slot: one of destination, flights, money_customs.
             task: a self-contained instruction. The agent shares no context with
                 you or with the other agents, so everything it needs must be in
                 this string.
@@ -159,34 +150,6 @@ def _new_run():
         if state:
             facts = "\n".join(f"{k.replace('_', ' ')}: {v}" for k, v in state.items())
             task = f"Trip details:\n{facts}\n\n{task}"
-        if slot == "budget":
-            # Budget must see the others' replies, and it cannot if the model
-            # emits every tool call in one parallel batch -- observed live: all
-            # six fired together, the ledger was still empty, and Budget billed
-            # $425 for a flight Flights had just reported it could not find.
-            # Refusing here forces the second, informed call; the model is free
-            # to call budget again once the others have returned.
-            pending = [s for s in ("flights", "restaurants", "activities") if s not in ledger]
-            if pending:
-                return (
-                    f"Budget cannot run yet: {', '.join(pending)} have not returned. "
-                    f"Budget prices what the other agents found, so calling it now would "
-                    f"produce invented figures. Wait for their replies, then call budget again."
-                )
-            # Budget can only cost what the others priced, and asking the model
-            # to remember to forward their replies is not enough: observed on
-            # the first live run, it sent Budget a bare "calculate the budget"
-            # and Budget answered $425 for a flight that Flights had reported
-            # it could not find. The deterministic path did this in
-            # _build_budget_task; it has to be guaranteed here too.
-            priced = "\n\n".join(
-                f"{LABELS[s]} reported:\n{r[-1]}" for s, r in ledger.items() if s != "budget"
-            )
-            if priced:
-                task = (
-                    f"{task}\n\nWhat the other agents actually returned. Cost these, and do "
-                    f"not substitute figures of your own for anything reported here:\n\n{priced}"
-                )
         reply = await ask_slot(slot, task)
         ledger.setdefault(slot, []).append(reply)
         return reply
@@ -228,7 +191,7 @@ def _is_failure(reply: str) -> bool:
     return reply.startswith("Not connected") or _looks_like_error(reply)
 
 
-# Sentences the six agents actually emit when they ran correctly but hold
+# Sentences the agents actually emit when they ran correctly but hold
 # nothing for this request. Substrings rather than a regex on purpose: these
 # are real phrases from real replies, and a reader should be able to check them
 # against the agents by eye.
@@ -267,16 +230,9 @@ def _held_no_data(reply: str) -> bool:
 def _unsourced_figures_note(final: str, ledger: dict[str, list[str]]) -> str:
     """Name the slots that supplied no figures, when the itinerary quotes some.
 
-    THE BUG THIS EXISTS FOR, observed live: Flights reported it found no prices
-    and Activities did not run at all, and Budget then billed "$850
-    (estimated)" for flights and "$200 (estimated)" for activities, producing
-    "Total $2,310 -- comfortably feasible". It labelled both as estimates in
-    its own table, but the headline a reader takes away is the total, and the
-    total is built on numbers no agent produced. Lodging was $400 with no
-    lodging agent in the system at all.
-
-    The jig measures this: grounding drops from 1.0 on the deterministic path
-    to 0.75 under the agent.
+    Exists because an itinerary can quote figures that no agent produced --
+    for a slot that failed, was never called, or reported no data -- and a
+    reader takes those figures as priced.
 
     Detection, not attribution. Working out WHICH figure came from which agent
     would mean parsing the model's prose, and getting that wrong would either
@@ -291,10 +247,6 @@ def _unsourced_figures_note(final: str, ledger: dict[str, list[str]]) -> str:
 
     unsourced = []
     for slot in SLOTS:
-        if slot == "budget":
-            # Budget is the slot doing the costing. Naming it here would say
-            # "budget supplied no figures" in the one case where it did.
-            continue
         replies = ledger.get(slot)
         if not replies:
             unsourced.append((LABELS[slot], "was not called"))

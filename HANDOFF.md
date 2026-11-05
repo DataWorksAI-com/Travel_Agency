@@ -1,3 +1,5 @@
+> Historical document — describes the earlier 7-agent system (preserved at tag v1.0-full-system). The current system has three agents: Destination, Flights, Money & Customs.
+
 # Handoff — UI over the orchestrator, tracing, and what's next
 
 **Author:** Rohan Shivakumar · **Date:** 2026-08-22 · **Branch:** `ui_chainlit_rohan`

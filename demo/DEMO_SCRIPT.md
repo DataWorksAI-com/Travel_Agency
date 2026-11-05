@@ -1,3 +1,5 @@
+> Historical document — describes the earlier 7-agent system (preserved at tag v1.0-full-system). The current system has three agents: Destination, Flights, Money & Customs.
+
 # Demo script — 25 Aug 2026
 
 Read top to bottom. Bold text is what you say; indented text is what to point at.

@@ -63,7 +63,7 @@ class LocalFunctionClient(SubagentClient):
     """Wraps a subagent that already lives as a Python callable in this repo.
 
     Covers both conventions found across the group's branches:
-      - build_agent()/answer(task) style (Budget, Restaurants, Activities)
+      - build_agent()/answer(task) style (Destination, Money & Customs)
       - a plain dict spec (Flights' `flights_subagent = {...}`) -- see
         `from_dict_spec()` below for that case, until/unless Flights is
         aligned to the callable convention like everyone else (open
@@ -138,17 +138,14 @@ class LocalFunctionClient(SubagentClient):
 
     async def call(self, task: str) -> str:
         try:
-            # Activities' answer() is a native coroutine function; every
-            # other subagent's is an ordinary blocking function. Await the
-            # first directly, and push the second to a worker thread so a
-            # slow subagent doesn't stall the event loop the other parallel
-            # calls are sharing.
+            # A subagent's answer() may be a native coroutine function or an
+            # ordinary blocking function. Await the first directly, and push
+            # the second to a worker thread so a slow subagent doesn't stall
+            # the event loop.
             #
             # The coroutine branch is not just a tidiness fix: wrapping an
-            # async answer() in asyncio.run() (as orchestrator_config used
-            # to) raises RuntimeError when a loop is already running, which
-            # is always true here -- _run_parallel_subagents() calls this
-            # from inside asyncio.gather().
+            # async answer() in asyncio.run() raises RuntimeError when a loop
+            # is already running, which is always true here.
             if inspect.iscoroutinefunction(self._answer_fn):
                 return await self._answer_fn(task)
             return await asyncio.to_thread(self._answer_fn, task)
