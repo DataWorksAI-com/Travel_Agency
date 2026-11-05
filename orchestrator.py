@@ -93,7 +93,7 @@ async def _run_parallel_subagents(task: str, money_context: str) -> dict:
     }
 
 
-def _assemble_itinerary(destination: str, parallel: dict) -> str:
+def _assemble_itinerary(destination: str, parallel: dict, money_context: str = "") -> str:
     """Combine every subagent's reply into one itinerary.
 
     TODO (ORCHESTRATOR_DESIGN.md, decision #1): once every subagent
@@ -101,12 +101,15 @@ def _assemble_itinerary(destination: str, parallel: dict) -> str:
     'Assumption:' lines from subagents should probably be surfaced
     together, rather than buried inline per section as they are now.
     """
-    return (
+    itinerary = (
         "=== Destination ===\n"
         f"{destination}\n\n"
         "=== Flights ===\n"
         f"{parallel['flights']}\n"
     )
+    if money_context:
+        itinerary += f"\n=== Money & Customs ===\n{money_context}\n"
+    return itinerary
 
 
 async def plan_trip(
@@ -161,7 +164,7 @@ async def _plan_trip_fixed(
 
     parallel_results = await _run_parallel_subagents(task, money_context)
 
-    return _assemble_itinerary(destination_result, parallel_results)
+    return _assemble_itinerary(destination_result, parallel_results, money_context)
 
 
 if __name__ == "__main__":

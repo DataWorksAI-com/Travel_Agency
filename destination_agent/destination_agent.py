@@ -344,8 +344,7 @@ def search_destinations(
 # --------------------------------------------------------
 
 model = ChatAnthropic(
-    model="claude-haiku-4-5",
-    temperature=0
+    model="claude-haiku-4-5"
 )
 
 # --------------------------------------------------------

@@ -26,7 +26,7 @@ import requests
 from dotenv import load_dotenv
 load_dotenv()
 
-TP_TOKEN = os.environ["TRAVELPAYOUTS_TOKEN"]
+TP_TOKEN = os.environ.get("TRAVELPAYOUTS_TOKEN", "")
 AUTOCOMPLETE_URL = "https://autocomplete.travelpayouts.com/places2"
 SEARCH_URL = "https://api.travelpayouts.com/aviasales/v3/prices_for_dates"
 
@@ -86,6 +86,8 @@ def _format_minutes(minutes) -> str:
 
 def _fetch_offers(origin_code: str, destination_code: str, date_str: str) -> tuple:
     """Single request to the search API. Returns (offers, error_message_or_None)."""
+    if not TP_TOKEN:
+        return [], "Flight search unavailable: TRAVELPAYOUTS_TOKEN is not set in .env."
     try:
         response = requests.get(
             SEARCH_URL,

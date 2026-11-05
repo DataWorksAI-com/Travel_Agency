@@ -88,6 +88,8 @@ def _build_money_customs_client() -> LocalFunctionClient:
     # Still worth knowing, because there is no conflict marker either way: if
     # this slot ever starts reporting found for a country it holds no data for,
     # look at this line first.
+    # The folder name has an '&', so it can't be a package; put it on the path.
+    sys.path.append(str(REPO_ROOT / "money&customs_agent"))
     from money_customs_agent import answer
     return LocalFunctionClient(answer)
 

@@ -30,7 +30,8 @@
 __pycache__/
 _backup_pre_reflection_15aug/
 _dev/
-_offline_runner.pyintegration_test/
+_offline_runner.py
+integration_test/
 _run_logs/
 agent_workspace/
 budget_agent/chroma_db/
