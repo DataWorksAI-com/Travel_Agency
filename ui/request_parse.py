@@ -58,7 +58,7 @@ _PLACE = (
     # match the SECOND "in" -- reporting the destination country as "September".
     r"([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'\-]{1,34}?)"
     r"(?=\s*(?:,|\.|;|$|\bfrom\b|\bfor\b|\bwith\b|\bbudget\b|\bon\b|\bunder\b"
-    r"|\bbelow\b|\bwho\b|\bthat\b|\band\b|\bin\b|\bnext\b|\bduring\b))"
+    r"|\bbelow\b|\bto\b|\bwho\b|\bthat\b|\band\b|\bin\b|\bnext\b|\bduring\b))"
 )
 
 _DESTINATION_RE = re.compile(r"\b(?:to|in|visit(?:ing)?|towards?)\s+" + _PLACE, re.I)

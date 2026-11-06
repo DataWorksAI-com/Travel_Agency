@@ -12,7 +12,7 @@ then update this file, not orchestrator.py.
 import sys
 from pathlib import Path
 
-from subagent_client import LocalFunctionClient
+from subagent_client import DEFAULT_MAX_TOKENS, LocalFunctionClient
 
 REPO_ROOT = Path(__file__).resolve().parent
 
@@ -33,17 +33,18 @@ def _build_flights_client() -> LocalFunctionClient:
     # LocalFunctionClient.from_dict_spec(). See ORCHESTRATOR_DESIGN.md #2:
     # if the group aligns Flights to expose answer() like every other
     # subagent, switch to the normal pattern below.
-    # The model is set HERE, not in Flights' spec. llama-3.3-70b was
-    # non-deterministic on this slot's short structured output; gpt-4o-mini is
-    # not. But which model a slot runs on depends on this system's budget,
-    # latency and determinism needs, not on the agent -- so it is the
-    # orchestrator's decision to make and its file to hold it in. Likewise the
-    # output ceiling, which from_dict_spec caps for every slot
-    # (subagent_client.DEFAULT_MAX_TOKENS) rather than each agent capping
-    # itself.
+    # The model is set HERE, not in Flights' spec: which model a slot runs on
+    # depends on this system's budget, latency and determinism needs, not on
+    # the agent, so it is the orchestrator's decision (llm_config, FLIGHTS_MODEL
+    # to override). Likewise the output ceiling,
+    # subagent_client.DEFAULT_MAX_TOKENS, rather than each agent capping itself.
     from flights_agent import flights_subagent
+    from llm_config import get_chat_model
     return LocalFunctionClient.from_dict_spec(
-        flights_subagent, model="openrouter:openai/gpt-4o-mini"
+        flights_subagent,
+        model=get_chat_model(
+            "flights", max_tokens=flights_subagent.get("max_tokens", DEFAULT_MAX_TOKENS)
+        ),
     )
 
     # once aligned:
@@ -88,6 +89,8 @@ def _build_money_customs_client() -> LocalFunctionClient:
     # Still worth knowing, because there is no conflict marker either way: if
     # this slot ever starts reporting found for a country it holds no data for,
     # look at this line first.
+    # The folder name has an '&', so it can't be a package; put it on the path.
+    sys.path.append(str(REPO_ROOT / "money&customs_agent"))
     from money_customs_agent import answer
     return LocalFunctionClient(answer)
 

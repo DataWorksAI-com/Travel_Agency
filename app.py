@@ -23,6 +23,8 @@ import truststore
 
 truststore.inject_into_ssl()
 
+import asyncio
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -36,6 +38,7 @@ if str(REPO_ROOT) not in sys.path:
 
 import chainlit as cl
 
+from llm_config import check_local_llm
 from orchestrator import plan_trip
 from ui.agent_seam import DUMMY, FAILED, LABELS, REAL, install_seam
 from ui.request_parse import describe, parse_request
@@ -163,6 +166,18 @@ async def on_message(message: cl.Message):
 
     if not request:
         await cl.Message(content=EMPTY_MESSAGE).send()
+        return
+
+    # One message for a missing local model, instead of every live agent
+    # failing on its own with the same cause. Only live slots need a model,
+    # so an all-sample-data demo still runs with Ollama stopped. The
+    # orchestrator itself is a model only in agent mode.
+    live = [slot for slot, mode in AGENT_MODES.items() if mode == REAL]
+    if os.getenv("TRAVEL_UI_ORCHESTRATOR", "").strip().lower() == "agent":
+        live.append("orchestrator")
+    problem = await asyncio.to_thread(check_local_llm, live) if live else None
+    if problem:
+        await cl.Message(content=problem).send()
         return
 
     # Placeholder doubles as the loading indicator, then becomes the answer.
