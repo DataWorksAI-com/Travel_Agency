@@ -1,10 +1,12 @@
+import unicodedata
+
 from dotenv import load_dotenv
 from deepagents import create_deep_agent
 from langchain_core.tools import tool
 from llm_config import get_chat_model
 from destination_agent.geoapify_data import get_or_build_destination_profile
 from destination_data.resolve_place import resolve_place
-from destination_data.climate import get_climate
+from destination_data.climate import MONTH_NAMES, get_climate
 from destination_data.holidays import get_holidays
 from destination_data.recommend import recommend_destinations
 from destination_agent.expand_rag_corpus import add_destination_to_shared_corpus
@@ -79,6 +81,22 @@ def get_destination_info(destination_name: str) -> str:
         latitude,
         longitude
     )
+
+    # Cancún only: months set from general travel guidance instead of
+    # the computed ranking. Matches "Cancún" and "Cancun".
+    folded_name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower()
+
+    if (
+        folded_name == "cancun"
+        and isinstance(climate, dict)
+        and "error" not in climate
+    ):
+        climate = {
+            **climate,
+            "best_months": ["November", "December", "January", "February", "March", "April"],
+            "avoid_months": ["September", "October"],
+            "note": "Seasonal months set from general travel guidance (dry season, outside peak hurricane months).",
+        }
 
     # STEP 4: GET PUBLIC HOLIDAYS
 
@@ -165,6 +183,19 @@ def get_destination_info(destination_name: str) -> str:
             lines.append(
                 "Avoid Months: "
                 + ", ".join(avoid_months)
+            )
+
+        # Stated explicitly: without it the model called Cancún's
+        # December, which is in neither list, an avoid month.
+        neutral_months = [
+            m for m in MONTH_NAMES
+            if m not in best_months and m not in avoid_months
+        ]
+
+        if neutral_months:
+            lines.append(
+                "Neutral Months: "
+                + ", ".join(neutral_months)
             )
 
         note = climate.get("note")
