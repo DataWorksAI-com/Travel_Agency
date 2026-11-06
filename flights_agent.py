@@ -130,6 +130,23 @@ def search_flights(
     if not date_str:
         date_str = (date.today() + timedelta(days=30)).isoformat()
 
+    # The model has no calendar and often guesses a year that has already
+    # passed (it searched 2026-09 in November 2026), so a past month is moved
+    # to its next occurrence.
+    passed_note = ""
+    today = date.today()
+    try:
+        year, month = int(date_str[:4]), int(date_str[5:7])
+    except ValueError:
+        year = month = None
+    if year and (year, month) < (today.year, today.month):
+        next_year = today.year if month >= today.month else today.year + 1
+        passed_note = f" ({date_str[:7]} has passed)"
+        date_str = f"{next_year}{date_str[4:]}"
+    # The searched date leads the output so the model keeps the right year
+    # when it rephrases the result.
+    searched = f"Searched {date_str}{passed_note}"
+
     offers, error = _fetch_offers(origin_code, destination_code, date_str)
     if error:
         return error
@@ -147,7 +164,7 @@ def search_flights(
 
     if not offers:
         return (
-            f"No cached flight data found from {origin_code.upper()} to {destination_code.upper()} "
+            f"{searched}: No cached flight data found from {origin_code.upper()} to {destination_code.upper()} "
             f"around {date_str}, even after widening to the full month. This route/date may simply "
             f"have no recent traveler searches in Aviasales's cache — try a different route to confirm."
         )
@@ -170,7 +187,7 @@ def search_flights(
             f"{carrier}: USD {price}, {duration}, {stop_text}, arrives {arrival_airport}"
         )
 
-    header = f"Flights {origin_code.upper()}→{destination_code.upper()}"
+    header = f"{searched}: Flights {origin_code.upper()}→{destination_code.upper()}"
     header += f" (month of {date_str[:7]}, no exact-date match)" if widened else f" on {date_str}"
     return header + ":\n" + "\n".join(lines)
 
@@ -185,7 +202,15 @@ flights_subagent = {
         "requires codes, not city names. Stay focused on flights only; "
         "do not discuss hotels, activities, or destinations.\n\n"
         "IMPORTANT — keep your final answer SHORT and DATA-ONLY:\n"
-        "- List at most 3 options, one per line, e.g.: 'EY: $371, 16h, 1 stop, arrives DEL'\n"
+        "- List at most 3 options, one per line, as: '<airline>: $<price>, <duration>, <stops>, arrives <airport>'\n"
+        "- If search_flights returns an error or no offers, say so plainly and never state a flight "
+        "that is not in the tool output; don't add filters like max_price unless the user asked\n"
+        "- The message may start with currency or customs notes from another agent: ignore them and never "
+        "repeat them. Whenever an origin and a destination are named, call get_airport_code for both and then "
+        "search_flights, even if the request also asks general questions\n"
+        f"- Today is {date.today().isoformat()}. For a month given without a year, "
+        "search its next occurrence after today\n"
+        "- If search_flights finds no offers, reply with its message word for word instead of a list\n"
         "- No headers, no bold/markdown formatting, no emojis\n"
         "- No written recommendation paragraph — just state which option is cheapest\n"
         "- If prices are cached/widened-month data, say so in ONE short trailing "
@@ -200,9 +225,10 @@ flights_subagent = {
 # ── Standalone test — run this file directly to test just this sub-agent ──
 if __name__ == "__main__":
     from deepagents import create_deep_agent
+    from llm_config import get_chat_model
 
     agent = create_deep_agent(
-        model="openrouter:anthropic/claude-sonnet-4.5",
+        model=get_chat_model("flights"),
         tools=[get_airport_code, search_flights],
         system_prompt=flights_subagent["system_prompt"],
     )

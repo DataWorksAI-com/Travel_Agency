@@ -6,6 +6,7 @@ chromadb
 langchain
 langchain-anthropic
 langchain-cohere
+langchain-ollama==1.1.0
 langchain-openrouter==0.2.7
 pydantic<2.13  # openrouter (via langchain-openrouter) requires <2.13
 python-dotenv==1.2.2

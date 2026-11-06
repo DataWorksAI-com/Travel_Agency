@@ -13,23 +13,11 @@ something is missing or ambiguous, it states an assumption and answers
 anyway (same policy as Budget and Restaurants).
 """
 
-import os
-
-# ---------------------------------------------------------------------------
-# API KEY -- set directly here for local testing.
-# Do NOT share this file or upload it anywhere with your real key still in it.
-# For shared/repo use, prefer setting this via a real .env file instead
-# (see .env.example) and python-dotenv, rather than hardcoding it here.
-# ---------------------------------------------------------------------------
-os.environ.setdefault("COHERE_API_KEY", "REALKEYGOESHERE")
-
-from langchain_cohere import ChatCohere
 from deepagents import create_deep_agent
 
+from llm_config import get_chat_model
 from money_tools import get_exchange_rate, search_money_customs, get_income_context, get_comparative_context
 
-
-MODEL = os.environ.get("MONEY_AGENT_MODEL", "command-r-plus-08-2024")
 
 SYSTEM_PROMPT = (
     "You are the Money & Customs agent in a multi-agent travel-planning "
@@ -99,7 +87,7 @@ def build_agent():
     """Construct and return the Money & Customs deep agent, ready to invoke."""
     global _AGENT
     if _AGENT is None:
-        llm = ChatCohere(model=MODEL)
+        llm = get_chat_model("money_customs")
         _AGENT = create_deep_agent(
             model=llm,
             tools=[get_exchange_rate, search_money_customs, get_income_context, get_comparative_context],

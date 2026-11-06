@@ -21,7 +21,6 @@ Two things keep a planning layer from making matters worse:
 """
 
 import asyncio
-import os
 import re
 
 from dotenv import load_dotenv
@@ -31,15 +30,13 @@ from dotenv import load_dotenv
 # Chainlit (the jig, a script) gets a ValidationError for a missing key.
 load_dotenv()
 
-from langchain.chat_models import init_chat_model
 from langchain.agents.middleware.types import AgentMiddleware
 
 from deepagents import create_deep_agent
 
+from llm_config import get_chat_model
 from orchestrator import SLOTS, ask_slot
 from ui.agent_seam import LABELS, _looks_like_error
-
-MODEL = os.getenv("ORCHESTRATOR_MODEL", "openrouter:openai/gpt-4o-mini")
 
 # Whole-run backoff, not per-call: a deep agent makes many model calls, so a 429
 # surfaces from the middle of the graph rather than from one request.
@@ -305,7 +302,7 @@ async def plan_trip_agentic(
     """Same signature and return type as orchestrator.plan_trip."""
     state, ledger, tools = _new_run()
     agent = create_deep_agent(
-        model=init_chat_model(MODEL.strip(), max_tokens=4000),
+        model=get_chat_model("orchestrator", max_tokens=4000),
         tools=tools,
         system_prompt=SYSTEM_PROMPT,
         middleware=[_OnlyOurTools()],

@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 from deepagents import create_deep_agent
-from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
+from llm_config import get_chat_model
 from destination_agent.geoapify_data import get_or_build_destination_profile
 from destination_data.resolve_place import resolve_place
 from destination_data.climate import get_climate
@@ -9,7 +9,7 @@ from destination_data.holidays import get_holidays
 from destination_data.recommend import recommend_destinations
 from destination_agent.expand_rag_corpus import add_destination_to_shared_corpus
 
-# Load ANTHROPIC_API_KEY from the .env file
+# Load GEOAPIFY_API_KEY (and any model override) from the .env file
 load_dotenv()
 
 # --------------------------------------------------------
@@ -343,9 +343,7 @@ def search_destinations(
 # LLM MODEL
 # --------------------------------------------------------
 
-model = ChatAnthropic(
-    model="claude-haiku-4-5"
-)
+model = get_chat_model("destination")
 
 # --------------------------------------------------------
 # DESTINATION EXPERT AGENT
@@ -364,6 +362,8 @@ agent = create_deep_agent(
     1. Provide grounded information about a named destination.
     2. Recommend one destination when the user provides travel preferences.
     3. Use only information returned by the available tools.
+    If the request also asks about flights, currency or bookings, ignore those parts; other agents handle them. Don't state flight prices or offer bookings.
+    Only state facts that appear in your tool output; don't add weather, safety or event claims the tools didn't provide.
 
     ROUTING
     CASE 1 - Specific destination

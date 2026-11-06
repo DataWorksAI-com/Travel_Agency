@@ -87,6 +87,10 @@ async def _run_parallel_subagents(task: str, money_context: str) -> dict:
     flights_client = get_client("flights")
 
     flights_result = await flights_client.call(flights_task)
+    # qwen3:8b sometimes hands back the Money & Customs text it was given as
+    # its own answer, or nothing at all; neither may appear as the Flights section.
+    if not flights_result.strip() or (money_context and money_context.strip()[:80] in flights_result):
+        flights_result = "The Flights agent didn't return results."
 
     return {
         "flights": flights_result,
@@ -162,7 +166,12 @@ async def _plan_trip_fixed(
 
     destination_result = await _run_destination(task)
 
-    parallel_results = await _run_parallel_subagents(task, money_context)
+    # Same condition as Money & Customs: without both, the Flights model
+    # invented an origin or answered the question itself.
+    if origin_country and destination_country:
+        parallel_results = await _run_parallel_subagents(task, money_context)
+    else:
+        parallel_results = {"flights": "No flight search made: a departure city and a destination are both needed."}
 
     return _assemble_itinerary(destination_result, parallel_results, money_context)
 
